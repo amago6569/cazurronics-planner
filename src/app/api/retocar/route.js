@@ -1,0 +1,35 @@
+import { NextResponse } from 'next/server';
+import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada } from '../../../lib/planUtils';
+
+export async function POST(request) {
+  try {
+    const { itinerarioActual, indice, instruccion, fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = await request.json();
+    const paradaAntigua = itinerarioActual[indice];
+    const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
+    const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
+    const nombreZona = await obtenerLocalidad(lat, lon, MAPS_KEY) || 'un punto de León';
+    const sumaOtras = itinerarioActual.reduce((suma, p, i) => i === indice ? suma : suma + parsePrecio(p.precio), 0);
+    const presDisp = Math.max(Number(presupuestoMax) - sumaOtras, 3);
+    const nombresYa = itinerarioActual.filter((_, i) => i !== indice).map(p => p.titulo);
+
+    const prompt = `
+      Cazurronics Planner. Cambia la parada "${paradaAntigua.titulo}" (${paradaAntigua.hora}). 
+      El usuario pide: "${instruccion}".
+      RESTRICCIONES: Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
+      Devuelve SOLO un JSON así:
+      {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "telefono": "No", "web": "No", "horario": "12-23"}
+    `;
+
+    const resGoogle = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ googleSearch: {} }], generationConfig: { temperature: 0.3 } })
+    });
+    
+    let textoIA = (await resGoogle.json()).candidates[0].content.parts[0].text;
+    const jsonLimpio = textoIA.substring(textoIA.indexOf('{'), textoIA.lastIndexOf('}') + 1);
+    const { parada } = await enriquecerParada(JSON.parse(jsonLimpio), { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY });
+
+    if (!parada) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
+    return NextResponse.json({ exito: true, parada });
+  } catch (error) { return NextResponse.json({ exito: false, mensaje: error.message }, { status: 500 }); }
+}
