@@ -12,6 +12,7 @@ export const metadata = {
   description: 'Organiza tu escapada perfecta por la provincia de León. Descubre rincones ocultos sin pensar y sin estrés.',
 }
 
+//Pruebas para vercel
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
