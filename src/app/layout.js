@@ -8,9 +8,9 @@ const fredoka = Fredoka({
 });
 
 export const metadata = {
-  title: "Cazurronics Planner 🦁",
-  description: "Planificador inteligente de ocio en León",
-};
+  title: 'Cazurronics Planner | Tu planazo en León',
+  description: 'Organiza tu escapada perfecta por la provincia de León. Descubre rincones ocultos sin pensar y sin estrés.',
+}
 
 export default function RootLayout({ children }) {
   return (
