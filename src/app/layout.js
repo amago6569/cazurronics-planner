@@ -18,7 +18,7 @@ export const metadata = {
 //Pruebas para vercel
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       {/* Aplicamos la fuente "Fredoka" a todo el cuerpo de tu web */}
       <body className={fredoka.className}>
         {children}

@@ -34,8 +34,14 @@ export default function Panel() {
     setError("");
     try {
       const r = await fetch("/api/panel", { headers: { "x-clave": c }, cache: "no-store" });
-      const d = await r.json();
-      if (!d.exito) { setError(d.mensaje || "Clave incorrecta"); setDatos(null); return; }
+      let d;
+      try { d = await r.json(); } catch {
+        setError(r.status === 404
+          ? "El servidor no tiene el panel (error 404): sube la última versión del código y vuelve a desplegar."
+          : `El servidor respondió con un error ${r.status}${r.status === 504 ? " (tardó demasiado)" : ""}. Mira los logs en Vercel → Logs.`);
+        setDatos(null); return;
+      }
+      if (!d.exito) { setError(d.mensaje || `Error ${r.status}`); setDatos(null); return; }
       setDatos(d);
       try { sessionStorage.setItem("cz-panel", c); } catch {}
     } catch { setError("No se pudo conectar"); }

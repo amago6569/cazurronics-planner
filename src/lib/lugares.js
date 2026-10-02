@@ -117,10 +117,12 @@ export function claveDesdeToken(token) {
 }
 
 // Comparación de la clave del panel sin filtrar información por tiempos
+const limpiarClave = (v) => String(v || "").trim().replace(/^["']|["']$/g, "").trim();
+
 export function claveDePanelValida(clave) {
-  const real = process.env.PANEL_CLAVE;
+  const real = limpiarClave(process.env.PANEL_CLAVE);
   if (!real || typeof clave !== "string") return false;
-  const a = Buffer.from(clave);
+  const a = Buffer.from(limpiarClave(clave));
   const b = Buffer.from(real);
   return a.length === b.length && timingSafeEqual(a, b);
 }

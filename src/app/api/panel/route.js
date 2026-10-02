@@ -9,9 +9,26 @@ export const dynamic = "force-dynamic";
 
 const autorizado = (request) => claveDePanelValida(request.headers.get("x-clave") || "");
 
+// Antes de comprobar la clave: ¿está configurado el servidor? (típico al subir a Vercel)
+function faltaConfiguracion() {
+  if (!process.env.PANEL_CLAVE) return "Falta la variable PANEL_CLAVE en el servidor. En Vercel: Settings → Environment Variables → añádela y haz Redeploy.";
+  return null;
+}
+
 // GET /api/panel (cabecera x-clave = PANEL_CLAVE) → todo lo que ve el equipo en /panel
 export async function GET(request) {
+  const falta = faltaConfiguracion();
+  if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
   if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
+  try {
+    return await datosDelPanel(request);
+  } catch (e) {
+    console.error("[panel]", e);
+    return NextResponse.json({ exito: false, mensaje: `Error del servidor: ${e?.message || e}` }, { status: 500 });
+  }
+}
+
+async function datosDelPanel(request) {
   // GET /api/panel?buscar=nombre → solo la búsqueda de locales
   const buscar = new URL(request.url).searchParams.get("buscar");
   if (buscar) {
@@ -39,6 +56,8 @@ export async function GET(request) {
 
 // POST /api/panel { accion: "barrido" } → lanzar el barrido de eventos a mano
 export async function POST(request) {
+  const falta = faltaConfiguracion();
+  if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
   if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
   const { accion } = await request.json().catch(() => ({}));
   if (accion !== "barrido") return NextResponse.json({ exito: false }, { status: 400 });
