@@ -192,56 +192,60 @@ export default function Home() {
           )}
         </div>
       ) : (
-        <form onSubmit={generarPlan} className="relative z-10 bg-white/70 backdrop-blur-xl p-8 rounded-[3rem] border-4 border-white shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] w-full max-w-md transition-all duration-300 mt-auto mb-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-black bg-gradient-to-br from-rose-400 to-orange-400 bg-clip-text text-transparent mb-2 tracking-tighter">Cazurronics Planner</h1>
-            <p className="text-slate-500 font-extrabold text-xs tracking-widest uppercase bg-white/80 inline-block px-4 py-2 rounded-full shadow-sm">El Plan Perfecto</p>
-          </div>
-          
-          <div className="space-y-6 mb-8">
-            <div>
-              <label className="block text-sm font-black text-slate-700 mb-2 ml-2">¿Qué día es el plan? 📅</label>
-              <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-full bg-white/80 border-0 text-slate-700 text-sm font-bold rounded-full focus:ring-2 focus:ring-rose-200 block px-5 py-4 outline-none shadow-inner cursor-pointer transition-all" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-black text-slate-700 mb-2 ml-2">¿Qué te apetece? 🌮</label>
-              <textarea rows="2" value={apetece} onChange={(e) => setApetece(e.target.value)} className="w-full bg-white/80 border-0 text-slate-700 text-sm font-bold rounded-[2rem] focus:ring-2 focus:ring-rose-200 block px-5 py-4 outline-none resize-none shadow-inner transition-all" placeholder="Ej: Cocido, ver monumentos..."></textarea>
+        <div className="relative z-10 w-full max-w-md flex flex-col items-center mt-auto mb-auto">
+          <form onSubmit={generarPlan} className="bg-white/70 backdrop-blur-xl p-8 rounded-[3rem] border-4 border-white shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] w-full transition-all duration-300">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-black bg-gradient-to-br from-rose-400 to-orange-400 bg-clip-text text-transparent mb-2 tracking-tighter">Cazurronics Planner</h1>
+              <p className="text-slate-500 font-extrabold text-xs tracking-widest uppercase bg-white/80 inline-block px-4 py-2 rounded-full shadow-sm">El Plan Perfecto</p>
             </div>
             
-            <div className="bg-sky-50/50 p-5 rounded-[2.5rem] border-2 border-white shadow-sm">
-              <label className="block text-sm font-black text-slate-700 mb-4 ml-1">Presupuesto (por persona)</label>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="relative flex items-center shrink-0 shadow-sm rounded-full overflow-hidden">
-                  <span className="absolute left-3 text-xs font-black text-slate-400">Mín</span>
-                  {/* AQUÍ PERMITIMOS BORRAR COMPLETAMENTE LA CAJA */}
-                  <input type="number" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 pl-10 pr-6 py-2 bg-white border-0 text-sm font-black text-slate-700 text-center outline-none focus:bg-sky-50 transition-colors" />
-                  <span className="absolute right-3 text-xs font-black text-slate-400">€</span>
-                </div>
-                <input type="range" min="0" max="300" step="5" value={presupuestoMin === '' ? 0 : presupuestoMin} onChange={(e) => setPresupuestoMin(Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-full h-3 bg-white rounded-full appearance-none cursor-pointer roseton-slider shadow-inner" />
+            <div className="space-y-6 mb-8">
+              <div>
+                <label className="block text-sm font-black text-slate-700 mb-2 ml-2">¿Qué día es el plan? 📅</label>
+                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-full bg-white/80 border-0 text-slate-700 text-sm font-bold rounded-full focus:ring-2 focus:ring-rose-200 block px-5 py-4 outline-none shadow-inner cursor-pointer transition-all" />
               </div>
-              <div className="flex items-center gap-4">
-                <div className="relative flex items-center shrink-0 shadow-sm rounded-full overflow-hidden">
-                  <span className="absolute left-3 text-xs font-black text-slate-400">Máx</span>
-                  {/* AQUÍ PERMITIMOS PRESUPUESTO HASTA 0€ Y BORRAR LA CAJA */}
-                  <input type="text" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 pl-10 pr-6 py-2 bg-white border-0 text-sm font-black text-slate-700 text-center outline-none focus:bg-sky-50 transition-colors" />
-                  <span className="absolute right-3 text-xs font-black text-slate-400">€</span>
+
+              <div>
+                <label className="block text-sm font-black text-slate-700 mb-2 ml-2">¿Qué te apetece? 🌮</label>
+                <textarea rows="2" value={apetece} onChange={(e) => setApetece(e.target.value)} className="w-full bg-white/80 border-0 text-slate-700 text-sm font-bold rounded-[2rem] focus:ring-2 focus:ring-rose-200 block px-5 py-4 outline-none resize-none shadow-inner transition-all" placeholder="Ej: Cocido, ver monumentos..."></textarea>
+              </div>
+              
+              <div className="bg-sky-50/50 p-5 rounded-[2.5rem] border-2 border-white shadow-sm">
+                <label className="block text-sm font-black text-slate-700 mb-4 ml-1">Presupuesto (por persona)</label>
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="relative flex items-center shrink-0 shadow-sm rounded-full overflow-hidden">
+                    <span className="absolute left-3 text-xs font-black text-slate-400">Mín</span>
+                    <input type="number" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 pl-10 pr-6 py-2 bg-white border-0 text-sm font-black text-slate-700 text-center outline-none focus:bg-sky-50 transition-colors" />
+                    <span className="absolute right-3 text-xs font-black text-slate-400">€</span>
+                  </div>
+                  <input type="range" min="0" max="300" step="5" value={presupuestoMin === '' ? 0 : presupuestoMin} onChange={(e) => setPresupuestoMin(Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-full h-3 bg-white rounded-full appearance-none cursor-pointer roseton-slider shadow-inner" />
                 </div>
-                <input type="range" min="0" max="300" step="5" value={presupuestoMax === '' ? 0 : presupuestoMax} onChange={(e) => setPresupuestoMax(Math.max(Number(e.target.value), presupuestoMin === '' ? 0 : presupuestoMin))} className="w-full h-3 bg-white rounded-full appearance-none cursor-pointer roseton-slider shadow-inner" />
+                <div className="flex items-center gap-4">
+                  <div className="relative flex items-center shrink-0 shadow-sm rounded-full overflow-hidden">
+                    <span className="absolute left-3 text-xs font-black text-slate-400">Máx</span>
+                    <input type="text" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 pl-10 pr-6 py-2 bg-white border-0 text-sm font-black text-slate-700 text-center outline-none focus:bg-sky-50 transition-colors" />
+                    <span className="absolute right-3 text-xs font-black text-slate-400">€</span>
+                  </div>
+                  <input type="range" min="0" max="300" step="5" value={presupuestoMax === '' ? 0 : presupuestoMax} onChange={(e) => setPresupuestoMax(Math.max(Number(e.target.value), presupuestoMin === '' ? 0 : presupuestoMin))} className="w-full h-3 bg-white rounded-full appearance-none cursor-pointer roseton-slider shadow-inner" />
+                </div>
+              </div>
+
+              <div className="bg-indigo-50/50 p-3 rounded-[2.5rem] border-2 border-white shadow-sm">
+                <label className="block text-sm font-black text-slate-700 mb-2 ml-3 mt-1">Zona de búsqueda 📍</label>
+                <MapSelectorDynamic radiusKm={distancia} setRadiusKm={setDistancia} center={centroMapa} setCenter={setCentroMapa} />
               </div>
             </div>
 
-            <div className="bg-indigo-50/50 p-3 rounded-[2.5rem] border-2 border-white shadow-sm">
-              <label className="block text-sm font-black text-slate-700 mb-2 ml-3 mt-1">Zona de búsqueda 📍</label>
-              <MapSelectorDynamic radiusKm={distancia} setRadiusKm={setDistancia} center={centroMapa} setCenter={setCentroMapa} />
-            </div>
+            <button type="submit" className="bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black text-xl py-4 px-6 rounded-full w-full shadow-[0_10px_30px_rgba(251,113,133,0.4)] hover:shadow-[0_15px_40px_rgba(251,113,133,0.6)] hover:-translate-y-1 active:translate-y-1 transition-all duration-300">
+              ¡Descubrir el Plan!
+            </button>
+          </form>
+
+          {/* El botón de negocios ahora vive aquí, feliz y sin errores de sintaxis */}
+          <div className="w-full mt-4 flex justify-center">
+            <BusinessModal />
           </div>
-
-          <button type="submit" className="bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black text-xl py-4 px-6 rounded-full w-full shadow-[0_10px_30px_rgba(251,113,133,0.4)] hover:shadow-[0_15px_40px_rgba(251,113,133,0.6)] hover:-translate-y-1 active:translate-y-1 transition-all duration-300">
-            ¡Descubrir el Plan!
-          </button>
-          <BusinessModal />
-        </form>
+        </div>
       )}
     </main>
   );

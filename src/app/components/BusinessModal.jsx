@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 
-// URL de tu Google Apps Script desplegado como Web App (termina en /exec).
-// Guárdala en .env.local como: NEXT_PUBLIC_GAS_BUSINESS_URL=https://script.google.com/macros/s/TU_ID/exec
+// URL de tu Google Apps Script
 const GAS_URL = process.env.NEXT_PUBLIC_GAS_BUSINESS_URL;
 
 const ESTADO = {
@@ -20,7 +19,6 @@ export default function BusinessModal() {
 
   const cerrar = () => {
     setAbierto(false);
-    // Pequeño margen para que no se vea el formulario "resetearse" mientras el modal aún se cierra
     setTimeout(() => {
       setEstado(ESTADO.IDLE);
       setForm({ nombreLocal: "", email: "", mensaje: "" });
@@ -44,10 +42,6 @@ export default function BusinessModal() {
     setEstado(ESTADO.ENVIANDO);
 
     try {
-      // OJO: Content-Type "text/plain" (no "application/json") a propósito.
-      // Así el navegador no lanza una petición OPTIONS de preflight antes del POST,
-      // que es justo lo que hace fallar por CORS a los Web Apps de Google Apps Script.
-      // Apps Script igualmente puede leer el contenido como JSON sin problema (ver Código.gs).
       const respuesta = await fetch(GAS_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -55,29 +49,26 @@ export default function BusinessModal() {
       });
 
       const texto = await respuesta.text();
-      console.log("[BusinessModal] Respuesta cruda de Apps Script:", texto);
-
       let datos;
       try {
         datos = JSON.parse(texto);
       } catch {
-        throw new Error("Apps Script no devolvió JSON válido (mira la consola para ver la respuesta cruda)");
+        throw new Error("Error leyendo JSON");
       }
 
       if (!datos.exito) {
-        throw new Error(datos.mensaje || "Apps Script devolvió exito:false sin más detalle");
+        throw new Error(datos.mensaje);
       }
 
       setEstado(ESTADO.ENVIADO);
     } catch (error) {
-      console.error("[BusinessModal] Error enviando el formulario:", error.message);
       setEstado(ESTADO.ERROR);
     }
   };
 
   return (
     <>
-      {/* Botón de apertura, sutil, para colocar debajo del botón principal de rutas */}
+      {/* Botón de apertura */}
       <button
         type="button"
         onClick={() => setAbierto(true)}
@@ -88,55 +79,56 @@ export default function BusinessModal() {
 
       {abierto && (
         <div
-          className="fixed inset-0 bg-slate-900/70 z-[200] flex items-center justify-center p-4 backdrop-blur-sm"
+          className="fixed inset-0 bg-slate-900/70 z-[200] flex items-center justify-center p-3 backdrop-blur-sm"
           onClick={cerrar}
         >
           <div
-            className="bg-white p-6 rounded-[2rem] border-4 border-slate-800 shadow-[8px_8px_0px_rgba(30,41,59,1)] w-full max-w-md max-h-[90vh] overflow-y-auto no-scrollbar"
+            className="bg-white p-4 sm:p-5 rounded-[2rem] border-4 border-slate-800 shadow-[8px_8px_0px_rgba(30,41,59,1)] w-full max-w-md max-h-[95vh] overflow-y-auto no-scrollbar"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-black text-slate-900 leading-tight pr-2">
+            {/* CABECERA (Márgenes reducidos) */}
+            <div className="flex justify-between items-start mb-3">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 leading-tight pr-2">
                 Impulsa tu negocio con Cazurronics 🦁
               </h2>
               <button
                 onClick={cerrar}
-                className="text-slate-900 font-black text-xl bg-slate-300 rounded-full min-w-[32px] h-8 flex items-center justify-center border-2 border-slate-800 hover:bg-slate-400 shrink-0"
+                className="text-slate-900 font-black text-lg bg-slate-300 rounded-full min-w-[28px] h-7 flex items-center justify-center border-2 border-slate-800 hover:bg-slate-400 shrink-0"
               >
                 ✕
               </button>
             </div>
 
-            {/* PITCH DE VENTA */}
-            <div className="space-y-2 mb-5">
-              <div className="flex items-center gap-2 bg-amber-50 border-2 border-slate-800 rounded-xl px-3 py-2">
-                <span className="text-lg">⭐</span>
-                <p className="text-sm font-bold text-slate-800">
-                  Sello <span className="font-black">"Cazurronics Choice"</span> destacando tu local en las rutas
+            {/* PITCH DE VENTA (Más compacto) */}
+            <div className="space-y-1.5 mb-3">
+              <div className="flex items-center gap-2 bg-amber-50 border-2 border-slate-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-base">⭐</span>
+                <p className="text-xs font-bold text-slate-800 leading-tight">
+                  Sello <span className="font-black">"Cazurronics Choice"</span> destacando tu local
                 </p>
               </div>
-              <div className="flex items-center gap-2 bg-sky-50 border-2 border-slate-800 rounded-xl px-3 py-2">
-                <span className="text-lg">📱</span>
-                <p className="text-sm font-bold text-slate-800">Ruido y promoción activa en nuestro Instagram</p>
+              <div className="flex items-center gap-2 bg-sky-50 border-2 border-slate-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-base">📱</span>
+                <p className="text-xs font-bold text-slate-800 leading-tight">Ruido y promoción activa en nuestro Instagram</p>
               </div>
-              <div className="flex items-center gap-2 bg-pink-50 border-2 border-slate-800 rounded-xl px-3 py-2">
-                <span className="text-lg">📍</span>
-                <p className="text-sm font-bold text-slate-800">
-                  Ficha VIP Permanente en la pestaña de Locales Colaboradores
+              <div className="flex items-center gap-2 bg-pink-50 border-2 border-slate-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-base">📍</span>
+                <p className="text-xs font-bold text-slate-800 leading-tight">
+                  Ficha VIP Permanente en Locales Colaboradores
                 </p>
               </div>
             </div>
 
-            {/* FORMULARIO O MENSAJE DE ÉXITO */}
+            {/* FORMULARIO */}
             {estado === ESTADO.ENVIADO ? (
-              <div className="bg-green-100 border-4 border-slate-800 rounded-2xl p-4 text-center">
-                <p className="font-black text-slate-900 mb-1">✅ ¡Solicitud enviada!</p>
-                <p className="text-sm font-bold text-slate-700">
-                  Te hemos mandado un email de confirmación. En breve nos ponemos en contacto contigo.
+              <div className="bg-green-100 border-4 border-slate-800 rounded-2xl p-3 text-center mb-2">
+                <p className="font-black text-slate-900 mb-1 text-sm">✅ ¡Solicitud enviada!</p>
+                <p className="text-xs font-bold text-slate-700">
+                  Te hemos mandado un email. En breve nos ponemos en contacto.
                 </p>
               </div>
             ) : (
-              <form onSubmit={enviarSolicitud} className="space-y-3">
+              <form onSubmit={enviarSolicitud} className="space-y-2">
                 <input
                   type="text"
                   name="nombreLocal"
@@ -145,7 +137,7 @@ export default function BusinessModal() {
                   placeholder="Nombre del local"
                   required
                   disabled={estado === ESTADO.ENVIANDO}
-                  className="w-full bg-white border-4 border-slate-800 text-slate-900 text-sm font-bold rounded-xl px-3 py-2 outline-none focus:border-[#ff6b6b] disabled:opacity-50"
+                  className="w-full bg-white border-2 border-slate-800 text-slate-900 text-sm font-bold rounded-xl px-3 py-1.5 outline-none focus:border-[#ff6b6b] disabled:opacity-50"
                 />
                 <input
                   type="email"
@@ -155,44 +147,44 @@ export default function BusinessModal() {
                   placeholder="Email de contacto"
                   required
                   disabled={estado === ESTADO.ENVIANDO}
-                  className="w-full bg-white border-4 border-slate-800 text-slate-900 text-sm font-bold rounded-xl px-3 py-2 outline-none focus:border-[#ff6b6b] disabled:opacity-50"
+                  className="w-full bg-white border-2 border-slate-800 text-slate-900 text-sm font-bold rounded-xl px-3 py-1.5 outline-none focus:border-[#ff6b6b] disabled:opacity-50"
                 />
                 <textarea
                   name="mensaje"
                   value={form.mensaje}
                   onChange={manejarCambio}
                   placeholder="Cuéntanos sobre tu local (opcional)"
-                  rows="3"
+                  rows="2"
                   disabled={estado === ESTADO.ENVIANDO}
-                  className="w-full bg-white border-4 border-slate-800 text-slate-900 text-sm font-bold rounded-xl px-3 py-2 outline-none resize-none focus:border-[#ff6b6b] disabled:opacity-50"
+                  className="w-full bg-white border-2 border-slate-800 text-slate-900 text-sm font-bold rounded-xl px-3 py-1.5 outline-none resize-none focus:border-[#ff6b6b] disabled:opacity-50"
                 />
 
                 {estado === ESTADO.ERROR && (
-                  <p className="text-sm font-bold text-red-600 bg-red-50 border-2 border-red-300 rounded-xl px-3 py-2">
-                    ⚠️ No se pudo enviar. Prueba otra vez o escríbenos directamente por Instagram.
+                  <p className="text-xs font-bold text-red-600 bg-red-50 border-2 border-red-300 rounded-xl px-2 py-1.5">
+                    ⚠️ Error. Escríbenos por Instagram.
                   </p>
                 )}
 
                 <button
                   type="submit"
                   disabled={estado === ESTADO.ENVIANDO}
-                  className="w-full bg-[#ff6b6b] text-white font-black text-base py-3 rounded-2xl border-4 border-slate-800 shadow-[4px_4px_0px_rgba(30,41,59,1)] active:translate-y-1 active:shadow-none hover:bg-[#ff5252] transition-all disabled:opacity-60 disabled:active:translate-y-0 disabled:active:shadow-[4px_4px_0px_rgba(30,41,59,1)]"
+                  className="w-full bg-[#ff6b6b] text-white font-black text-sm py-2 rounded-xl border-2 border-slate-800 shadow-[3px_3px_0px_rgba(30,41,59,1)] active:translate-y-0.5 active:shadow-none hover:bg-[#ff5252] transition-all disabled:opacity-60"
                 >
                   {estado === ESTADO.ENVIANDO ? "Enviando..." : "Enviar solicitud"}
                 </button>
               </form>
             )}
 
-            {/* ALTERNATIVA INSTAGRAM */}
-            <hr className="border-slate-800 border-t-2 my-5" />
-            <p className="text-center text-sm font-bold text-slate-700 mb-2">
+            {/* ALTERNATIVA INSTAGRAM (Márgenes ajustados) */}
+            <hr className="border-slate-800 border-t-2 my-3" />
+            <p className="text-center text-xs font-bold text-slate-700 mb-2">
               ¿Prefieres un trato más directo? Háblanos por Instagram 👇
             </p>
             <a
               href="https://www.instagram.com/cazurronics"
               target="_blank"
               rel="noopener noreferrer"
-              className="block text-center bg-amber-300 text-slate-900 font-black px-4 py-2 rounded-xl border-4 border-slate-800 shadow-[2px_2px_0px_rgba(30,41,59,1)] hover:bg-amber-400 active:translate-y-1 active:shadow-none transition-all"
+              className="block text-center bg-amber-300 text-slate-900 font-black text-sm px-4 py-2 rounded-xl border-2 border-slate-800 shadow-[2px_2px_0px_rgba(30,41,59,1)] hover:bg-amber-400 active:translate-y-0.5 active:shadow-none transition-all"
             >
               📸 @cazurronics
             </a>
