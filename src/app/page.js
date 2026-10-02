@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import dynamic from 'next/dynamic'; 
+import BusinessModal from './components/BusinessModal';
 
 const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false });
 
@@ -239,6 +240,7 @@ export default function Home() {
           <button type="submit" className="bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black text-xl py-4 px-6 rounded-full w-full shadow-[0_10px_30px_rgba(251,113,133,0.4)] hover:shadow-[0_15px_40px_rgba(251,113,133,0.6)] hover:-translate-y-1 active:translate-y-1 transition-all duration-300">
             ¡Descubrir el Plan!
           </button>
+          <BusinessModal />
         </form>
       )}
     </main>
