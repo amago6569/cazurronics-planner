@@ -48,15 +48,29 @@ export default function BusinessModal() {
       // Así el navegador no lanza una petición OPTIONS de preflight antes del POST,
       // que es justo lo que hace fallar por CORS a los Web Apps de Google Apps Script.
       // Apps Script igualmente puede leer el contenido como JSON sin problema (ver Código.gs).
-      await fetch(GAS_URL, {
+      const respuesta = await fetch(GAS_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(form),
       });
 
+      const texto = await respuesta.text();
+      console.log("[BusinessModal] Respuesta cruda de Apps Script:", texto);
+
+      let datos;
+      try {
+        datos = JSON.parse(texto);
+      } catch {
+        throw new Error("Apps Script no devolvió JSON válido (mira la consola para ver la respuesta cruda)");
+      }
+
+      if (!datos.exito) {
+        throw new Error(datos.mensaje || "Apps Script devolvió exito:false sin más detalle");
+      }
+
       setEstado(ESTADO.ENVIADO);
     } catch (error) {
-      console.error("Error enviando el formulario de negocios:", error);
+      console.error("[BusinessModal] Error enviando el formulario:", error.message);
       setEstado(ESTADO.ERROR);
     }
   };
