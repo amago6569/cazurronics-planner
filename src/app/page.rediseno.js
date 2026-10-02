@@ -15,54 +15,13 @@ const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder
 const LABEL = "flex items-center gap-2 text-[13px] font-semibold text-slate-700 mb-2 px-1";
 const PRESS = "transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.97]";
 
-// Pasos que se van completando mientras /api/plan trabaja (solo visual)
-const PASOS_CARGA = [
-  { emoji: "🌤️", texto: "Mirando la previsión del tiempo" },
-  { emoji: "🗺️", texto: "Buscando sitios dentro de tu zona" },
-  { emoji: "💶", texto: "Ajustándolo a tu presupuesto" },
-  { emoji: "📸", texto: "Comprobando horarios y fotos reales" },
-  { emoji: "🦁", texto: "Trazando la ruta más cazurra" },
+const FRASES_CARGA = [
+  "Mirando la previsión del tiempo…",
+  "Buscando el mejor tapeo del Húmedo…",
+  "Preguntando a los del Barrio Romántico…",
+  "Comprobando horarios y fotos reales…",
+  "Trazando la ruta más cazurra posible…",
 ];
-
-/* ─────────────────────────────────────────────────────────────
-   CAZURRONICS CHOICES — los locales destacados.
-   Mientras esté vacío se muestran las vidrieras "apagadas".
-   Para añadir uno, mete un objeto así (máx. 3 se ven a la vez):
-   { nombre: "Bar Ejemplo", categoria: "Tapeo", zona: "Barrio Húmedo",
-     foto: "/choices/bar-ejemplo.jpg", frase: "La mejor morcilla de León",
-     url: "https://..." }   ← url es opcional
-   ───────────────────────────────────────────────────────────── */
-const CAZURRONICS_CHOICES = [];
-
-// Colores de cada vidriera (inspirados en el rosetón de la Catedral)
-const VIDRIERAS = [
-  "radial-gradient(circle at 50% 28%, #fef3c7 0 9%, transparent 10%), conic-gradient(from 210deg at 50% 62%, #fb7185, #f97316, #fde68a, #f43f5e, #fb923c, #fb7185)",
-  "radial-gradient(circle at 50% 28%, #e0f2fe 0 9%, transparent 10%), conic-gradient(from 180deg at 50% 62%, #38bdf8, #6366f1, #a78bfa, #0ea5e9, #818cf8, #38bdf8)",
-  "radial-gradient(circle at 50% 28%, #fef9c3 0 9%, transparent 10%), conic-gradient(from 240deg at 50% 62%, #34d399, #14b8a6, #facc15, #10b981, #a3e635, #34d399)",
-];
-const PLOMO = "linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,.95) calc(50% - 1px), rgba(255,255,255,.95) calc(50% + 1px), transparent calc(50% + 1px)), repeating-linear-gradient(0deg, transparent 0 26px, rgba(255,255,255,.85) 26px 28px), linear-gradient(90deg, transparent calc(25% - 1px), rgba(255,255,255,.6) calc(25% - 1px), rgba(255,255,255,.6) calc(25% + 1px), transparent calc(25% + 1px), transparent calc(75% - 1px), rgba(255,255,255,.6) calc(75% - 1px), rgba(255,255,255,.6) calc(75% + 1px), transparent calc(75% + 1px))";
-
-function SelloChoice({ className = "" }) {
-  return (
-    <svg viewBox="0 0 100 100" className={className} aria-label="Sello Cazurronics Choice" role="img">
-      <defs>
-        <path id="cz-sello-arco" d="M50,50 m-35,0 a35,35 0 1,1 70,0 a35,35 0 1,1 -70,0" />
-        <linearGradient id="cz-sello-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#fb7185" />
-          <stop offset="55%" stopColor="#f97316" />
-          <stop offset="100%" stopColor="#f59e0b" />
-        </linearGradient>
-      </defs>
-      <circle cx="50" cy="50" r="48" fill="url(#cz-sello-grad)" />
-      <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="1" strokeDasharray="1.5 3" />
-      <text fill="#fff" fontSize="9" fontWeight="700" letterSpacing="1">
-        <textPath href="#cz-sello-arco" textLength="216" lengthAdjust="spacing">CAZURRONICS · CHOICE · LEÓN ·</textPath>
-      </text>
-      <circle cx="50" cy="50" r="23" fill="#fff" />
-      <text x="50" y="58.5" textAnchor="middle" fontSize="23">🦁</text>
-    </svg>
-  );
-}
 
 const SUGERENCIAS = [
   { emoji: "🍷", texto: "Tapeo por el Húmedo" },
@@ -100,20 +59,24 @@ export default function Home() {
   const [distancia, setDistancia] = useState(15);
   const [centroMapa, setCentroMapa] = useState([42.5987, -5.5671]);
 
-  // Solo visual: avanza los pasos de la pantalla de carga (se queda en el último)
-  const [pasoCarga, setPasoCarga] = useState(0);
+  // Solo visual: rota los mensajes de la pantalla de carga
+  const [fraseCarga, setFraseCarga] = useState(0);
   useEffect(() => {
     if (!estaCargando) return;
-    const id = setInterval(() => setPasoCarga((p) => Math.min(p + 1, PASOS_CARGA.length - 1)), 2600);
-    return () => { clearInterval(id); setPasoCarga(0); };
+    const id = setInterval(() => setFraseCarga((f) => (f + 1) % FRASES_CARGA.length), 2200);
+    return () => clearInterval(id);
   }, [estaCargando]);
 
   // Solo visual: intro de bienvenida (rosetón + león) al abrir la web.
   // "entrando" → "saliendo" (fade out) → "fin" (se desmonta). Se salta con un toque.
   const [intro, setIntro] = useState("entrando");
-  const salirIntro = () => setIntro((f) => (f === "entrando" ? "saliendo" : f));
+  const salirIntro = () => {
+    const reducir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setIntro((f) => (f === "entrando" ? (reducir ? "fin" : "saliendo") : f));
+  };
   useEffect(() => {
-    const t = setTimeout(() => setIntro((f) => (f === "entrando" ? "saliendo" : f)), 1700);
+    const reducir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t = setTimeout(() => setIntro((f) => (f === "entrando" ? (reducir ? "fin" : "saliendo") : f)), reducir ? 0 : 1700);
     return () => clearTimeout(t);
   }, []);
 
@@ -200,6 +163,7 @@ export default function Home() {
         @keyframes cz-float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(-3deg); } }
         @keyframes cz-spin { to { transform: rotate(360deg); } }
         @keyframes cz-swap { 0% { opacity: 0; transform: translateY(6px); } 15%,85% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); } }
+        @keyframes cz-skeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
         .cz-up { animation: cz-up .7s cubic-bezier(.2,.8,.2,1) both; }
         .cz-fade { animation: cz-fade .35s ease both; }
@@ -209,6 +173,7 @@ export default function Home() {
         .cz-swap { animation: cz-swap 2.2s ease both; }
         .cz-sheen::after { content: ""; position: absolute; inset: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); transform: translateX(-120%) skewX(-20deg); pointer-events: none; }
         .cz-sheen:hover::after { animation: cz-shimmer 1s ease; }
+        .cz-skeleton { background: linear-gradient(90deg, rgba(15,23,42,.06) 25%, rgba(15,23,42,.13) 50%, rgba(15,23,42,.06) 75%); background-size: 200% 100%; animation: cz-skeleton 1.6s linear infinite; }
 
         /* Intro: el rosetón entra girando, el león salta dentro y aparece la marca */
         @keyframes cz-intro-roseton { 0% { opacity: 0; transform: scale(.4) rotate(-140deg); } 70% { opacity: 1; transform: scale(1.04) rotate(8deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
@@ -223,21 +188,9 @@ export default function Home() {
         /* Mientras dura la intro, las entradas de la página esperan congeladas en su primer fotograma */
         .cz-wait .cz-up { animation-play-state: paused; }
 
-        /* La vidriera se colorea en abanico mientras se genera el plan */
-        @property --cz-p { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
-        @keyframes cz-colorea { from { --cz-p: 0%; } to { --cz-p: 96%; } }
-        @keyframes cz-fade-out { to { opacity: 0; } }
-        .cz-colorea { -webkit-mask-image: conic-gradient(#000 var(--cz-p), transparent var(--cz-p)); mask-image: conic-gradient(#000 var(--cz-p), transparent var(--cz-p)); animation: cz-colorea 24s cubic-bezier(.2,.55,.35,1) forwards; }
-        .cz-spin-lento { animation: cz-spin 18s linear infinite; }
-
-        /* Si el sistema pide "reducir movimiento" (p. ej. Windows con los efectos de animación apagados)
-           no apagamos nada del todo: lo decorativo pasa a fundidos suaves y la carga sigue girando,
-           porque es lo que te dice que la web está trabajando. */
         @media (prefers-reduced-motion: reduce) {
-          .cz-up, .cz-sheet, .cz-intro-txt, .cz-intro-roseton, .cz-intro-leon { animation: cz-fade .5s ease both !important; }
-          .cz-float, .cz-swap, .cz-sheen:hover::after, .cz-intro-halo { animation: none !important; }
-          .cz-intro-out { animation: cz-fade-out .4s ease both !important; }
-          .cz-spin, .cz-spin-lento { animation-duration: 30s; }
+          .cz-up, .cz-fade, .cz-sheet, .cz-float, .cz-spin, .cz-swap, .cz-skeleton, .cz-sheen:hover::after,
+          .cz-intro-roseton, .cz-intro-leon, .cz-intro-halo, .cz-intro-out, .cz-intro-txt { animation: none !important; }
         }
       `}} />
 
@@ -275,47 +228,31 @@ export default function Home() {
       )}
 
       {estaCargando ? (
-        /* ───────────────────────── CARGANDO ─────────────────────────
-           El rosetón gira y su vidriera se va coloreando como una barra de progreso,
-           con el león dentro. Debajo, los pasos se van marcando uno a uno. */
-        <div className="w-full max-w-md my-auto cz-up" role="status" aria-live="polite">
-          <div className={`${GLASS} rounded-[2.25rem] px-6 pt-9 pb-6 sm:px-9 sm:pt-10 text-center relative overflow-hidden`}>
-            <div className="relative mx-auto mb-7 w-40 h-40 sm:w-44 sm:h-44">
-              <div aria-hidden className="absolute -inset-5 rounded-full bg-gradient-to-br from-rose-300/70 via-amber-200/70 to-sky-300/70 blur-2xl animate-pulse" />
-              <div className="cz-spin-lento absolute inset-0 rounded-full overflow-hidden ring-[5px] ring-white shadow-[0_18px_50px_-12px_rgba(244,63,94,0.55)] bg-white">
-                <img src="/roseton.png" alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover grayscale opacity-35" />
-                <img src="/roseton.png" alt="" aria-hidden className="cz-colorea absolute inset-0 w-full h-full object-cover" />
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20 rounded-full bg-white/85 backdrop-blur-sm ring-1 ring-white shadow-[0_8px_24px_-6px_rgba(15,23,42,0.35)] flex items-center justify-center">
-                  <span className="cz-float text-4xl sm:text-5xl">🦁</span>
-                </span>
+        /* ───────────────────────── CARGANDO ───────────────────────── */
+        <div className="w-full max-w-md my-auto cz-up">
+          <div className={`${GLASS} rounded-[2.25rem] p-8 sm:p-10 text-center relative overflow-hidden`}>
+            <div className="relative mx-auto mb-7 w-28 h-28">
+              <div aria-hidden className="absolute -inset-3 rounded-full bg-gradient-to-br from-rose-300/60 via-amber-200/60 to-sky-300/60 blur-xl animate-pulse" />
+              <img src="/roseton.png" alt="" aria-hidden className="cz-spin absolute inset-0 w-full h-full object-cover rounded-full opacity-90" />
+              <div className="absolute inset-0 rounded-full ring-4 ring-white/80 shadow-[0_12px_40px_-8px_rgba(251,113,133,0.55)]" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="cz-float text-5xl drop-shadow-[0_6px_10px_rgba(0,0,0,0.25)]">🦁</span>
               </div>
             </div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 mb-2">Creando tu plan maestro</h2>
+            <p key={fraseCarga} className="cz-swap text-slate-500 font-medium text-[15px] h-6">{FRASES_CARGA[fraseCarga]}</p>
 
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Creando tu plan maestro</h2>
-            <p className="text-slate-500 text-sm mt-1.5">Tu vidriera se va coloreando…</p>
-
-            <ol className="mt-7 space-y-1.5 text-left">
-              {PASOS_CARGA.map((paso, i) => {
-                const hecho = i < pasoCarga;
-                const actual = i === pasoCarga;
-                return (
-                  <li
-                    key={paso.texto}
-                    className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all duration-500 ${actual ? "bg-white/80 ring-1 ring-rose-100 shadow-[0_6px_18px_-8px_rgba(244,63,94,0.35)]" : ""} ${!hecho && !actual ? "opacity-45" : ""}`}
-                  >
-                    <span className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center text-base transition-all duration-500 ${hecho ? "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.6)]" : "bg-white/80 ring-1 ring-slate-900/5"}`}>
-                      {hecho ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-                      ) : paso.emoji}
-                    </span>
-                    <span className={`flex-1 text-[14px] font-medium ${hecho ? "text-slate-500" : "text-slate-800"}`}>{paso.texto}</span>
-                    {actual && <span className="w-4 h-4 shrink-0 rounded-full border-2 border-rose-200 border-t-rose-500 animate-spin" aria-hidden />}
-                  </li>
-                );
-              })}
-            </ol>
+            <div className="mt-8 space-y-3 text-left" aria-hidden>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3 bg-white/40 rounded-2xl p-3 border border-white/60">
+                  <div className="cz-skeleton w-12 h-12 rounded-xl shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="cz-skeleton h-3 rounded-full" style={{ width: `${80 - i * 15}%` }} />
+                    <div className="cz-skeleton h-2.5 rounded-full w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : itinerario ? (
@@ -533,7 +470,7 @@ export default function Home() {
           </section>
 
           {/* Formulario */}
-          <form onSubmit={generarPlan} className="order-2 lg:col-span-7 lg:row-span-4">
+          <form onSubmit={generarPlan} className="order-2 lg:col-span-7 lg:row-span-3">
             <div className={`${GLASS} rounded-[2.25rem] p-5 sm:p-7 cz-up`} style={{ animationDelay: "90ms" }}>
               <div className="flex items-center justify-between mb-6 px-1">
                 <div>
@@ -645,65 +582,11 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Cazurronics Choices: tres vidrieras góticas que se "encienden" con cada local destacado */}
-          <section className={`${GLASS} group/choices order-4 lg:col-span-5 rounded-[2.25rem] p-5 sm:p-6 relative overflow-hidden cz-up`} style={{ animationDelay: "220ms" }} aria-labelledby="cz-choices-titulo">
-            <div aria-hidden className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-gradient-to-br from-amber-200/50 via-rose-200/40 to-transparent blur-2xl" />
-            <div className="relative flex items-center gap-4">
-              <SelloChoice className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] shrink-0 drop-shadow-[0_8px_16px_rgba(244,63,94,0.35)] transition-transform duration-[1200ms] ease-[cubic-bezier(.2,.8,.2,1)] group-hover/choices:rotate-[30deg]" />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Selección de la casa</p>
-                <h2 id="cz-choices-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-tight">Cazurronics Choices</h2>
-                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Los sitios de León que nos han enamorado.</p>
-              </div>
-            </div>
-
-            <div className="relative grid grid-cols-3 gap-2.5 sm:gap-3 mt-5">
-              {(CAZURRONICS_CHOICES.length ? CAZURRONICS_CHOICES.slice(0, 3) : [null, null, null]).map((local, i) => {
-                const Tag = local?.url ? "a" : "div";
-                return (
-                  <Tag
-                    key={local?.nombre ?? i}
-                    {...(local?.url ? { href: local.url, target: "_blank", rel: "noopener noreferrer" } : {})}
-                    className="group/arco relative block aspect-[3/4.2] rounded-t-[999px] rounded-b-[1.25rem] overflow-hidden bg-white/50 ring-1 ring-white shadow-[0_10px_24px_-12px_rgba(15,23,42,0.35),inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-14px_rgba(244,63,94,0.45)]"
-                  >
-                    {local?.foto && <img src={local.foto} alt={local.nombre} className="absolute inset-0 w-full h-full object-cover" />}
-                    {/* El cristal: apagado si el hueco está libre, translúcido sobre la foto si hay local */}
-                    <div
-                      aria-hidden
-                      className={`absolute inset-0 transition-all duration-700 ${local ? "opacity-30 mix-blend-color" : "opacity-40 saturate-[.6] group-hover/arco:opacity-90 group-hover/arco:saturate-150"}`}
-                      style={{ background: VIDRIERAS[i % VIDRIERAS.length] }}
-                    />
-                    {/* Las tiras de plomo de la vidriera */}
-                    <div aria-hidden className="absolute inset-0 opacity-70" style={{ backgroundImage: PLOMO }} />
-                    <div aria-hidden className="absolute inset-[5px] rounded-t-[999px] rounded-b-[1rem] ring-1 ring-white/80" />
-
-                    {local ? (
-                      <div className="absolute inset-x-0 bottom-0 p-2 pt-8 bg-gradient-to-t from-slate-900/80 via-slate-900/40 to-transparent text-center">
-                        <p className="text-[12px] sm:text-[13px] font-bold text-white leading-tight line-clamp-2">{local.nombre}</p>
-                        {local.categoria && <p className="text-[10px] font-medium text-white/75 mt-0.5 truncate">{local.categoria}{local.zona ? ` · ${local.zona}` : ""}</p>}
-                      </div>
-                    ) : (
-                      <div className="absolute inset-x-0 bottom-2 flex flex-col items-center gap-1">
-                        <span className="text-[10px] font-bold text-slate-500/90 tabular-nums">Nº {i + 1}</span>
-                        <span className="text-[10px] sm:text-[11px] font-semibold text-slate-700 bg-white/85 backdrop-blur-sm rounded-full px-2 py-0.5 shadow-sm whitespace-nowrap">Próximamente</span>
-                      </div>
-                    )}
-                  </Tag>
-                );
-              })}
-            </div>
-
-            <p className="relative text-center text-xs text-slate-500 mt-4">
-              {CAZURRONICS_CHOICES.length ? "Elegidos a mano por el equipo cazurro" : "Estamos eligiendo a mano los primeros. Muy pronto, aquí."}
-            </p>
-          </section>
-
           {/* Negocios */}
-          <section className={`${GLASS_SOFT} order-5 lg:col-span-5 rounded-[1.75rem] p-4 pl-5 flex items-center justify-between gap-3 cz-up`} style={{ animationDelay: "280ms" }}>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900 leading-snug">¿Tienes un negocio en León?</p>
-              <p className="text-xs text-slate-500 leading-snug mt-0.5">Consigue el sello y aparece en los planes.</p>
-            </div>
+          <section className={`${GLASS_SOFT} order-4 lg:col-span-5 rounded-[1.75rem] px-5 py-4 flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center justify-between gap-1 cz-up`} style={{ animationDelay: "220ms" }}>
+            <p className="text-sm text-slate-600 text-center sm:text-left lg:text-center xl:text-left">
+              <span className="font-semibold text-slate-800">Hecho en León</span>, para la gente de León.
+            </p>
             <BusinessModal />
           </section>
         </div>
