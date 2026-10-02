@@ -1,5 +1,6 @@
 import { Fredoka } from "next/font/google";
 import "./globals.css";
+import { URL_SITIO } from "../lib/sitio";
 
 // Cargamos la tipografía Fredoka con distintos grosores
 const fredoka = Fredoka({ 
@@ -8,8 +9,10 @@ const fredoka = Fredoka({
 });
 
 export const metadata = {
+  metadataBase: new URL(URL_SITIO),
   title: 'Cazurronics Planner | Tu planazo en León',
   description: 'Organiza tu escapada perfecta por la provincia de León. Descubre rincones ocultos sin pensar y sin estrés.',
+  openGraph: { siteName: 'Cazurronics Planner', locale: 'es_ES', type: 'website' },
 }
 
 //Pruebas para vercel

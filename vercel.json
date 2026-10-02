@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/barrido", "schedule": "0 5 * * *" }
+  ]
+}

@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada } from '../../../lib/planUtils';
+import { leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
+import { claveLugar, registrarApariciones } from '../../../lib/lugares';
+import { registrar } from '../../../lib/estadisticas';
+
+export const maxDuration = 60;
 
 export async function POST(request) {
   try {
-    const { itinerarioActual, indice, instruccion, fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = await request.json();
+    const { itinerarioActual, indice, instruccion, fecha, presupuestoMin, presupuestoMax, radio, lat, lon, planId } = await request.json();
     const paradaAntigua = itinerarioActual[indice];
     const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
     const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
@@ -30,6 +35,24 @@ export async function POST(request) {
     const { parada } = await enriquecerParada(JSON.parse(jsonLimpio), { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY });
 
     if (!parada) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
+
+    // NUEVO: identificador del lugar + actualizar el plan guardado (el enlace compartido ve el cambio)
+    parada.lugarId = claveLugar(parada);
+    if (typeof planId === 'string' && /^[0-9a-zA-Z]{6,20}$/.test(planId)) {
+      await sinRomper((async () => {
+        const guardado = await leerJSON(`plan:${planId}`);
+        if (guardado?.itinerario?.[indice]) {
+          guardado.itinerario[indice] = parada;
+          guardado.editado = Date.now();
+          await guardarJSON(`plan:${planId}`, guardado, 120 * 24 * 3600);
+        }
+      })(), 'actualizar plan');
+    }
+    await Promise.all([
+      sinRomper(registrarApariciones([parada]), 'apariciones'),
+      sinRomper(registrar('retoque'), 'estadísticas'),
+    ]);
+
     return NextResponse.json({ exito: true, parada });
   } catch (error) { return NextResponse.json({ exito: false, mensaje: error.message }, { status: 500 }); }
-}
+}

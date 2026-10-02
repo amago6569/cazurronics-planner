@@ -262,6 +262,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       parada.lat = objetivo.geometry.location.lat;
       parada.lon = objetivo.geometry.location.lng;
       ubicacionResuelta = true;
+      if (objetivo.place_id) parada.placeId = objetivo.place_id;
 
       if (typeof objetivo.rating === 'number') {
         parada.resenas = `${objetivo.rating}/5 (${objetivo.user_ratings_total || 0} reseñas)`;
@@ -282,7 +283,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
             }
             if (detalle.photos && detalle.photos.length > 0) {
               const photoRef = detalle.photos[0].photo_reference;
-              fotoRealEncontrada = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photoRef}&key=${mapsKey}`;
+              // La clave NO viaja al navegador: la foto se pide a nuestra ruta /api/foto, que añade la clave en el servidor
+              fotoRealEncontrada = `/api/foto?ref=${encodeURIComponent(photoRef)}`;
             }
           }
         } catch (eDetalle) {
@@ -292,7 +294,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
 
       if (!fotoRealEncontrada && objetivo.photos && objetivo.photos.length > 0) {
         const photoRef = objetivo.photos[0].photo_reference;
-        fotoRealEncontrada = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photoRef}&key=${mapsKey}`;
+        fotoRealEncontrada = `/api/foto?ref=${encodeURIComponent(photoRef)}`;
       }
     }
   } catch (e) {
@@ -327,4 +329,4 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   parada.streetView = await obtenerStreetView(parada.lat, parada.lon, mapsKey);
 
   return { parada, problemaConfigPlaces };
-}
+}

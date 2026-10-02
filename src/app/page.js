@@ -1,7 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import BusinessModal from './components/BusinessModal';
+import Valorar from './components/Valorar';
+import { baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
 
 const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false });
 
@@ -100,6 +103,27 @@ export default function Home() {
   const [distancia, setDistancia] = useState(15);
   const [centroMapa, setCentroMapa] = useState([42.5987, -5.5671]);
 
+  // NUEVO: plan guardado (para compartir/votar), aviso de "enlace copiado" y valoración pendiente
+  const [planId, setPlanId] = useState(null);
+  const [aviso, setAviso] = useState("");
+  const [pendienteValorar, setPendienteValorar] = useState(null);
+  useEffect(() => {
+    registrarVisita();
+    // en el siguiente fotograma: localStorage solo existe en el navegador
+    const t = requestAnimationFrame(() => setPendienteValorar(planPendienteDeValorar()));
+    return () => cancelAnimationFrame(t);
+  }, []);
+
+  const compartir = async () => {
+    if (!planId) return;
+    const r = await compartirPlan(planId);
+    if (r === "copiado") { setAviso("Enlace copiado. ¡Pásalo al grupo!"); setTimeout(() => setAviso(""), 2500); }
+  };
+  const abrirParada = (parada, index) => {
+    setParadaSeleccionada(parada); setIndiceSeleccionado(index);
+    baliza("detalle", { lugarId: parada.lugarId });
+  };
+
   // Solo visual: avanza los pasos de la pantalla de carga (se queda en el último)
   const [pasoCarga, setPasoCarga] = useState(0);
   useEffect(() => {
@@ -120,7 +144,7 @@ export default function Home() {
   const generarPlan = async (e) => {
     if (e) e.preventDefault();
     if (!fecha) { alert("¡Necesito una fecha!"); return; }
-    setEstaCargando(true); setItinerario(null); setParadaSeleccionada(null); setClimaPrevision(null);
+    setEstaCargando(true); setItinerario(null); setParadaSeleccionada(null); setClimaPrevision(null); setPlanId(null);
 
     // Aseguramos que si dejaron la caja vacía, se envíe un 0 (o un 1 en la distancia)
     const minSeguro = presupuestoMin === "" ? 0 : Number(presupuestoMin);
@@ -135,6 +159,7 @@ export default function Home() {
       const datos = await respuesta.json();
       if (datos.exito) {
         setItinerario(datos.plan); setClimaPrevision(datos.prevision || null);
+        setPlanId(datos.planId || null); recordarPlan(datos.planId, fecha, datos.plan);
       } else { alert("🚨 Error: " + datos.mensaje); }
     } catch (error) { alert("Error de conexión."); } finally { setEstaCargando(false); }
   };
@@ -150,10 +175,11 @@ export default function Home() {
     try {
       const respuesta = await fetch('/api/retocar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itinerarioActual: itinerario, indice: indiceSeleccionado, instruccion: instruccionRetoque, fecha, presupuestoMin: minSeguro, presupuestoMax: maxSeguro, radio: radioSeguro, lat: centroMapa[0], lon: centroMapa[1] })
+        body: JSON.stringify({ itinerarioActual: itinerario, indice: indiceSeleccionado, instruccion: instruccionRetoque, fecha, presupuestoMin: minSeguro, presupuestoMax: maxSeguro, radio: radioSeguro, lat: centroMapa[0], lon: centroMapa[1], planId })
       });
       const datos = await respuesta.json();
       if (datos.exito) {
+        actualizarParadaRecordada(planId, indiceSeleccionado, datos.parada);
         const nuevoItinerario = [...itinerario];
         nuevoItinerario[indiceSeleccionado] = datos.parada;
         setItinerario(nuevoItinerario); setParadaSeleccionada(datos.parada); setInstruccionRetoque("");
@@ -331,6 +357,13 @@ export default function Home() {
                 <p className="text-[11px] sm:text-xs font-medium text-slate-500 mt-1 truncate">{itinerario.length} paradas · {fecha}</p>
               </div>
             </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+            {planId && (
+              <button onClick={compartir} aria-label="Compartir plan" className={`${PRESS} shrink-0 flex items-center gap-1.5 bg-white/80 text-slate-800 ring-1 ring-slate-900/10 text-sm font-semibold px-3.5 h-11 rounded-full hover:bg-white`}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13" /></svg>
+                <span className="hidden sm:inline">Compartir</span>
+              </button>
+            )}
             <button
               onClick={() => { setItinerario(null); setClimaPrevision(null); }}
               className={`${PRESS} shrink-0 flex items-center gap-1.5 bg-slate-900 text-white text-sm font-semibold pl-3.5 pr-4 h-11 rounded-full shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] hover:bg-slate-800 hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.55)]`}
@@ -338,7 +371,10 @@ export default function Home() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 18l-6-6 6-6" /></svg>
               Volver
             </button>
+            </div>
           </div>
+
+          {aviso && <div className="cz-fade fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg">{aviso}</div>}
 
           {/* Bento superior: mapa + tiempo/consejo */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
@@ -356,6 +392,21 @@ export default function Home() {
                     <p className="text-xs text-slate-500 mt-1.5">Plan adaptado al tiempo</p>
                   </div>
                 </div>
+              )}
+
+              {planId && (
+                <button onClick={compartir} className={`${GLASS} group text-left rounded-[2rem] p-5 relative overflow-hidden cz-up transition-all duration-500 hover:-translate-y-1 hover:bg-white/70`} style={{ animationDelay: "170ms" }}>
+                  <div aria-hidden className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-gradient-to-br from-emerald-200/60 to-sky-200/40 blur-2xl" />
+                  <div className="relative flex items-center gap-4">
+                    <div className="flex -space-x-2 shrink-0" aria-hidden>
+                      {["🦁", "🐻", "🦊"].map((e, i) => <span key={e} className="w-10 h-10 rounded-full bg-white ring-2 ring-white shadow-sm flex items-center justify-center text-lg" style={{ zIndex: 3 - i }}>{e}</span>)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-slate-900">Decidid en grupo</p>
+                      <p className="text-sm text-slate-600 leading-snug">Manda el enlace y votad cada parada. <span className="font-semibold text-rose-500 group-hover:underline">Compartir →</span></p>
+                    </div>
+                  </div>
+                </button>
               )}
 
               <div className={`${GLASS} rounded-[2rem] p-5 flex-1 relative overflow-hidden cz-up`} style={{ animationDelay: "200ms" }}>
@@ -383,8 +434,8 @@ export default function Home() {
                 key={index}
                 role="button"
                 tabIndex={0}
-                onClick={() => { setParadaSeleccionada(parada); setIndiceSeleccionado(index); }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setParadaSeleccionada(parada); setIndiceSeleccionado(index); } }}
+                onClick={() => abrirParada(parada, index)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirParada(parada, index); } }}
                 className={`${GLASS} cz-up group rounded-[2rem] p-2 flex flex-col cursor-pointer outline-none transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1.5 hover:bg-white/70 hover:shadow-[0_30px_60px_-18px_rgba(244,63,94,0.35),inset_0_1px_0_rgba(255,255,255,0.9)] focus-visible:ring-4 focus-visible:ring-rose-300/60 active:scale-[0.985]`}
                 style={{ animationDelay: `${260 + index * 70}ms` }}
               >
@@ -469,12 +520,12 @@ export default function Home() {
 
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   {paradaSeleccionada.telefono !== "No disponible" ? (
-                    <a href={`tel:${paradaSeleccionada.telefono}`} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl shadow-[0_10px_24px_-8px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5`}>📞 Llamar</a>
+                    <a href={`tel:${paradaSeleccionada.telefono}`} onClick={() => baliza("llamar", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl shadow-[0_10px_24px_-8px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5`}>📞 Llamar</a>
                   ) : (
                     <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-400 font-semibold rounded-2xl cursor-not-allowed">📞 Sin teléfono</span>
                   )}
                   {paradaSeleccionada.web !== "No disponible" ? (
-                    <a href={paradaSeleccionada.web} target="_blank" rel="noopener noreferrer" className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200 hover:bg-rose-50 hover:-translate-y-0.5`}>🌐 Web</a>
+                    <a href={paradaSeleccionada.web} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200 hover:bg-rose-50 hover:-translate-y-0.5`}>🌐 Web</a>
                   ) : (
                     <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-400 font-semibold rounded-2xl cursor-not-allowed">🌐 Sin web</span>
                   )}
@@ -513,6 +564,13 @@ export default function Home() {
       ) : (
         /* ───────────────────────── INICIO (Bento) ───────────────────────── */
         <div className="relative z-10 w-full max-w-6xl my-auto grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
+
+          {/* NUEVO: "¿Fuiste? ¿Qué tal?" si tiene un plan pasado sin valorar */}
+          {pendienteValorar && (
+            <div className="order-first lg:col-span-12">
+              <Valorar plan={pendienteValorar} onCerrar={() => setPendienteValorar(null)} />
+            </div>
+          )}
 
           {/* Hero */}
           <section className={`${GLASS} group order-1 lg:col-span-5 rounded-[2.25rem] p-6 sm:p-8 relative overflow-hidden cz-up`}>
@@ -706,6 +764,13 @@ export default function Home() {
             </div>
             <BusinessModal />
           </section>
+
+          {/* NUEVO: enlaces a las páginas de contenido (ayudan a que Google encuentre la web) */}
+          <nav aria-label="Más de León" className="order-6 lg:col-span-12 flex flex-wrap items-center justify-center gap-2 pt-1 cz-up" style={{ animationDelay: "320ms" }}>
+            {[["/agenda-leon", "📅 Agenda de León"], ["/que-hacer-en-leon", "✨ Qué hacer en León"], ["/donde-comer-en-leon", "🍷 Dónde comer en León"]].map(([href, texto]) => (
+              <Link key={href} href={href} className={`${PRESS} h-9 px-3.5 inline-flex items-center rounded-full bg-white/50 ring-1 ring-white text-[13px] font-medium text-slate-600 hover:bg-white hover:text-rose-600`}>{texto}</Link>
+            ))}
+          </nav>
         </div>
       )}
     </main>

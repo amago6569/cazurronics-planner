@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { leerJSON, sinRomper } from "../../../lib/almacen";
+import { registrarValoracion } from "../../../lib/lugares";
+import { idPlanValido, votanteValido } from "../../../lib/votos";
+import { registrar } from "../../../lib/estadisticas";
+
+// POST /api/valoracion  { planId, indice, valor: "bien" | "mal" | "nofui", votante }
+// "¿Fuiste? ¿Qué tal?" — alimenta el ranking que usa el planificador y el panel de cada negocio.
+export async function POST(request) {
+  try {
+    const { planId, indice, valor, votante } = await request.json();
+    if (!idPlanValido(planId) || !votanteValido(votante)) return NextResponse.json({ exito: false }, { status: 400 });
+    const plan = await leerJSON(`plan:${planId}`);
+    const parada = plan?.itinerario?.[Number(indice)];
+    if (!parada) return NextResponse.json({ exito: false }, { status: 404 });
+    // El lugar sale del plan guardado, no de lo que mande el navegador
+    const nueva = await registrarValoracion({ planId, indice: Number(indice), votante, valor, lugarId: parada.lugarId });
+    if (nueva) await sinRomper(registrar("valoracion"), "estadísticas");
+    return NextResponse.json({ exito: true, nueva });
+  } catch (e) {
+    return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+  }
+}

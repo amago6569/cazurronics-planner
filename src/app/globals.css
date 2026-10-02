@@ -24,3 +24,19 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Cazurronics: animaciones compartidas por las páginas nuevas ── */
+@keyframes cz-up { from { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes cz-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cz-sheet { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+@keyframes cz-pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.cz-up { animation: cz-up .7s cubic-bezier(.2,.8,.2,1) both; }
+.cz-fade { animation: cz-fade .35s ease both; }
+.cz-sheet { animation: cz-sheet .5s cubic-bezier(.2,.8,.2,1) both; }
+.cz-pop { animation: cz-pop .35s cubic-bezier(.3,1.4,.5,1); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+@media (prefers-reduced-motion: reduce) {
+  .cz-up, .cz-sheet { animation: cz-fade .5s ease both !important; }
+  .cz-pop { animation: none; }
+}
