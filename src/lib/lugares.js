@@ -124,3 +124,20 @@ export function claveDePanelValida(clave) {
   const b = Buffer.from(real);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+// Buscar un local por nombre (para el buscador del panel): recorre todos los sitios que han salido en algún plan
+export async function buscarLugares(texto, max = 20) {
+  const q = slug(texto).replace(/-/g, " ").trim();
+  if (q.length < 2) return [];
+  const claves = (await comando(["ZREVRANGE", "ranking:apariciones", 0, 4999])) || [];
+  const fichas = await varios(claves.map((k) => ["GET", `lugar:${k}`]));
+  const encontrados = [];
+  fichas.forEach((f, i) => {
+    if (encontrados.length >= max || !f) return;
+    try {
+      const ficha = JSON.parse(f);
+      if (slug(ficha.nombre).replace(/-/g, " ").includes(q)) encontrados.push(claves[i]);
+    } catch {}
+  });
+  return (await Promise.all(encontrados.map(leerLugar))).filter(Boolean);
+}

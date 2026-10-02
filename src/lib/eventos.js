@@ -7,7 +7,7 @@
 //  1. Datos abiertos de la Junta de Castilla y León: agenda cultural oficial, con fechas y coordenadas.
 //  2. Gemini con Google Search, en varias búsquedas dirigidas a las agendas locales
 //     (Ayuntamiento, Diputación, Diario de León, Leonoticias, iLeón, auditorios, museos, fiestas de pueblos...).
-import { guardarJSON, leerJSON, varios } from "./almacen";
+import { comando, guardarJSON, leerJSON, varios } from "./almacen";
 import { haversineKm } from "./planUtils";
 import { hoyEnLeon } from "./estadisticas";
 
@@ -104,11 +104,25 @@ export const BUSQUEDAS = [
   { tema: "mercados, mercadillos, ferias de artesanía y jornadas gastronómicas", pistas: "Mercado del Conde Luna, ferias del Bierzo, jornadas de la cecina, del botillo y del cocido, Diario de León agenda" },
   { tema: "fiestas patronales, romerías y eventos en pueblos de la provincia", pistas: "Ponferrada, Astorga, La Bañeza, Villablino, Sahagún, Valencia de Don Juan, el Bierzo, la Montaña, Diputación de León" },
   { tema: "deporte, rutas guiadas, actividades al aire libre y planes para niños", pistas: "Cultural Leonesa, Ademar, Abanca Ademar, rutas de senderismo guiadas, ludotecas, actividades municipales" },
+  { tema: "mercados semanales, mercadillos fijos, rastros y mercados de abastos (los que se repiten cada semana: indica en diasSemana qué días se celebran)", pistas: "mercado de la Plaza Mayor y del Conde Luna de León, mercadillos de los pueblos, rastro, mercados de productores, ayuntamientos de la provincia" },
+  { tema: "exposiciones temporales abiertas ahora, ferias, festivales y ciclos que duran varios días o semanas (marca permanente: true si siguen abiertas sin fecha de cierre clara)", pistas: "salas de exposiciones, MUSAC, Museo de León, ILC, ferias de muestras, festivales de música y cine, ciclos culturales, jornadas gastronómicas" },
 ];
 
-async function llamarGemini(prompt) {
+// Formato que pedimos a Gemini en todas las búsquedas de eventos
+const FORMATO_EVENTO = `[{"titulo":"...","fecha":"AAAA-MM-DD (o null si se repite cada semana)","fechaFin":"AAAA-MM-DD o null","diasSemana":"null o lista de días que se repite, 0=domingo..6=sábado, p. ej. [3,6]","permanente":"true si es algo abierto durante semanas (exposición, feria) sin fecha de cierre clara","hora":"20:30 o null","lugar":"recinto","localidad":"León","precio":"Gratis / 12€ / null","categoria":"concierto|teatro|exposicion|mercado|feria|fiesta|festival|deporte|infantil|gastronomia|visita|otro","descripcion":"una frase","fuente":"https://...","lat":null,"lon":null}]`;
+
+const DIAS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+function leerDiasSemana(v) {
+  if (!Array.isArray(v)) return null;
+  const dias = v.map((d) => (typeof d === "number" ? d : DIAS.indexOf(normalizar(d)))).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return dias.length ? [...new Set(dias)] : null;
+}
+const diaDeLaSemana = (fecha) => new Date(`${fecha}T12:00:00Z`).getUTCDay();
+
+async function llamarGemini(prompt, msMax = 50000) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
     method: "POST",
+    signal: AbortSignal.timeout(msMax),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ googleSearch: {} }], generationConfig: { temperature: 0.1 } }),
     cache: "no-store",
@@ -130,9 +144,15 @@ export function extraerListaJSON(texto) {
 export function validarEventoIA(e, desde, hasta) {
   if (!e || typeof e !== "object") return null;
   const titulo = limpiarHtml(e.titulo).slice(0, 140);
-  const fecha = esFecha(e.fecha) ? e.fecha : null;
+  const diasSemana = leerDiasSemana(e.diasSemana);
+  const permanente = e.permanente === true || e.permanente === "true";
+  // Lo recurrente (mercado de los sábados) o lo abierto durante semanas (una exposición)
+  // no necesita fecha exacta: vale para toda la ventana.
+  let fecha = esFecha(e.fecha) ? e.fecha : null;
+  if (!fecha && (diasSemana || permanente)) fecha = desde;
   if (!titulo || !fecha || fecha > hasta) return null;
-  const fechaFin = esFecha(e.fechaFin) && e.fechaFin >= fecha ? e.fechaFin : null;
+  let fechaFin = esFecha(e.fechaFin) && e.fechaFin >= fecha ? e.fechaFin : null;
+  if (!fechaFin && (diasSemana || permanente)) fechaFin = hasta;
   if ((fechaFin || fecha) < desde) return null;
   // Solo aceptamos una URL real citada por el modelo (no los enlaces internos de Google)
   const fuente = typeof e.fuente === "string" && /^https?:\/\//.test(e.fuente) && !/vertexaisearch|grounding-api/.test(e.fuente) ? e.fuente : null;
@@ -150,6 +170,8 @@ export function validarEventoIA(e, desde, hasta) {
     fuente,
     lat: coords ? lat : null,
     lon: coords ? lon : null,
+    diasSemana,
+    permanente: permanente || undefined,
     origen: "web",
   };
 }
@@ -160,8 +182,9 @@ async function fuenteBusqueda({ tema, pistas }, desde, hasta) {
     que se celebren entre el ${desde} y el ${hasta}, ambos incluidos.
     Mira sobre todo estas fuentes: ${pistas}. Consulta también agendas de prensa local y webs oficiales.
     REGLAS: solo eventos con fecha confirmada en una fuente real; no inventes nada; incluye la URL exacta donde lo has visto.
+    Incluye también lo que no es de un solo día: mercados semanales (con diasSemana), exposiciones abiertas, ferias y festivales.
     Devuelve SOLO un array JSON (máximo 25 elementos) con este formato:
-    [{"titulo":"...","fecha":"AAAA-MM-DD","fechaFin":"AAAA-MM-DD o null","hora":"20:30 o null","lugar":"recinto","localidad":"León","precio":"Gratis / 12€ / null","categoria":"concierto|teatro|exposicion|mercado|fiesta|deporte|infantil|gastronomia|otro","descripcion":"una frase","fuente":"https://...","lat":null,"lon":null}]
+    ${FORMATO_EVENTO}
   `;
   const { texto } = await llamarGemini(prompt);
   return extraerListaJSON(texto).map((e) => validarEventoIA(e, desde, hasta)).filter(Boolean);
@@ -178,6 +201,7 @@ export function fusionarPorDia(listas, desde, hasta) {
     const ultimo = e.fechaFin && e.fechaFin > e.fecha ? e.fechaFin : e.fecha;
     // un evento de varios días aparece en cada uno de ellos (dentro de la ventana)
     for (let d = e.fecha < desde ? desde : e.fecha, n = 0; d <= ultimo && d <= hasta && n < DIAS_VENTANA; d = sumarDias(d, 1), n++) {
+      if (e.diasSemana?.length && !e.diasSemana.includes(diaDeLaSemana(d))) continue; // solo los días que se repite
       const dia = (porDia[d] ||= new Map());
       const k = claveEvento({ ...e, fecha: d });
       const previo = dia.get(k);
@@ -206,7 +230,13 @@ export async function barrerEventos() {
     else informe.fuentes[nombre] = { ok: false, error: String(r.reason?.message || r.reason).slice(0, 200) };
   });
 
-  const porDia = fusionarPorDia(listas, desde, hasta);
+  // Conservamos lo que han encontrado las búsquedas a medida de los usuarios (origen "peticion")
+  const fechas = Array.from({ length: DIAS_VENTANA }, (_, i) => sumarDias(desde, i));
+  const previos = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
+  const dePeticiones = previos.flatMap((v) => { try { return JSON.parse(v || "[]").filter((e) => e.origen === "peticion"); } catch { return []; } });
+  if (dePeticiones.length) informe.fuentes["búsquedas de usuarios (conservadas)"] = { ok: true, eventos: dePeticiones.length };
+
+  const porDia = fusionarPorDia([...listas, dePeticiones], desde, hasta);
   const comandos = [];
   for (let d = desde, i = 0; i < DIAS_VENTANA; d = sumarDias(d, 1), i++) {
     comandos.push(["SET", `eventos:${d}`, JSON.stringify(porDia[d] || []), "EX", 21 * 24 * 3600]);
@@ -237,10 +267,91 @@ export async function eventosProximos(dias = DIAS_VENTANA) {
   });
 }
 
-export function eventosParaPrompt(eventos, max = 15) {
+export function eventosParaPrompt(eventos, max = 20) {
   if (!eventos.length) return "";
   const lineas = eventos.slice(0, max).map((e) =>
-    `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}`
+    `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""} · fuente: ${e.fuente}`
   );
-  return `AGENDA VERIFICADA DE ESE DÍA (de nuestro barrido diario de fuentes locales). Si alguno encaja con lo que pide el usuario, inclúyelo con su hora real:\n${lineas.join("\n")}`;
+  return `AGENDA VERIFICADA DE ESE DÍA (barrido de fuentes locales: eventos, mercadillos, ferias, exposiciones y fiestas).
+OBLIGATORIO: si alguno encaja con lo que pide el usuario, el plan DEBE incluirlo (con su hora real y su campo "fuente"). Si hay varios compatibles, mezcla eventos con sitios para comer o tomar algo:
+${lineas.join("\n")}`;
+}
+
+// ============ BARRIDO A MEDIDA DE CADA PETICIÓN ============
+// Además del barrido diario, cada plan lanza 4 búsquedas en paralelo pensadas para ESA petición:
+// lo que pide el usuario ese día, lo que está en marcha aunque no sea de un día (mercadillos,
+// ferias, exposiciones), los pueblos de alrededor y planes concretos para su "apetece".
+// Lo que encuentra se suma a la agenda de ese día, así la agenda crece con cada búsqueda.
+function huella(texto) {
+  let h = 0;
+  for (const c of normalizar(texto)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h.toString(36);
+}
+
+export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) {
+  if (!esFecha(fecha)) return [];
+  const clave = `amedida:${fecha}:${huella(`${zona}|${Math.round(Number(radio))}|${apetece}`)}`;
+  const enCache = await leerJSON(clave).catch(() => null);
+  if (enCache) return enCache;
+
+  const nombreDia = DIAS[diaDeLaSemana(fecha)];
+  const donde = `${zona || "León"} (provincia de León, España), en un radio de ${radio} km`;
+  const peticion = String(apetece || "").slice(0, 300) || "un plan de ocio";
+  const temas = [
+    `eventos, actividades y planes del ${fecha} (${nombreDia}) en ${donde} relacionados con lo que pide el usuario: "${peticion}"`,
+    `todo lo que está en marcha el ${fecha} (${nombreDia}) en ${donde} aunque no sea de un solo día: mercadillos y mercados que se celebran los ${nombreDia}s, ferias, exposiciones temporales abiertas, festivales, fiestas patronales, jornadas gastronómicas y ciclos`,
+    `fiestas, romerías, ferias y eventos en los pueblos y localidades cercanas a ${donde} el ${fecha}`,
+    `planes concretos y especiales para "${peticion}" en ${donde} ese ${nombreDia}: visitas guiadas, catas, talleres, rutas, conciertos pequeños, actividades con reserva`,
+  ];
+  const prompt = (tema) => `
+    Eres el documentalista de Cazurronics Planner. Busca en Internet, en todas las fuentes que puedas
+    (webs de ayuntamientos y de la Diputación de León, Junta de Castilla y León, prensa local como Diario de León, Leonoticias o iLeón,
+    redes y webs de los organizadores, venta de entradas, turismo), ${tema}.
+    REGLAS: solo cosas confirmadas en una fuente real; no inventes nada; incluye la URL exacta donde lo has visto.
+    Devuelve SOLO un array JSON (máximo 15 elementos) con este formato:
+    ${FORMATO_EVENTO}
+  `;
+  const resultados = await Promise.allSettled(temas.map((t) => llamarGemini(prompt(t), 22000)));
+  const encontrados = resultados
+    .filter((r) => r.status === "fulfilled")
+    .flatMap((r) => extraerListaJSON(r.value.texto).map((e) => validarEventoIA(e, fecha, fecha)).filter(Boolean))
+    .map((e) => ({ ...e, origen: "peticion" }));
+
+  const delDia = fusionarPorDia([encontrados], fecha, fecha)[fecha] || [];
+  const cerca = lat != null && lon != null
+    ? delDia.filter((e) => e.lat == null || haversineKm(Number(lat), Number(lon), e.lat, e.lon) <= Number(radio) * 1.2)
+    : delDia;
+
+  // Caché 6 h para la misma petición y suma a la agenda pública de ese día
+  await guardarJSON(clave, cerca, 6 * 3600).catch(() => null);
+  if (cerca.length) await sumarAlDia(fecha, cerca).catch(() => null);
+  return cerca;
+}
+
+async function sumarAlDia(fecha, nuevos) {
+  const actuales = (await leerJSON(`eventos:${fecha}`)) || [];
+  const fusion = fusionarPorDia([actuales, nuevos], fecha, fecha)[fecha] || [];
+  await guardarJSON(`eventos:${fecha}`, fusion, 21 * 24 * 3600);
+}
+
+// Une la agenda guardada con la del barrido a medida, sin duplicados
+export function unirEventos(...listas) {
+  const vistos = new Map();
+  for (const e of listas.flat().filter(Boolean)) {
+    const k = normalizar(e.titulo).replace(/[^a-z0-9]/g, "").slice(0, 32);
+    if (!vistos.has(k)) vistos.set(k, e);
+  }
+  return [...vistos.values()];
+}
+
+// Si el barrido diario no se ha hecho en las últimas 20 h (por ejemplo, en local, donde no hay cron),
+// lo lanza una sola vez. Se llama en segundo plano con after(), sin hacer esperar a nadie.
+export async function asegurarBarridoReciente() {
+  const ultimo = await leerJSON("eventos:ultimoBarrido");
+  const edad = ultimo?.fin ? Date.now() - Date.parse(ultimo.fin) : Infinity;
+  if (edad < 20 * 3600 * 1000) return false;
+  const libre = await comando(["SET", "barrido:cerrojo", "1", "NX", "EX", 300]);
+  if (!libre) return false; // ya hay otro barrido en marcha
+  await barrerEventos();
+  return true;
 }

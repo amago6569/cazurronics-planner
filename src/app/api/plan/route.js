@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from '../../../lib/planUtils';
 import { guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
-import { eventosDelDia, eventosParaPrompt } from '../../../lib/eventos';
+import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos, asegurarBarridoReciente } from '../../../lib/eventos';
 import { claveLugar, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
 
@@ -15,15 +15,20 @@ export async function POST(request) {
     const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
 
     const nombreZona = await obtenerLocalidad(lat, lon, MAPS_KEY) || 'un punto de la provincia de León';
-    const previsionTiempo = await obtenerPrevisionTiempo(lat, lon, fecha);
-
-    // NUEVO: agenda verificada del barrido diario + lo que la comunidad ha valorado en esa zona.
-    // Si el almacén falla o está vacío, el plan se genera exactamente igual que antes.
-    const [eventosDia, prefs] = await Promise.all([
+    // NUEVO: en paralelo con el tiempo, 1) la agenda guardada de ese día, 2) un barrido a medida
+    // de ESTA petición (eventos, mercadillos, ferias, exposiciones, pueblos cercanos...) y
+    // 3) lo que la comunidad ha valorado en la zona. Si algo falla, el plan sale igual que antes.
+    const [previsionTiempo, eventosDia, eventosAMedida, prefs] = await Promise.all([
+      obtenerPrevisionTiempo(lat, lon, fecha),
       sinRomper(eventosDelDia(fecha, { lat, lon, radio }), 'eventos'),
+      sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
       sinRomper(preferenciasComunidad(lat, lon, radio), 'preferencias'),
     ]);
-    const bloqueAgenda = eventosParaPrompt(eventosDia || []);
+    // Si la agenda diaria está vacía o caducada (p. ej. en local, sin cron), se rellena en segundo plano
+    after(() => sinRomper(asegurarBarridoReciente(), 'barrido diario'));
+
+    const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []);
+    const bloqueAgenda = eventosParaPrompt(agendaDelDia);
     const bloqueComunidad = [
       prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
       prefs?.evitar?.length ? `EVITA estos sitios (malas experiencias reales de usuarios): ${prefs.evitar.join(', ')}.` : '',
@@ -39,10 +44,11 @@ export async function POST(request) {
       ${bloqueAgenda}
       ${bloqueComunidad}
       INSTRUCCIONES:
-      1. Busca en Google Search eventos efímeros para ${fecha} y sitios bien valorados.
+      1. Busca en Google Search eventos efímeros para ${fecha} (y también mercadillos, ferias, exposiciones y fiestas que estén en marcha ese día) y sitios bien valorados.
       2. No inventes nada. No te salgas del radio.
       3. Devuelve SOLO JSON estricto con este formato:
-      [{"hora": "12:00", "titulo": "Nombre Oficial", "descripcion": "Descripción del sitio.", "precio": "10€", "resenas": "4.5/5", "transporte": "5 min andando", "lat": 42.59, "lon": -5.56, "tipo": "bar", "telefono": "No disponible", "web": "No disponible", "horario": "12:00 - 16:00"}]
+      [{"hora": "12:00", "titulo": "Nombre Oficial", "descripcion": "Descripción del sitio.", "precio": "10€", "resenas": "4.5/5", "transporte": "5 min andando", "lat": 42.59, "lon": -5.56, "tipo": "bar", "telefono": "No disponible", "web": "No disponible", "horario": "12:00 - 16:00", "fuente": "URL del evento o null"}]
+      "tipo" es uno de: bar, restaurante, cafeteria, discoteca, monumento, parque, museo, exposicion, concierto, teatro, mercadillo, feria, fiesta, festival, evento, ruta, deporte.
     `;
 
     const resGoogle = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
@@ -75,16 +81,20 @@ export async function POST(request) {
 
     // NUEVO: guardamos el plan para poder compartirlo (/plan/ID) y votarlo en grupo
     const planId = nuevoId();
+    // NUEVO: el resto de la agenda de ese día que no ha entrado en el plan ("Más cosas ese día")
+    const enPlan = new Set(rutaFinal.map((p) => String(p.titulo).toLowerCase()));
+    const masEseDia = agendaDelDia.filter((e) => !enPlan.has(String(e.titulo).toLowerCase())).slice(0, 12);
+
     const guardado = await sinRomper(guardarJSON(`plan:${planId}`, {
       id: planId, creado: Date.now(), fecha, apetece, zona: nombreZona,
       centro: [lat, lon], radio, presupuesto: { min: presupuestoMin, max: presupuestoMax },
-      prevision: previsionTiempo, itinerario: rutaFinal,
+      prevision: previsionTiempo, itinerario: rutaFinal, masEseDia,
     }, 120 * 24 * 3600), 'guardar plan');
     await Promise.all([
       sinRomper(registrarApariciones(rutaFinal), 'apariciones'),
       sinRomper(registrar('plan'), 'estadísticas'),
     ]);
 
-    return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null });
+    return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia });
   } catch (error) { return NextResponse.json({ exito: false, mensaje: error.message }, { status: 500 }); }
 }

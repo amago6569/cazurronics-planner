@@ -204,11 +204,24 @@ export const BUSQUEDA_GENERICA_POR_TIPO = {
   concierto: 'live music concert crowd',
   mercadillo: 'street market stalls Spain',
   fiesta: 'traditional Spanish village festival fireworks',
+  feria: 'Spanish fair stalls crafts',
+  festival: 'music festival stage Spain',
+  exposicion: 'art exhibition gallery',
+  museo: 'museum interior Spain',
+  teatro: 'theatre stage performance',
+  evento: 'León Spain event plaza',
+  ruta: 'hiking trail mountains León Spain',
+  deporte: 'sports stadium Spain',
 };
 
 // Tipos para los que aceptamos una ubicación aproximada (la del centro elegido, o la que estime la IA)
 // cuando Google Places no tiene una ficha de negocio exacta. No aplica a bar/restaurante/discoteca.
 export const TIPOS_UBICACION_FLEXIBLE = ['concierto', 'mercadillo', 'fiesta', 'evento', 'monumento', 'parque'];
+
+// NUEVO: solo los negocios de hostelería EXIGEN ficha real en Google Places. Antes, una exposición,
+// una feria, un teatro o una ruta sin ficha se descartaban y el plan se quedaba en bares y restaurantes.
+export const TIPOS_CON_FICHA_OBLIGATORIA = ['bar', 'restaurante', 'discoteca', 'cafeteria', 'cafetería', 'pub', 'taberna', 'sidreria', 'sidrería'];
+const necesitaFicha = (tipo) => TIPOS_CON_FICHA_OBLIGATORIA.includes(String(tipo || '').toLowerCase());
 
 // Dado UNA parada (tal cual la devuelve Gemini) y el contexto de la búsqueda, la enriquece con datos
 // reales: coordenadas verificadas, teléfono, web, horario, reseñas, foto real y Street View.
@@ -301,7 +314,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     console.error("Error buscando lugar real en Google Places:", e);
   }
 
-  if (!ubicacionResuelta && TIPOS_UBICACION_FLEXIBLE.includes(parada.tipo)) {
+  if (!ubicacionResuelta && (TIPOS_UBICACION_FLEXIBLE.includes(parada.tipo) || !necesitaFicha(parada.tipo))) {
     const latIA = Number(parada.lat);
     const lonIA = Number(parada.lon);
     const coordenadaValidaIA = !isNaN(latIA) && !isNaN(lonIA) && haversineKm(lat, lon, latIA, lonIA) <= Number(radio) * 1.1;

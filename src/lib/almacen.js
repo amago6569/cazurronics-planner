@@ -62,6 +62,7 @@ function ejecutarEnMemoria([cmd, ...a]) {
   switch (cmd.toUpperCase()) {
     case "GET": { const v = vivo(a[0]); return typeof v === "string" ? v : null; }
     case "SET": {
+      if (a.some((x) => String(x).toUpperCase() === "NX") && vivo(a[0]) !== undefined) return null;
       mem.kv.set(a[0], String(a[1]));
       const i = a.findIndex((x) => String(x).toUpperCase() === "EX");
       if (i > -1) mem.caduca.set(a[0], Date.now() + Number(a[i + 1]) * 1000); else mem.caduca.delete(a[0]);

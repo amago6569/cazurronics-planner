@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import Fondo from "./Fondo";
 import Valorar from "./Valorar";
+import TarjetaEvento from "./TarjetaEvento";
 import { GLASS, PRESS, BOTON_OSCURO, BOTON_CTA, TITULO_GRADIENTE } from "../../lib/estilos";
 import { baliza, compartirPlan, idVotante, registrarVisita } from "../../lib/cliente";
 
@@ -182,6 +183,18 @@ export default function PlanCompartido({ inicial }) {
           })}
         </div>
 
+        {(plan.masEseDia || []).length > 0 && (
+            <section className="pt-2" aria-labelledby="cz-mas-titulo">
+              <div className="flex items-end justify-between px-1 mb-3">
+                <h3 id="cz-mas-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Más cosas ese día</h3>
+                <span className="hidden sm:inline text-xs font-medium text-slate-500">Eventos, mercadillos y ferias encontrados</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {(plan.masEseDia || []).map((e, i) => <TarjetaEvento key={`${i}-${e.titulo}`} e={e} />)}
+              </div>
+            </section>
+          )}
+
         {/* Bucle viral: quien recibe el enlace se monta el suyo */}
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-8 text-center relative overflow-hidden cz-up mt-2`}>
           <img src="/roseton.png" alt="" aria-hidden className="pointer-events-none absolute -right-16 -bottom-16 w-56 h-56 object-cover rounded-full opacity-20" />
@@ -207,6 +220,9 @@ export default function PlanCompartido({ inicial }) {
             </div>
             <img src={parada.fotoOficial} alt={parada.titulo} className="w-full h-48 object-cover rounded-[1.5rem] mb-4" />
             <p className="text-slate-600 text-[15px] leading-relaxed mb-4">{parada.descripcion}</p>
+            {parada.fuente && /^https?:\/\//.test(parada.fuente) && (
+                  <a href={parada.fuente} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-rose-500 hover:underline">🎟️ Ver la fuente del evento</a>
+                )}
             <div className="grid gap-2 mb-4">
               {[["💶", "Precio", parada.precio], ["🕒", "Horario", parada.horario], ["🚶", "Cómo llegar", parada.transporte], ["⭐", "Reseñas", parada.resenas]].filter(([, , v]) => v).map(([ic, et, val]) => (
                 <div key={et} className="flex items-center gap-3 bg-white/70 ring-1 ring-slate-900/5 rounded-2xl p-3">

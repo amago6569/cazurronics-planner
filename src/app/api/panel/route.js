@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { leerJSON, usaRedis } from "../../../lib/almacen";
 import { leerResumen } from "../../../lib/estadisticas";
-import { claveDePanelValida, tokenNegocio, topLugares } from "../../../lib/lugares";
+import { buscarLugares, claveDePanelValida, tokenNegocio, topLugares } from "../../../lib/lugares";
 import { barrerEventos, eventosProximos } from "../../../lib/eventos";
 
 export const maxDuration = 60;
@@ -12,6 +12,12 @@ const autorizado = (request) => claveDePanelValida(request.headers.get("x-clave"
 // GET /api/panel (cabecera x-clave = PANEL_CLAVE) → todo lo que ve el equipo en /panel
 export async function GET(request) {
   if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
+  // GET /api/panel?buscar=nombre → solo la búsqueda de locales
+  const buscar = new URL(request.url).searchParams.get("buscar");
+  if (buscar) {
+    const lugares = await buscarLugares(buscar);
+    return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
+  }
   const [resumen, apariciones, gusta, barrido, agenda] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),

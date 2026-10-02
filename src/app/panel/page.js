@@ -17,6 +17,18 @@ export default function Panel() {
   const [error, setError] = useState("");
   const [barriendo, setBarriendo] = useState(false);
   const [copiado, setCopiado] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [encontrados, setEncontrados] = useState(null);
+
+  const buscar = async (e) => {
+    e?.preventDefault();
+    if (busqueda.trim().length < 2) { setEncontrados(null); return; }
+    try {
+      const r = await fetch(`/api/panel?buscar=${encodeURIComponent(busqueda.trim())}`, { headers: { "x-clave": clave }, cache: "no-store" });
+      const d = await r.json();
+      setEncontrados(d.exito ? d.lugares : []);
+    } catch { setEncontrados([]); }
+  };
 
   const cargar = useCallback(async (c) => {
     setError("");
@@ -205,14 +217,23 @@ export default function Panel() {
 
         {/* Locales */}
         <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
-          <h2 className="font-bold text-slate-900">Locales que más salen en los planes</h2>
-          <p className="text-xs text-slate-500 mb-4">El botón copia un enlace privado con las estadísticas de ese local, para enseñárselo o mandárselo.</p>
-          {lugares.length ? (
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-bold text-slate-900">{encontrados ? `Resultados para “${busqueda}”` : "Locales que más salen en los planes"}</h2>
+              <p className="text-xs text-slate-500">El botón copia el enlace privado con las estadísticas de ese local, para mandárselo.</p>
+            </div>
+            <form onSubmit={buscar} className="flex gap-2">
+              <input value={busqueda} onChange={(e) => { setBusqueda(e.target.value); if (!e.target.value) setEncontrados(null); }} placeholder="Buscar un local…" className="w-full sm:w-56 bg-white/80 border border-white rounded-full px-4 h-10 text-sm outline-none ring-1 ring-slate-900/5 focus:ring-2 focus:ring-rose-300" />
+              <button className={`${BOTON_OSCURO} h-10`}>Buscar</button>
+            </form>
+          </div>
+          {encontrados && !encontrados.length && <p className="text-sm text-slate-500">Ningún local con ese nombre ha salido todavía en un plan.</p>}
+          {(encontrados || lugares).length ? (
             <div className="overflow-x-auto no-scrollbar -mx-2">
               <table className="w-full text-sm min-w-[640px]">
                 <thead><tr className="text-left text-xs text-slate-500"><th className="px-2 py-2 font-medium">Local</th><th className="px-2 font-medium text-right">Planes</th><th className="px-2 font-medium text-right">Fichas</th><th className="px-2 font-medium text-right">Llamadas</th><th className="px-2 font-medium text-right">Web</th><th className="px-2 font-medium text-right">😍 / 😕</th><th className="px-2" /></tr></thead>
                 <tbody>
-                  {lugares.map((l) => (
+                  {(encontrados || lugares).map((l) => (
                     <tr key={l.clave} className="border-t border-slate-900/5">
                       <td className="px-2 py-2.5"><span className="font-semibold text-slate-900">{l.nombre}</span>{l.tipo && <span className="text-xs text-slate-400"> · {l.tipo}</span>}</td>
                       <td className="px-2 text-right tabular-nums">{fmt(l.stats.apariciones)}</td>
@@ -228,7 +249,7 @@ export default function Panel() {
                 </tbody>
               </table>
             </div>
-          ) : <p className="text-sm text-slate-500">Cuando se generen planes aparecerán aquí los locales.</p>}
+          ) : !encontrados && <p className="text-sm text-slate-500">Cuando se generen planes aparecerán aquí los locales.</p>}
         </section>
       </div>
     </main>

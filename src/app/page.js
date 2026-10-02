@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import BusinessModal from './components/BusinessModal';
 import Valorar from './components/Valorar';
+import TarjetaEvento from './components/TarjetaEvento';
 import { baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
 
 const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false });
@@ -105,6 +106,7 @@ export default function Home() {
 
   // NUEVO: plan guardado (para compartir/votar), aviso de "enlace copiado" y valoración pendiente
   const [planId, setPlanId] = useState(null);
+  const [masEseDia, setMasEseDia] = useState([]);
   const [aviso, setAviso] = useState("");
   const [pendienteValorar, setPendienteValorar] = useState(null);
   useEffect(() => {
@@ -144,7 +146,7 @@ export default function Home() {
   const generarPlan = async (e) => {
     if (e) e.preventDefault();
     if (!fecha) { alert("¡Necesito una fecha!"); return; }
-    setEstaCargando(true); setItinerario(null); setParadaSeleccionada(null); setClimaPrevision(null); setPlanId(null);
+    setEstaCargando(true); setItinerario(null); setParadaSeleccionada(null); setClimaPrevision(null); setPlanId(null); setMasEseDia([]);
 
     // Aseguramos que si dejaron la caja vacía, se envíe un 0 (o un 1 en la distancia)
     const minSeguro = presupuestoMin === "" ? 0 : Number(presupuestoMin);
@@ -159,7 +161,7 @@ export default function Home() {
       const datos = await respuesta.json();
       if (datos.exito) {
         setItinerario(datos.plan); setClimaPrevision(datos.prevision || null);
-        setPlanId(datos.planId || null); recordarPlan(datos.planId, fecha, datos.plan);
+        setPlanId(datos.planId || null); recordarPlan(datos.planId, fecha, datos.plan); setMasEseDia(datos.masEseDia || []);
       } else { alert("🚨 Error: " + datos.mensaje); }
     } catch (error) { alert("Error de conexión."); } finally { setEstaCargando(false); }
   };
@@ -466,6 +468,19 @@ export default function Home() {
             ))}
           </div>
 
+          {/* NUEVO: todo lo demás que ha encontrado el barrido para ese día */}
+          {masEseDia.length > 0 && (
+            <section className="pt-2" aria-labelledby="cz-mas-titulo">
+              <div className="flex items-end justify-between px-1 mb-3">
+                <h3 id="cz-mas-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Más cosas ese día</h3>
+                <span className="hidden sm:inline text-xs font-medium text-slate-500">Eventos, mercadillos y ferias encontrados</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {masEseDia.map((e, i) => <TarjetaEvento key={`${i}-${e.titulo}`} e={e} />)}
+              </div>
+            </section>
+          )}
+
           {/* ── Hoja de detalle (bottom sheet en móvil, modal en escritorio) ── */}
           {paradaSeleccionada && (
             <div className="cz-fade fixed inset-0 bg-slate-900/35 backdrop-blur-md z-[100] flex items-end sm:items-center justify-center sm:p-4" onClick={cerrarModal}>
@@ -501,6 +516,9 @@ export default function Home() {
                 )}
 
                 <p className="text-slate-600 text-[15px] leading-relaxed mb-5">{paradaSeleccionada.descripcion}</p>
+                {paradaSeleccionada.fuente && /^https?:\/\//.test(paradaSeleccionada.fuente) && (
+                  <a href={paradaSeleccionada.fuente} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-rose-500 hover:underline">🎟️ Ver la fuente del evento</a>
+                )}
 
                 <div className="grid grid-cols-1 gap-2 mb-5">
                   {[
