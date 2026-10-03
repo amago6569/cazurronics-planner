@@ -64,9 +64,9 @@ export default async function PanelNegocio({ params }) {
         </section>
 
         <section className={`${GLASS} rounded-[2rem] p-6 text-center cz-up`} style={{ animationDelay: "380ms" }}>
-          <p className="text-lg font-bold text-slate-900">¿Quieres salir en más planes?</p>
-          <p className="text-sm text-slate-600 mt-1 mb-4">Con el sello Cazurronics Choice te destacamos en la web y en nuestro Instagram.</p>
-          <a href="https://www.instagram.com/cazurronics" target="_blank" rel="noopener noreferrer" className={BOTON_CTA}>Hablar con el equipo</a>
+          <p className="text-lg font-bold text-slate-900">¿Quieres que te vea más gente?</p>
+          <p className="text-sm text-slate-600 mt-1 mb-4 max-w-md mx-auto">Con Cazurronics Choices sales en la portada de la web, tienes tu propia destacada en nuestro Instagram y el sello para tu puerta. Escríbenos y te lo contamos.</p>
+          <a href="https://www.instagram.com/cazurronics" target="_blank" rel="noopener noreferrer" className={BOTON_CTA}>Escribirnos por Instagram</a>
           <p className="mt-4 text-xs text-slate-400"><Link href="/" className="hover:text-rose-500">cazurronics · No pienses. Cazurrea.</Link></p>
         </section>
       </div>

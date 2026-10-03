@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { leerJSON, usaRedis } from "../../../lib/almacen";
+import { comando, leerJSON, usaRedis } from "../../../lib/almacen";
 import { leerResumen } from "../../../lib/estadisticas";
 import { buscarLugares, claveDePanelValida, tokenNegocio, topLugares } from "../../../lib/lugares";
-import { barrerEventos, eventosProximos } from "../../../lib/eventos";
+import { barrerEventos, eventosProximos, IDS_TRAMOS, idTramo } from "../../../lib/eventos";
 
-export const maxDuration = 60;
+export const maxDuration = 60; // el panel lanza el barrido tramo a tramo
 export const dynamic = "force-dynamic";
 
 const autorizado = (request) => claveDePanelValida(request.headers.get("x-clave") || "");
@@ -35,12 +35,13 @@ async function datosDelPanel(request) {
     const lugares = await buscarLugares(buscar);
     return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda] = await Promise.all([
+  const [resumen, apariciones, gusta, barrido, agenda, solicitudes] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
     leerJSON("eventos:ultimoBarrido"),
     eventosProximos(14),
+    comando(["LRANGE", "negocios:solicitudes", 0, 99]).catch(() => []),
   ]);
   const conEnlace = (l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) });
   return NextResponse.json({
@@ -51,6 +52,7 @@ async function datosDelPanel(request) {
     favoritos: gusta.map(conEnlace),
     barrido,
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
+    solicitudes: (solicitudes || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean),
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -59,10 +61,10 @@ export async function POST(request) {
   const falta = faltaConfiguracion();
   if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
   if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
-  const { accion } = await request.json().catch(() => ({}));
-  if (accion !== "barrido") return NextResponse.json({ exito: false }, { status: 400 });
+  const { accion, tramo } = await request.json().catch(() => ({}));
+  if (accion !== "barrido" || tramo == null || !IDS_TRAMOS.includes(idTramo(tramo))) return NextResponse.json({ exito: false }, { status: 400 });
   try {
-    return NextResponse.json({ exito: true, informe: await barrerEventos() });
+    return NextResponse.json({ exito: true, informe: await barrerEventos({ tramo: idTramo(tramo) }) });
   } catch (e) {
     return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
   }

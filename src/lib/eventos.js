@@ -10,6 +10,8 @@
 import { comando, guardarJSON, leerJSON, varios } from "./almacen";
 import { haversineKm } from "./planUtils";
 import { hoyEnLeon } from "./estadisticas";
+import { deduplicar, ordenarPorHora } from "./agenda";
+import { MUNICIPIOS, ZONAS } from "./zonas";
 
 const DIAS_VENTANA = 14;
 // Mismos límites de la provincia que usa el mapa
@@ -109,7 +111,7 @@ export const BUSQUEDAS = [
 ];
 
 // Formato que pedimos a Gemini en todas las búsquedas de eventos
-const FORMATO_EVENTO = `[{"titulo":"...","fecha":"AAAA-MM-DD (o null si se repite cada semana)","fechaFin":"AAAA-MM-DD o null","diasSemana":"null o lista de días que se repite, 0=domingo..6=sábado, p. ej. [3,6]","permanente":"true si es algo abierto durante semanas (exposición, feria) sin fecha de cierre clara","hora":"20:30 o null","lugar":"recinto","localidad":"León","precio":"Gratis / 12€ / null","categoria":"concierto|teatro|exposicion|mercado|feria|fiesta|festival|deporte|infantil|gastronomia|visita|otro","descripcion":"una frase","fuente":"https://...","lat":null,"lon":null}]`;
+const FORMATO_EVENTO = `[{"titulo":"...","fecha":"AAAA-MM-DD (o null si se repite cada semana)","fechaFin":"AAAA-MM-DD o null","diasSemana":"null o lista de días que se repite, 0=domingo..6=sábado, p. ej. [3,6]","permanente":"true si es algo abierto durante semanas (exposición, feria) sin fecha de cierre clara","hora":"20:30 o null","lugar":"recinto","localidad":"municipio exacto donde se celebra (León, Ponferrada, Astorga, Villablino...)","precio":"Gratis / 12€ / null","categoria":"concierto|teatro|exposicion|mercado|feria|fiesta|festival|deporte|infantil|gastronomia|visita|otro","descripcion":"una frase","fuente":"https://...","lat":null,"lon":null}]`;
 
 const DIAS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
 function leerDiasSemana(v) {
@@ -131,7 +133,11 @@ async function llamarGemini(prompt, msMax = 50000) {
   const datos = await res.json();
   const candidato = datos.candidates?.[0];
   const texto = (candidato?.content?.parts || []).map((p) => p.text || "").join("\n");
-  return { texto };
+  // Webs que Google Search ha consultado DE VERDAD para esta respuesta (sirven para comprobar las fuentes)
+  const dominios = new Set((candidato?.groundingMetadata?.groundingChunks || [])
+    .map((c) => String(c?.web?.title || "").toLowerCase().replace(/^www\./, "").trim())
+    .filter((t) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)));
+  return { texto, dominios };
 }
 
 export function extraerListaJSON(texto) {
@@ -176,18 +182,171 @@ export function validarEventoIA(e, desde, hasta) {
   };
 }
 
-async function fuenteBusqueda({ tema, pistas }, desde, hasta) {
+// ============ BARRIDO A LO BESTIA, POR TRAMOS ============
+// Para pillar TODO lo que pasa en la provincia hacemos ~40 búsquedas al día, repartidas en 5 tramos
+// (cada tramo cabe de sobra en el minuto que da Vercel). Cada tramo guarda lo suyo y luego se fusiona todo
+// en la agenda de cada día, sin repetidos. El cron lanza un tramo cada hora de madrugada (vercel.json).
+//
+// Que sea CIERTO: cada evento necesita fecha dentro de la ventana y una URL de fuente, y esa fuente se comprueba:
+//  · si es de una web que Google Search ha consultado de verdad en esa búsqueda → vale;
+//  · si no, abrimos la URL: si existe, vale; si da 404 o el dominio no existe → fuera (era inventada).
+
+const GRUPOS_ZONA = [
+  { id: "cultura", nombre: "cultura y música", tema: "conciertos, música en directo, teatro, cine, monólogos, magia, exposiciones, presentaciones de libros, charlas y actividades culturales de ayuntamientos, casas de cultura y asociaciones" },
+  { id: "fiestas", nombre: "fiestas, ferias y mercados", tema: "fiestas patronales, romerías, verbenas, ferias de muestras y de ganado, mercados y mercadillos (también los semanales: indica en diasSemana qué días), jornadas gastronómicas, catas, matanzas y degustaciones" },
+  { id: "aire", nombre: "deporte, rutas y familia", tema: "deporte, carreras populares, marchas, rutas guiadas y de senderismo, visitas guiadas a monumentos y museos, actividades de naturaleza, talleres y planes para niños y familias" },
+];
+
+function semana(desde, n) { return [sumarDias(desde, n * 7), sumarDias(desde, n * 7 + 6)]; }
+
+// León capital, a fondo: por tipo de sitio (el barrido gordo la recorre así; los pueblos, municipio a municipio)
+const CAPITAL_A_FONDO = [
+  ["salas y bares con música en directo, conciertos, jam sessions y DJ", "Barrio Húmedo, Barrio Romántico, El Ensanche, Espacio Vías, salas de conciertos de León, Leonoticias, iLeón, Diario de León agenda"],
+  ["teatro, danza, cine, monólogos, magia y espectáculos", "Auditorio Ciudad de León, Teatro El Albéitar, Teatro San Francisco, cines de León, Fundación Sierra Pambley, venta de entradas"],
+  ["exposiciones, museos, visitas guiadas y patrimonio", "MUSAC, Museo de León, Palacio del Conde Luna, Catedral, San Isidoro, Casa Botines, San Marcos, Turismo León"],
+  ["actividades de centros cívicos, bibliotecas, Universidad de León, asociaciones vecinales y culturales, presentaciones de libros y charlas", "aytoleon.es, centros cívicos, Biblioteca Pública de León, ULE, Instituto Leonés de Cultura, Club de Prensa"],
+  ["deporte en directo, carreras populares, rutas y planes para niños y familias", "Cultural Leonesa, Ademar, Baloncesto León, carreras populares de León, ludotecas, actividades municipales infantiles"],
+  ["mercados, mercadillos, ferias, jornadas gastronómicas, catas y fiestas de barrio", "Mercado de la Plaza Mayor, Mercado del Conde Luna, ferias en la ciudad, fiestas de barrios de León, jornadas gastronómicas"],
+];
+
+// Trocea una lista en grupos de n
+const trozos = (lista, n) => Array.from({ length: Math.ceil(lista.length / n) }, (_, i) => lista.slice(i * n, i * n + n));
+// Reparte búsquedas en tramos de máximo 10 (cada tramo cabe en el minuto que da Vercel)
+const enTramos = (prefijo, nombre, busquedas) => trozos(busquedas, 10).map((bs, i, todos) => ({ id: `${prefijo}${i}`, nombre: `${nombre} · parte ${i + 1}/${todos.length}`, busquedas: bs }));
+
+// Todos los tramos que existen:
+//  · d0..d4  barrido diario (de madrugada): temas generales y las comarcas por tipo de plan
+//  · r       repaso de novedades (2 veces al día): hoy y los 3 próximos días, zona por zona
+//  · m0..m8  barrido GORDO (cada 2 días): municipio a municipio por toda la provincia + la capital a fondo
+export function definirTramos(desde = hoyEnLeon()) {
+  const hasta = sumarDias(desde, DIAS_VENTANA - 1);
+  const general = (n) => {
+    const [a, b] = semana(desde, n);
+    return BUSQUEDAS.map((bq) => ({ ...bq, nombre: `${bq.tema.split(" (")[0]} · ${n ? "semana que viene" : "esta semana"}`, desde: a, hasta: b }));
+  };
+  const porZona = (g) => ZONAS.filter((z) => z.id !== "leon").map((z) => ({
+    nombre: `${z.nombre} · ${g.nombre}`,
+    zona: z.id,
+    tema: `${g.tema} en ${z.nombre}: ${z.pueblos.slice(0, 18).join(", ")} y el resto de sus pueblos`,
+    pistas: `${z.pistas}, webs y redes de sus ayuntamientos y juntas vecinales, asociaciones culturales, peñas, comisiones de fiestas`,
+    donde: `${z.nombre}, provincia de León (España)`,
+    desde, hasta,
+  }));
+  const diario = [
+    { id: "d0", nombre: "Diario · León y provincia, esta semana", jcyl: true, busquedas: general(0) },
+    { id: "d1", nombre: "Diario · León y provincia, semana que viene", busquedas: general(1) },
+    { id: "d2", nombre: "Diario · comarcas, cultura y música", busquedas: porZona(GRUPOS_ZONA[0]) },
+    { id: "d3", nombre: "Diario · comarcas, fiestas, ferias y mercados", busquedas: porZona(GRUPOS_ZONA[1]) },
+    { id: "d4", nombre: "Diario · comarcas, deporte, rutas y familia", busquedas: porZona(GRUPOS_ZONA[2]) },
+  ];
+  const corto = sumarDias(desde, 3);
+  const repaso = [{
+    id: "r", nombre: "Repaso de novedades (hoy y 3 días)",
+    busquedas: ZONAS.map((z) => ({
+      nombre: `Novedades · ${z.nombre}`, zona: z.id,
+      tema: `todo lo que se ha anunciado para hoy y los próximos 3 días (también lo publicado a última hora: conciertos, fiestas, mercadillos, ferias, actividades, deporte, rutas)`,
+      pistas: `${z.pistas}, prensa local de hoy, redes de ayuntamientos y organizadores`,
+      donde: z.id === "leon" ? "León capital (España)" : `${z.nombre} (${z.pueblos.slice(0, 10).join(", ")}), provincia de León (España)`,
+      desde, hasta: corto,
+    })),
+  }];
+  const gordo = [
+    ...CAPITAL_A_FONDO.map(([tema, pistas]) => ({ nombre: `León capital · ${tema.split(",")[0]}`, zona: "leon", tema, pistas, donde: "León capital (España)", desde, hasta })),
+    ...ZONAS.filter((z) => MUNICIPIOS[z.id]).flatMap((z) => trozos(MUNICIPIOS[z.id], 3).map((grupo) => ({
+      nombre: `${grupo.join(", ")}`,
+      zona: z.id,
+      tema: `TODO lo que se celebra en los municipios de ${grupo.join(", ")} y en sus pueblos y pedanías: fiestas patronales, romerías, verbenas, conciertos, teatro, cine, exposiciones, mercadillos, ferias, jornadas gastronómicas, matanzas, deporte, carreras, rutas y visitas guiadas, talleres y actividades para niños`,
+      pistas: `webs, Facebook e Instagram de los ayuntamientos de ${grupo.join(", ")}, juntas vecinales, comisiones de fiestas, asociaciones culturales, ${z.pistas}`,
+      donde: `${grupo.join(", ")} (${z.nombre}, provincia de León, España)`,
+      desde, hasta,
+    }))),
+  ];
+  return [...diario, ...repaso, ...enTramos("m", "Barrido gordo", gordo)];
+}
+export const tramoPorId = (id, desde) => definirTramos(desde).find((t) => t.id === id) || null;
+export const IDS_TRAMOS = definirTramos("2026-01-01").map((t) => t.id);
+export const TRAMOS_DIARIOS = IDS_TRAMOS.filter((id) => id.startsWith("d"));
+export const TRAMOS_GORDOS = IDS_TRAMOS.filter((id) => id.startsWith("m"));
+// Compatibilidad: un número 0..4 es un tramo diario
+export const idTramo = (t) => (typeof t === "number" || /^\d+$/.test(String(t)) ? `d${t}` : String(t));
+export const NUM_TRAMOS = TRAMOS_DIARIOS.length;
+
+async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta }, msMax = 42000) {
   const prompt = `
-    Eres el documentalista de Cazurronics Planner. Busca en Internet ${tema} en León capital y en la provincia de León (España)
+    Eres el documentalista de Cazurronics Planner. Busca en Internet ${tema} en ${donde || "León capital y en la provincia de León (España)"}
     que se celebren entre el ${desde} y el ${hasta}, ambos incluidos.
-    Mira sobre todo estas fuentes: ${pistas}. Consulta también agendas de prensa local y webs oficiales.
-    REGLAS: solo eventos con fecha confirmada en una fuente real; no inventes nada; incluye la URL exacta donde lo has visto.
+    Mira sobre todo estas fuentes: ${pistas}. Consulta también agendas de prensa local, webs oficiales y venta de entradas.
+    Haz varias búsquedas distintas (por pueblo, por tipo de plan y por fecha) para no dejarte nada.
+    REGLAS: solo eventos con fecha confirmada en una fuente real; no inventes nada; la URL de "fuente" tiene que ser
+    la página exacta donde lo has leído. Si un mismo evento sale en varias webs, ponlo UNA sola vez.
     Incluye también lo que no es de un solo día: mercados semanales (con diasSemana), exposiciones abiertas, ferias y festivales.
-    Devuelve SOLO un array JSON (máximo 25 elementos) con este formato:
+    Devuelve SOLO un array JSON (máximo 30 elementos) con este formato:
     ${FORMATO_EVENTO}
   `;
-  const { texto } = await llamarGemini(prompt);
-  return extraerListaJSON(texto).map((e) => validarEventoIA(e, desde, hasta)).filter(Boolean);
+  const { texto, dominios } = await llamarGemini(prompt, msMax);
+  const eventos = extraerListaJSON(texto).map((e) => validarEventoIA(e, desde, hasta)).filter(Boolean)
+    .map((e) => (zona ? { ...e, zonaBusqueda: zona } : e)); // pista de zona por si el evento no trae municipio
+  return { eventos, dominios };
+}
+
+// ---------- Comprobar que la fuente es de verdad ----------
+const dominioDe = (url) => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+export function dominioConsultado(url, dominios) {
+  const d = dominioDe(url);
+  if (!d || !dominios?.size) return false;
+  for (const t of dominios) if (d === t || d.endsWith(`.${t}`) || t.endsWith(`.${d}`)) return true;
+  return false;
+}
+
+// "ok" (la página existe) · "mal" (404, 410 o dominio inexistente) · "duda" (no se pudo saber a tiempo)
+export async function comprobarUrl(url, ms = 3500) {
+  try {
+    const r = await fetch(url, {
+      method: "GET", redirect: "follow", cache: "no-store", signal: AbortSignal.timeout(ms),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; CazurronicsBot/1.0; +https://cazurronics.es)", Range: "bytes=0-4096" },
+    });
+    try { await r.body?.cancel(); } catch {}
+    if (r.status === 404 || r.status === 410) return "mal";
+    return r.status < 400 ? "ok" : "duda";
+  } catch (e) {
+    const codigo = `${e?.cause?.code || ""} ${e?.message || ""}`;
+    return /ENOTFOUND|EAI_AGAIN|getaddrinfo|Invalid URL/i.test(codigo) ? "mal" : "duda";
+  }
+}
+
+// Filtra una lista de eventos dejando solo los de fuente comprobada. Devuelve { buenos, descartados }
+export async function verificarFuentes(eventos, dominios, { limite = Date.now() + 12000, enParalelo = 16 } = {}) {
+  const porComprobar = [...new Set(eventos.filter((e) => e.origen !== "jcyl" && !dominioConsultado(e.fuente, dominios)).map((e) => e.fuente))];
+  const estado = new Map();
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(enParalelo, porComprobar.length) }, async () => {
+    while (i < porComprobar.length) {
+      const url = porComprobar[i++];
+      const quedan = limite - Date.now();
+      estado.set(url, quedan > 800 ? await comprobarUrl(url, Math.min(3500, quedan - 300)) : "duda");
+    }
+  }));
+  const buenos = [], descartados = [];
+  for (const e of eventos) {
+    const ok = e.origen === "jcyl" || dominioConsultado(e.fuente, dominios) || estado.get(e.fuente) === "ok";
+    (ok ? buenos : descartados).push(e);
+  }
+  return { buenos, descartados };
+}
+
+// Lanza tareas con un máximo de N a la vez
+async function enTandas(tareas, maximo = 6) {
+  const resultados = new Array(tareas.length);
+  let siguiente = 0;
+  async function trabajador() {
+    while (siguiente < tareas.length) {
+      const i = siguiente++;
+      try { resultados[i] = { status: "fulfilled", value: await tareas[i]() }; }
+      catch (reason) { resultados[i] = { status: "rejected", reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(maximo, tareas.length) }, trabajador));
+  return resultados;
 }
 
 // ---------- Fusión ----------
@@ -210,42 +369,106 @@ export function fusionarPorDia(listas, desde, hasta) {
       if (!previo || puntos(e) > puntos(previo)) dia.set(k, e);
     }
   }
-  return Object.fromEntries(Object.entries(porDia).map(([d, m]) => [d, [...m.values()]]));
+  // además del nombre exacto, quitamos lo que es lo mismo con otro nombre ("Mercadillo Plaza Mayor" = "Mercado de la Plaza Mayor")
+  return Object.fromEntries(Object.entries(porDia).map(([d, m]) => [d, ordenarPorHora(deduplicar([...m.values()]))]));
 }
 
-export async function barrerEventos() {
+// Ejecuta UN tramo del barrido (o los diarios, uno detrás de otro, si no se dice cuál)
+export async function barrerEventos({ tramo } = {}) {
+  if (tramo == null) {
+    let ultimo = null;
+    for (const id of TRAMOS_DIARIOS) ultimo = await barrerEventos({ tramo: id });
+    return ultimo;
+  }
+  const id = idTramo(tramo);
+  const inicio = Date.now();
   const desde = hoyEnLeon();
   const hasta = sumarDias(desde, DIAS_VENTANA - 1);
-  const informe = { desde, hasta, inicio: new Date().toISOString(), fuentes: {} };
+  const def = tramoPorId(id, desde);
+  if (!def) throw new Error(`El tramo ${id} no existe`);
+  const informe = { tramo: id, nombre: def.nombre, desde, hasta, inicio: new Date(inicio).toISOString(), fuentes: {} };
 
   const tareas = [
-    ["jcyl", () => fuenteJCyL(desde, hasta)],
-    ...BUSQUEDAS.map((b) => [`web: ${b.tema}`, () => fuenteBusqueda(b, desde, hasta)]),
+    ...(def.jcyl ? [["Junta de Castilla y León (datos abiertos)", async () => ({ eventos: await fuenteJCyL(desde, hasta), dominios: new Set() })]] : []),
+    ...def.busquedas.map((b) => [b.nombre, () => fuenteBusqueda(b)]),
   ];
-  const resultados = await Promise.allSettled(tareas.map(([, f]) => f()));
-  const listas = [];
-  resultados.forEach((r, i) => {
+  const resultados = await enTandas(tareas.map(([, f]) => f), 10);
+
+  let encontrados = 0, descartados = 0, errores = 0;
+  const nuevos = [];
+  const limite = inicio + 54000; // todo el tramo cabe en el minuto de Vercel
+  await Promise.all(resultados.map(async (r, i) => {
     const nombre = tareas[i][0];
-    if (r.status === "fulfilled") { informe.fuentes[nombre] = { ok: true, eventos: r.value.length }; listas.push(r.value); }
-    else informe.fuentes[nombre] = { ok: false, error: String(r.reason?.message || r.reason).slice(0, 200) };
-  });
+    if (r.status !== "fulfilled") { errores++; informe.fuentes[nombre] = { ok: false, error: String(r.reason?.message || r.reason).slice(0, 200) }; return; }
+    const { buenos, descartados: malos } = await verificarFuentes(r.value.eventos, r.value.dominios, { limite });
+    encontrados += r.value.eventos.length; descartados += malos.length;
+    informe.fuentes[nombre] = { ok: true, eventos: buenos.length, ...(malos.length ? { descartados: malos.length } : {}) };
+    nuevos.push(...buenos.map((e) => ({ ...e, verificado: true })));
+  }));
 
-  // Conservamos lo que han encontrado las búsquedas a medida de los usuarios (origen "peticion")
-  const fechas = Array.from({ length: DIAS_VENTANA }, (_, i) => sumarDias(desde, i));
-  const previos = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
-  const dePeticiones = previos.flatMap((v) => { try { return JSON.parse(v || "[]").filter((e) => e.origen === "peticion"); } catch { return []; } });
-  if (dePeticiones.length) informe.fuentes["búsquedas de usuarios (conservadas)"] = { ok: true, eventos: dePeticiones.length };
-
-  const porDia = fusionarPorDia([...listas, dePeticiones], desde, hasta);
-  const comandos = [];
-  for (let d = desde, i = 0; i < DIAS_VENTANA; d = sumarDias(d, 1), i++) {
-    comandos.push(["SET", `eventos:${d}`, JSON.stringify(porDia[d] || []), "EX", 21 * 24 * 3600]);
-  }
-  await varios(comandos);
-  informe.total = Object.values(porDia).reduce((s, l) => s + l.length, 0);
-  informe.fin = new Date().toISOString();
-  await guardarJSON("eventos:ultimoBarrido", informe);
+  informe.nuevos = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta) : 0;
+  Object.assign(informe, { encontrados, descartados, errores, busquedas: tareas.length, fin: new Date().toISOString() });
+  await guardarJSON(`eventos:tramo:${id}`, informe, 7 * 24 * 3600);
+  await resumirBarridos();
   return informe;
+}
+
+// Mete eventos en la agenda de cada día SIN BORRAR lo que ya había: lo nuevo entra, lo repetido
+// (aunque tenga otro nombre) no se duplica, y de cada repetido nos quedamos con la versión más completa.
+// Lo antiguo sin fuente comprobada (de versiones anteriores de la web) se limpia aquí.
+// Devuelve cuántos eventos nuevos han entrado.
+async function sumarALaAgenda(eventos, desde, hasta) {
+  for (let intento = 0; intento < 40; intento++) {
+    if (await comando(["SET", "barrido:fusion", "1", "NX", "EX", 30])) break;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  try {
+    const porDia = fusionarPorDia([eventos], desde, hasta);
+    const fechas = Object.keys(porDia);
+    if (!fechas.length) return 0;
+    const actuales = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
+    const fiable = (e) => e.verificado || e.origen === "jcyl";
+    let nuevos = 0;
+    const comandos = fechas.map((f, i) => {
+      let antes = [];
+      try { antes = JSON.parse(actuales[i] || "[]").filter(fiable); } catch {}
+      const junto = ordenarPorHora(deduplicar([...antes, ...porDia[f]]));
+      nuevos += Math.max(0, junto.length - antes.length);
+      return ["SET", `eventos:${f}`, JSON.stringify(junto), "EX", 21 * 24 * 3600];
+    });
+    await varios(comandos);
+    return nuevos;
+  } finally {
+    await comando(["DEL", "barrido:fusion"]).catch(() => null);
+  }
+}
+
+// Resumen para el panel: cada tramo con su última pasada, y el total de la agenda
+export async function resumirBarridos() {
+  const desde = hoyEnLeon();
+  const fechas = Array.from({ length: DIAS_VENTANA }, (_, i) => sumarDias(desde, i));
+  const [informes, dias] = await Promise.all([
+    varios(IDS_TRAMOS.map((id) => ["GET", `eventos:tramo:${id}`])),
+    varios(fechas.map((f) => ["GET", `eventos:${f}`])),
+  ]);
+  const leer = (v) => { try { return JSON.parse(v); } catch { return null; } };
+  const lista = informes.map(leer);
+  const hechos = lista.filter(Boolean);
+  const defs = definirTramos(desde);
+  await guardarJSON("eventos:ultimoBarrido", {
+    desde, hasta: fechas.at(-1),
+    fin: hechos.map((x) => x.fin).sort().at(-1) || null,
+    total: dias.reduce((s, v) => s + (leer(v) || []).length, 0),
+    descartados: hechos.reduce((s, x) => s + (x.descartados || 0), 0),
+    tramos: IDS_TRAMOS.map((id, i) => ({
+      tramo: id, nombre: lista[i]?.nombre || defs.find((d) => d.id === id)?.nombre, fin: lista[i]?.fin || null,
+      busquedas: lista[i]?.busquedas || defs.find((d) => d.id === id)?.busquedas.length, nuevos: lista[i]?.nuevos ?? null,
+      eventos: lista[i] ? Object.values(lista[i].fuentes || {}).reduce((s, r) => s + (r.eventos || 0), 0) : null,
+      descartados: lista[i]?.descartados || 0, errores: lista[i]?.errores || 0,
+    })),
+    // Solo las búsquedas que han fallado (para no llenar el panel con 100 filas)
+    fuentes: Object.fromEntries(hechos.flatMap((x) => Object.entries(x.fuentes || {}).filter(([, r]) => !r.ok))),
+  });
 }
 
 // ---------- Lectura ----------
@@ -267,9 +490,9 @@ export async function eventosProximos(dias = DIAS_VENTANA) {
   });
 }
 
-export function eventosParaPrompt(eventos, max = 20) {
+export function eventosParaPrompt(eventos, max = 30) {
   if (!eventos.length) return "";
-  const lineas = eventos.slice(0, max).map((e) =>
+  const lineas = ordenarPorHora(deduplicar(eventos)).slice(0, max).map((e) =>
     `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""} · fuente: ${e.fuente}`
   );
   return `AGENDA VERIFICADA DE ESE DÍA (barrido de fuentes locales: eventos, mercadillos, ferias, exposiciones y fiestas).
@@ -312,10 +535,13 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
     ${FORMATO_EVENTO}
   `;
   const resultados = await Promise.allSettled(temas.map((t) => llamarGemini(prompt(t), 22000)));
-  const encontrados = resultados
-    .filter((r) => r.status === "fulfilled")
-    .flatMap((r) => extraerListaJSON(r.value.texto).map((e) => validarEventoIA(e, fecha, fecha)).filter(Boolean))
-    .map((e) => ({ ...e, origen: "peticion" }));
+  // Solo lo que tiene fuente comprobada (web consultada de verdad por Google, o URL que existe)
+  const limite = Date.now() + 5000;
+  const comprobados = await Promise.all(resultados.filter((r) => r.status === "fulfilled").map(async (r) => {
+    const lista = extraerListaJSON(r.value.texto).map((e) => validarEventoIA(e, fecha, fecha)).filter(Boolean);
+    return (await verificarFuentes(lista, r.value.dominios, { limite })).buenos;
+  }));
+  const encontrados = comprobados.flat().map((e) => ({ ...e, origen: "peticion", verificado: true }));
 
   const delDia = fusionarPorDia([encontrados], fecha, fecha)[fecha] || [];
   const cerca = lat != null && lon != null
@@ -336,22 +562,22 @@ async function sumarAlDia(fecha, nuevos) {
 
 // Une la agenda guardada con la del barrido a medida, sin duplicados
 export function unirEventos(...listas) {
-  const vistos = new Map();
-  for (const e of listas.flat().filter(Boolean)) {
-    const k = normalizar(e.titulo).replace(/[^a-z0-9]/g, "").slice(0, 32);
-    if (!vistos.has(k)) vistos.set(k, e);
-  }
-  return [...vistos.values()];
+  return ordenarPorHora(deduplicar(listas.flat().filter(Boolean)));
 }
 
-// Si el barrido diario no se ha hecho en las últimas 20 h (por ejemplo, en local, donde no hay cron),
-// lo lanza una sola vez. Se llama en segundo plano con after(), sin hacer esperar a nadie.
+// Pone al día lo más atrasado: un tramo diario con más de 20 h, o uno del barrido gordo con más de 46 h
+// (en local, donde no hay cron, así la agenda se va llenando sola). Se llama en segundo plano con after().
 export async function asegurarBarridoReciente() {
-  const ultimo = await leerJSON("eventos:ultimoBarrido");
-  const edad = ultimo?.fin ? Date.now() - Date.parse(ultimo.fin) : Infinity;
-  if (edad < 20 * 3600 * 1000) return false;
-  const libre = await comando(["SET", "barrido:cerrojo", "1", "NX", "EX", 300]);
-  if (!libre) return false; // ya hay otro barrido en marcha
-  await barrerEventos();
-  return true;
+  const ids = [...TRAMOS_DIARIOS, ...TRAMOS_GORDOS];
+  const informes = await varios(ids.map((id) => ["GET", `eventos:tramo:${id}`]));
+  const edad = (v) => { try { const f = JSON.parse(v)?.fin; return f ? Date.now() - Date.parse(f) : Infinity; } catch { return Infinity; } };
+  const atrasados = ids.map((id, i) => ({ id, edad: edad(informes[i]), max: (id.startsWith("m") ? 46 : 20) * 3600 * 1000 }))
+    .filter((t) => t.edad >= t.max)
+    .sort((a, b) => (a.id[0] === b.id[0] ? b.edad - a.edad : a.id.startsWith("d") ? -1 : 1)); // primero los diarios
+  for (const t of atrasados) {
+    if (!(await comando(["SET", `barrido:cerrojo:${t.id}`, "1", "NX", "EX", 300]))) continue; // ese tramo ya está en marcha
+    await barrerEventos({ tramo: t.id });
+    return t.id;
+  }
+  return false;
 }

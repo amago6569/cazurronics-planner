@@ -86,6 +86,12 @@ function ejecutarEnMemoria([cmd, ...a]) {
       const tramo = orden.slice(Number(a[1]), fin);
       return String(a[3] || "").toUpperCase() === "WITHSCORES" ? tramo.flatMap(([m, s]) => [m, String(s)]) : tramo.map(([m]) => m);
     }
+    case "LPUSH": {
+      let l = vivo(a[0]); if (!Array.isArray(l)) { l = []; mem.kv.set(a[0], l); }
+      l.unshift(...a.slice(1).map(String).reverse()); return l.length;
+    }
+    case "LTRIM": { const l = vivo(a[0]); if (Array.isArray(l)) mem.kv.set(a[0], l.slice(Number(a[1]), Number(a[2]) < 0 ? l.length + Number(a[2]) + 1 : Number(a[2]) + 1)); return "OK"; }
+    case "LRANGE": { const l = vivo(a[0]); if (!Array.isArray(l)) return []; return l.slice(Number(a[1]), Number(a[2]) < 0 ? l.length + Number(a[2]) + 1 : Number(a[2]) + 1); }
     default: throw new Error(`[almacén] Comando no soportado en memoria: ${cmd}`);
   }
 }

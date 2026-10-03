@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import Fondo from "./Fondo";
 import Valorar from "./Valorar";
-import TarjetaEvento from "./TarjetaEvento";
+import AgendaFranjas from "./AgendaFranjas";
 import { GLASS, PRESS, BOTON_OSCURO, BOTON_CTA, TITULO_GRADIENTE } from "../../lib/estilos";
 import { baliza, compartirPlan, idVotante, registrarVisita } from "../../lib/cliente";
 
@@ -92,7 +92,7 @@ export default function PlanCompartido({ inicial }) {
       <div className="w-full max-w-6xl mx-auto flex flex-col gap-4 sm:gap-5">
 
         {/* Barra superior */}
-        <header className={`${GLASS} sticky top-3 z-50 rounded-full pl-4 pr-2 py-2 flex items-center justify-between gap-2 cz-up`}>
+        <header className={`${GLASS} !bg-white/85 sticky top-3 z-50 rounded-full pl-4 pr-2 py-2 flex items-center justify-between gap-2 cz-up`}>
           <Link href="/" className="flex items-center gap-2.5 min-w-0">
             <span className="text-2xl shrink-0">🦁</span>
             <span className="min-w-0">
@@ -189,9 +189,7 @@ export default function PlanCompartido({ inicial }) {
                 <h3 id="cz-mas-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Más cosas ese día</h3>
                 <span className="hidden sm:inline text-xs font-medium text-slate-500">Eventos, mercadillos y ferias encontrados</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {(plan.masEseDia || []).map((e, i) => <TarjetaEvento key={`${i}-${e.titulo}`} e={e} />)}
-              </div>
+              <AgendaFranjas eventos={plan.masEseDia || []} mostrarCuando />
             </section>
           )}
 

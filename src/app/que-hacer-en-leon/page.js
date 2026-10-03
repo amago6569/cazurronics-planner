@@ -1,6 +1,8 @@
 // /que-hacer-en-leon — planes de este fin de semana + favoritos de la comunidad + clásicos (idea 8)
 import PaginaContenido from "../components/PaginaContenido";
 import TarjetaEvento, { fechaLarga } from "../components/TarjetaEvento";
+import AgendaFranjas from "../components/AgendaFranjas";
+import { organizarAgenda } from "../../lib/agenda";
 import TarjetaLugar from "../components/TarjetaLugar";
 import { eventosProximos } from "../../lib/eventos";
 import { topLugares } from "../../lib/lugares";
@@ -25,7 +27,8 @@ const CLASICOS = [
 export default async function QueHacer() {
   const proximos = await eventosProximos(14);
   // Próximo fin de semana: viernes, sábado y domingo
-  const finde = proximos.filter((d) => [5, 6, 0].includes(new Date(`${d.fecha}T12:00:00`).getDay())).slice(0, 3).filter((d) => d.eventos.length);
+  // Próximo fin de semana, sin repetidos: lo que dura varios días va aparte y cada día solo lo suyo
+  const finde = organizarAgenda(proximos.filter((d) => [5, 6, 0].includes(new Date(`${d.fecha}T12:00:00`).getDay())).slice(0, 3));
   let favoritos = await topLugares("ranking:gusta", 6);
   if (favoritos.length < 3) favoritos = await topLugares("ranking:apariciones", 6);
 
@@ -38,14 +41,20 @@ export default async function QueHacer() {
       ctaRef="que-hacer"
       actual="/que-hacer-en-leon"
     >
-      {finde.length > 0 && (
+      {(finde.enMarcha.length > 0 || finde.porDia.length > 0) && (
         <section>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">Este fin de semana</h2>
-          <div className="space-y-4">
-            {finde.map((d) => (
+          <div className="space-y-5">
+            {finde.enMarcha.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-rose-500 px-1 mb-2">Todo el fin de semana</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">{finde.enMarcha.slice(0, 6).map((e, i) => <TarjetaEvento key={i} e={e} mostrarCuando />)}</div>
+              </div>
+            )}
+            {finde.porDia.map((d) => (
               <div key={d.fecha}>
                 <p className="text-sm font-semibold text-rose-500 px-1 mb-2 first-letter:uppercase">{fechaLarga(d.fecha)}</p>
-                <div className="grid sm:grid-cols-2 gap-3">{d.eventos.slice(0, 6).map((e, i) => <TarjetaEvento key={i} e={e} />)}</div>
+                <AgendaFranjas eventos={d.grupos.flatMap((g) => g.eventos)} />
               </div>
             ))}
           </div>

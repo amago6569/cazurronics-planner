@@ -4,6 +4,7 @@ import { guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos, asegurarBarridoReciente } from '../../../lib/eventos';
 import { claveLugar, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
+import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from '../../../lib/agenda';
 
 export const maxDuration = 60;
 
@@ -45,7 +46,7 @@ export async function POST(request) {
       ${bloqueComunidad}
       INSTRUCCIONES:
       1. Busca en Google Search eventos efímeros para ${fecha} (y también mercadillos, ferias, exposiciones y fiestas que estén en marcha ese día) y sitios bien valorados.
-      2. No inventes nada. No te salgas del radio.
+      2. No inventes nada. No te salgas del radio. No repitas el mismo sitio o evento con otro nombre. Ordena las paradas por hora.
       3. Devuelve SOLO JSON estricto con este formato:
       [{"hora": "12:00", "titulo": "Nombre Oficial", "descripcion": "Descripción del sitio.", "precio": "10€", "resenas": "4.5/5", "transporte": "5 min andando", "lat": 42.59, "lon": -5.56, "tipo": "bar", "telefono": "No disponible", "web": "No disponible", "horario": "12:00 - 16:00", "fuente": "URL del evento o null"}]
       "tipo" es uno de: bar, restaurante, cafeteria, discoteca, monumento, parque, museo, exposicion, concierto, teatro, mercadillo, feria, fiesta, festival, evento, ruta, deporte.
@@ -76,14 +77,21 @@ export async function POST(request) {
     const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax);
     if (rutaFinal.length === 0) return NextResponse.json({ exito: false, mensaje: "Presupuesto muy bajo para esta zona." }, { status: 200 });
 
+    // NUEVO: paradas en orden cronológico y sin repetir el mismo sitio con otro nombre
+    const sinRepetir = deduplicar(rutaFinal.map((p) => ({ ...p, categoria: p.tipo })));
+    rutaFinal.splice(0, rutaFinal.length, ...sinRepetir.map(({ categoria, ...p }) => p));
+    rutaFinal.sort((a, b) => (leerHora(a.hora).min ?? 24 * 60) - (leerHora(b.hora).min ?? 24 * 60));
+
     // NUEVO: cada parada lleva su identificador de lugar (para estadísticas y valoraciones)
     for (const parada of rutaFinal) parada.lugarId = claveLugar(parada);
 
     // NUEVO: guardamos el plan para poder compartirlo (/plan/ID) y votarlo en grupo
     const planId = nuevoId();
     // NUEVO: el resto de la agenda de ese día que no ha entrado en el plan ("Más cosas ese día")
-    const enPlan = new Set(rutaFinal.map((p) => String(p.titulo).toLowerCase()));
-    const masEseDia = agendaDelDia.filter((e) => !enPlan.has(String(e.titulo).toLowerCase())).slice(0, 12);
+    // (sin lo que ya está en la ruta, aunque tenga otro nombre, y ordenado por hora)
+    const masEseDia = ordenarPorHora(
+      agendaDelDia.filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })))
+    ).slice(0, 12);
 
     const guardado = await sinRomper(guardarJSON(`plan:${planId}`, {
       id: planId, creado: Date.now(), fecha, apetece, zona: nombreZona,

@@ -15,7 +15,7 @@ export default function Panel() {
   const [clave, setClave] = useState("");
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState("");
-  const [barriendo, setBarriendo] = useState(false);
+  const [barriendo, setBarriendo] = useState(null); // null = parado; { tipo, hecho, total } mientras barre
   const [copiado, setCopiado] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [encontrados, setEncontrados] = useState(null);
@@ -55,12 +55,21 @@ export default function Panel() {
     return () => cancelAnimationFrame(t);
   }, [cargar]);
 
-  const barrer = async () => {
-    setBarriendo(true);
+  // Cada barrido va por tramos, uno detrás de otro, para que cada uno quepa en el minuto de Vercel
+  const BARRIDOS = {
+    diario: { texto: "Barrido diario", ids: ["d0", "d1", "d2", "d3", "d4"] },
+    novedades: { texto: "Novedades", ids: ["r"] },
+    gordo: { texto: "Barrido gordo", ids: ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7"] },
+  };
+  const barrer = async (tipo) => {
+    const { ids } = BARRIDOS[tipo];
     try {
-      await fetch("/api/panel", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ accion: "barrido" }) });
+      for (let i = 0; i < ids.length; i++) {
+        setBarriendo({ tipo, hecho: i, total: ids.length });
+        await fetch("/api/panel", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ accion: "barrido", tramo: ids[i] }) }).catch(() => null);
+      }
       await cargar(clave);
-    } finally { setBarriendo(false); }
+    } finally { setBarriendo(null); }
   };
 
   const copiarEnlace = async (lugar) => {
@@ -84,7 +93,7 @@ export default function Panel() {
     );
   }
 
-  const { resumen, lugares, barrido, agenda, almacen } = datos;
+  const { resumen, lugares, barrido, agenda, almacen, solicitudes = [] } = datos;
   const t = resumen.porDia.reduce((acc, d) => { for (const [k, v] of Object.entries(d)) if (k !== "fecha") acc[k] = (acc[k] || 0) + v; return acc; }, {});
   const planesTotales = resumen.total.plan || 0;
   const progreso = Math.min(planesTotales / OBJETIVO_ROSETON, 1);
@@ -192,23 +201,41 @@ export default function Panel() {
           <section className={`${GLASS} lg:col-span-8 rounded-[2rem] p-5 sm:p-6 cz-up`}>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
-                <h2 className="font-bold text-slate-900">Agenda (barrido diario)</h2>
-                <p className="text-xs text-slate-500">{barrido ? `Último barrido: ${new Date(barrido.fin || barrido.inicio).toLocaleString("es-ES")} · ${barrido.total ?? 0} eventos` : "Todavía no se ha hecho ningún barrido"}</p>
+                <h2 className="font-bold text-slate-900">Agenda (barridos automáticos)</h2>
+                <p className="text-xs text-slate-500">{barrido ? `Última pasada: ${new Date(barrido.fin || barrido.inicio).toLocaleString("es-ES")} · ${barrido.total ?? 0} planes en la agenda${barrido.descartados ? ` · ${barrido.descartados} descartados por fuente falsa` : ""}` : "Todavía no se ha hecho ningún barrido"}</p>
               </div>
-              <button onClick={barrer} disabled={barriendo} className={`${BOTON_OSCURO} disabled:opacity-60`}>
-                {barriendo && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                {barriendo ? "Barriendo… (hasta 1 min)" : "Lanzar barrido ahora"}
-              </button>
             </div>
-            {barrido?.fuentes && (
+            {/* Lanzar a mano (los crons lo hacen solos: diario de madrugada, novedades a mediodía y tarde, gordo cada 2 días) */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {Object.entries(BARRIDOS).map(([tipo, b]) => {
+                const activo = barriendo?.tipo === tipo;
+                return (
+                  <button key={tipo} onClick={() => barrer(tipo)} disabled={!!barriendo} className={`${BOTON_OSCURO} disabled:opacity-60 ${tipo === "gordo" ? "!bg-gradient-to-r from-rose-500 to-orange-500" : ""}`}>
+                    {activo && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                    {activo ? `${b.texto}: ${barriendo.hecho + 1}/${barriendo.total}…` : `${b.texto} (${b.ids.length === 1 ? "1 min" : `~${b.ids.length} min`})`}
+                  </button>
+                );
+              })}
+            </div>
+            {barrido?.tramos && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-4">
-                {Object.entries(barrido.fuentes).map(([f, r]) => (
-                  <div key={f} className="min-w-0 flex items-center justify-between gap-2 text-xs bg-white/60 rounded-xl px-3 py-2">
-                    <span className="truncate">{r.ok ? "✅" : "⚠️"} {f}</span>
-                    <span className="shrink-0 font-semibold" title={r.error || ""}>{r.ok ? `${r.eventos} eventos` : "error"}</span>
+                {barrido.tramos.map((t) => (
+                  <div key={t.tramo} className="min-w-0 flex items-center justify-between gap-2 text-xs bg-white/60 rounded-xl px-3 py-2">
+                    <span className="truncate">{t.fin ? (t.errores ? "⚠️" : "✅") : "⏳"} {t.nombre}</span>
+                    <span className="shrink-0 font-semibold tabular-nums" title={t.fin ? new Date(t.fin).toLocaleString("es-ES") : "aún no se ha hecho"}>
+                      {t.fin ? `${t.eventos} · +${t.nuevos ?? 0} nuevos${t.descartados ? ` · −${t.descartados}` : ""}` : "pendiente"}
+                    </span>
                   </div>
                 ))}
               </div>
+            )}
+            {barrido?.fuentes && Object.keys(barrido.fuentes).length > 0 && (
+              <details className="mb-4 text-xs">
+                <summary className="cursor-pointer text-amber-700 font-semibold">⚠️ {Object.keys(barrido.fuentes).length} búsquedas fallaron en la última pasada</summary>
+                <ul className="mt-2 space-y-1">
+                  {Object.entries(barrido.fuentes).map(([f, r]) => <li key={f} className="bg-white/60 rounded-xl px-3 py-2"><b>{f}</b>: {r.error}</li>)}
+                </ul>
+              </details>
             )}
             <div className="flex gap-1 overflow-x-auto no-scrollbar">
               {agenda.map((d) => (
@@ -220,6 +247,33 @@ export default function Panel() {
             </div>
           </section>
         </div>
+
+        {/* Solicitudes de negocios (copia de seguridad del formulario "Destácalo") */}
+        <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h2 className="font-bold text-slate-900">Negocios que quieren hablar contigo <span className="text-slate-400 font-medium">· {solicitudes.length}</span></h2>
+            <p className="text-xs text-slate-500">Llegan desde el botón “Destácalo” de la portada. También van a tu Google Sheet si el Apps Script responde.</p>
+          </div>
+          {solicitudes.length ? (
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {solicitudes.map((s, i) => (
+                <li key={`${s.fecha}-${i}`} className="bg-white/70 ring-1 ring-slate-900/5 rounded-2xl p-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-slate-900 leading-snug">{s.nombreLocal}</p>
+                    <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">{new Date(s.fecha).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-sm">
+                    {s.email && <a href={`mailto:${s.email}`} className="text-rose-600 hover:underline break-all">✉️ {s.email}</a>}
+                    {s.telefono && <a href={`tel:${s.telefono}`} className="text-rose-600 hover:underline">📞 {s.telefono}</a>}
+                    {s.telefono && <a href={`https://wa.me/${s.telefono.replace(/\D/g, "").replace(/^(?!34)(\d{9})$/, "34$1")}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">WhatsApp</a>}
+                  </div>
+                  {s.mensaje && <p className="text-[13px] text-slate-600 mt-1.5 whitespace-pre-line">{s.mensaje}</p>}
+                  {!s.enviadoAlSheet && <p className="text-[11px] text-amber-700 mt-1.5">⚠️ Esta no llegó al Google Sheet: revisa NEXT_PUBLIC_GAS_BUSINESS_URL en Vercel</p>}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-sm text-slate-500">Todavía no ha escrito ningún negocio.</p>}
+        </section>
 
         {/* Locales */}
         <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
