@@ -1,5 +1,5 @@
 import { METRICAS, registrar } from "../../../lib/estadisticas";
-import { registrarAccionLugar } from "../../../lib/lugares";
+import { esPrueba, registrarAccionLugar } from "../../../lib/lugares";
 import { sinRomper } from "../../../lib/almacen";
 
 // POST /api/evento — analítica propia. Lo manda el navegador con navigator.sendBeacon (texto plano).
@@ -12,6 +12,6 @@ export async function POST(request) {
   const { tipo, fuente, lugarId } = datos;
   if (!DESDE_NAVEGADOR.includes(tipo) || !METRICAS.includes(tipo)) return new Response(null, { status: 400 });
   await sinRomper(registrar(tipo, { fuente }), "estadísticas");
-  if (["detalle", "llamar", "web"].includes(tipo) && lugarId) await sinRomper(registrarAccionLugar(lugarId, tipo), "lugar");
+  if (["detalle", "llamar", "web"].includes(tipo) && lugarId && !esPrueba(request)) await sinRomper(registrarAccionLugar(lugarId, tipo), "lugar");
   return new Response(null, { status: 204 });
 }

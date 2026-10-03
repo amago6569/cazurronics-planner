@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { leerJSON, sinRomper } from "../../../lib/almacen";
-import { registrarValoracion } from "../../../lib/lugares";
+import { esPrueba, registrarValoracion } from "../../../lib/lugares";
 import { idPlanValido, votanteValido } from "../../../lib/votos";
 import { registrar } from "../../../lib/estadisticas";
 
@@ -13,6 +13,8 @@ export async function POST(request) {
     const plan = await leerJSON(`plan:${planId}`);
     const parada = plan?.itinerario?.[Number(indice)];
     if (!parada) return NextResponse.json({ exito: false }, { status: 404 });
+    // Modo prueba (ver lib/lugares.js): se responde igual, pero no se apunta nada
+    if (esPrueba(request)) return NextResponse.json({ exito: true, nueva: true });
     // El lugar sale del plan guardado, no de lo que mande el navegador
     const nueva = await registrarValoracion({ planId, indice: Number(indice), votante, valor, lugarId: parada.lugarId });
     if (nueva) await sinRomper(registrar("valoracion"), "estadísticas");

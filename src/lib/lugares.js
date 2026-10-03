@@ -24,6 +24,11 @@ export function claveLugar(parada) {
 
 export const claveValida = (k) => typeof k === "string" && /^[ps]_[\w-]{1,120}$/.test(k);
 
+// Modo prueba: al entrar en /panel el navegador guarda la marca cz_prueba=1 y, desde entonces, lo que hagas con
+// ese navegador (planes, fichas, llamadas, valoraciones) no suma a las cifras de ningún local. Así tus pruebas no
+// inflan los números que luego enseñas a un negocio. Se desactiva en Captación → Ajustes.
+export const esPrueba = (request) => /(?:^|;\s*)cz_prueba=1(?:;|$)/.test(request?.headers?.get?.("cookie") || "");
+
 // Al guardar un plan: ficha del sitio + contador de apariciones + rankings
 export async function registrarApariciones(paradas) {
   const c = [];

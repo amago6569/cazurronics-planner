@@ -15,6 +15,7 @@
     { "path": "/api/barrido?tramo=m5", "schedule": "0 14 */2 * *" },
     { "path": "/api/barrido?tramo=m6", "schedule": "0 15 */2 * *" },
     { "path": "/api/barrido?tramo=m7", "schedule": "0 16 */2 * *" },
-    { "path": "/api/finde/aviso", "schedule": "0 8 * * 4" }
+    { "path": "/api/finde/aviso", "schedule": "0 8 * * 4" },
+    { "path": "/api/captacion/aviso", "schedule": "30 7 * * *" }
   ]
 }

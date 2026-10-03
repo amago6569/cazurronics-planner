@@ -2,7 +2,7 @@ import { llamarGemini } from '../../../lib/gemini';
 import { NextResponse } from 'next/server';
 import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada } from '../../../lib/planUtils';
 import { leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
-import { claveLugar, registrarApariciones } from '../../../lib/lugares';
+import { claveLugar, esPrueba, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
 
 export const maxDuration = 60;
@@ -45,7 +45,7 @@ export async function POST(request) {
       })(), 'actualizar plan');
     }
     await Promise.all([
-      sinRomper(registrarApariciones([parada]), 'apariciones'),
+      sinRomper(esPrueba(request) ? null : registrarApariciones([parada]), 'apariciones'),
       sinRomper(registrar('retoque'), 'estadísticas'),
     ]);
 

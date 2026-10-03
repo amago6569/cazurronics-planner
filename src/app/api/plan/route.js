@@ -3,7 +3,7 @@ import { NextResponse, after } from 'next/server';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from '../../../lib/planUtils';
 import { guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos, asegurarBarridoReciente } from '../../../lib/eventos';
-import { claveLugar, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
+import { claveLugar, esPrueba, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
 import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from '../../../lib/agenda';
 
@@ -94,7 +94,7 @@ export async function POST(request) {
       prevision: previsionTiempo, itinerario: rutaFinal, masEseDia,
     }, 120 * 24 * 3600), 'guardar plan');
     await Promise.all([
-      sinRomper(registrarApariciones(rutaFinal), 'apariciones'),
+      sinRomper(esPrueba(request) ? null : registrarApariciones(rutaFinal), 'apariciones'),
       sinRomper(registrar('plan'), 'estadísticas'),
     ]);
 

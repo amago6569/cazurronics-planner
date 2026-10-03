@@ -4,6 +4,7 @@
 // estado del barrido de eventos (idea 3) y el rosetón colectivo de la campaña.
 import { useCallback, useEffect, useState } from "react";
 import Fondo from "../components/Fondo";
+import Captacion from "../components/Captacion";
 import { GLASS, PRESS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../lib/estilos";
 
 const OBJETIVO_ROSETON = 500; // planes para completar el rosetón de la campaña (24 cristales)
@@ -296,6 +297,9 @@ export default function Panel() {
             ) : <p className="text-sm text-slate-500">Todavía no hay agenda cerrada para el próximo finde: lanza el barrido diario y vuelve a mirar.</p>}
           </section>
         )}
+
+        {/* Captación: locales que ya rinden en la web, listos para escribirles (el envío lo haces tú) */}
+        <Captacion clave={clave} />
 
         {/* Solicitudes de negocios (copia de seguridad del formulario "Destácalo") */}
         <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
