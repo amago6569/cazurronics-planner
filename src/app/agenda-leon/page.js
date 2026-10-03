@@ -2,10 +2,14 @@
 // Con mapa: se elige zona (empieza en León capital) y día. Sin repeticiones: lo que dura varios días
 // (exposiciones, mercados semanales, ferias) sale UNA vez, y cada día muestra solo lo suyo, ordenado por horas.
 // Lleva datos estructurados "Event" para Google.
+import Link from "next/link";
 import PaginaContenido from "../components/PaginaContenido";
 import AgendaZonas from "../components/AgendaZonas";
 import { eventosProximos } from "../../lib/eventos";
-import { deduplicar, esDeVariosDias, leerHora, organizarAgenda } from "../../lib/agenda";
+import { deduplicar, esDeVariosDias, organizarAgenda } from "../../lib/agenda";
+import { ZONAS } from "../../lib/zonas";
+import { rutaZona } from "../../lib/zonasSeo";
+import { datosEstructurados } from "../../lib/jsonld";
 
 export const revalidate = 3600;
 export const metadata = {
@@ -13,30 +17,6 @@ export const metadata = {
   description: "Qué hacer en León esta semana: conciertos, teatro, exposiciones, mercados y fiestas en la capital y la provincia, actualizado cada día.",
   alternates: { canonical: "/agenda-leon" },
 };
-
-function datosEstructurados({ enMarcha, porDia }) {
-  const unicos = [
-    ...enMarcha.map((e) => ({ ...e, dia: e.fecha, diaFin: e.fechaFin })),
-    ...porDia.flatMap((d) => d.grupos.flatMap((g) => g.eventos.map((e) => ({ ...e, dia: d.fecha })))),
-  ].slice(0, 60);
-  return unicos.map((e) => {
-    const h = leerHora(e.hora);
-    const hora = h.min != null ? `T${String(Math.floor(h.min / 60)).padStart(2, "0")}:${String(h.min % 60).padStart(2, "0")}` : "";
-    return {
-      "@context": "https://schema.org",
-      "@type": "Event",
-      name: e.titulo,
-      startDate: `${e.dia}${hora}`,
-      ...(e.diaFin ? { endDate: e.diaFin } : {}),
-      eventStatus: "https://schema.org/EventScheduled",
-      eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
-      location: { "@type": "Place", name: e.lugar || e.localidad || "León", address: { "@type": "PostalAddress", addressLocality: e.localidad || "León", addressRegion: "León", addressCountry: "ES" } },
-      ...(e.descripcion ? { description: e.descripcion } : {}),
-      ...(e.fuente ? { url: e.fuente } : {}),
-      ...(/grat/i.test(e.precio || "") ? { isAccessibleForFree: true } : {}),
-    };
-  });
-}
 
 // Solo lo que necesita la página (la descripción recortada) para que pese poco
 const ligero = ({ titulo, fecha, fechaFin, hora, lugar, localidad, precio, categoria, descripcion, fuente, lat, lon, diasSemana, permanente, zonaBusqueda }) =>
@@ -59,6 +39,16 @@ export default async function Agenda() {
     >
       {total > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(datosEstructurados(agenda)).replace(/</g, "\\u003c") }} />}
       <AgendaZonas enMarcha={enMarcha} dias={porDia} />
+      <nav aria-label="Agenda por zonas" className="px-1">
+        <p className="text-sm font-semibold text-slate-700 mb-2">Agenda de cada zona</p>
+        <div className="flex flex-wrap gap-2">
+          {ZONAS.map((z) => (
+            <Link key={z.id} href={rutaZona(z.id)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/60 ring-1 ring-white text-[13px] font-medium text-slate-700 hover:bg-white hover:text-rose-600 transition-colors">
+              <span aria-hidden>{z.emoji}</span>{z.corto}
+            </Link>
+          ))}
+        </div>
+      </nav>
     </PaginaContenido>
   );
 }

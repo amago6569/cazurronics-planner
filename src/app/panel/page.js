@@ -19,6 +19,8 @@ export default function Panel() {
   const [copiado, setCopiado] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [encontrados, setEncontrados] = useState(null);
+  const [finde, setFinde] = useState(null); // resumen del finde (textos + imágenes)
+  const [copiadoFinde, setCopiadoFinde] = useState("");
 
   const buscar = async (e) => {
     e?.preventDefault();
@@ -75,6 +77,18 @@ export default function Panel() {
   const copiarEnlace = async (lugar) => {
     if (!lugar.enlaceNegocio) return;
     try { await navigator.clipboard.writeText(`${window.location.origin}/negocio/${lugar.enlaceNegocio}`); setCopiado(lugar.clave); setTimeout(() => setCopiado(""), 2000); } catch {}
+  };
+
+  // El resumen del finde se carga cuando ya has entrado en el panel
+  useEffect(() => {
+    if (!datos || finde) return;
+    let vivo = true;
+    fetch("/api/finde", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (vivo && d.exito) setFinde(d); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [datos, finde]);
+
+  const copiarTexto = async (id, texto) => {
+    try { await navigator.clipboard.writeText(texto); setCopiadoFinde(id); setTimeout(() => setCopiadoFinde(""), 2000); } catch {}
   };
 
   if (!datos) {
@@ -247,6 +261,41 @@ export default function Panel() {
             </div>
           </section>
         </div>
+
+        {/* Resumen del finde: texto listo para WhatsApp e Instagram + imágenes del carrusel */}
+        {finde && (
+          <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+              <h2 className="font-bold text-slate-900">📣 Resumen del finde <span className="text-slate-400 font-medium">· {finde.rango}</span></h2>
+              <a href="/finde" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-rose-600 hover:underline underline-offset-2">Ver la página</a>
+            </div>
+            {finde.hayContenido ? (
+              <div className="grid lg:grid-cols-2 gap-4">
+                {[["wa", "💬 WhatsApp", finde.whatsapp], ["ig", "📸 Instagram (pie de foto)", finde.instagram]].map(([id, titulo, texto]) => (
+                  <div key={id}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-sm font-semibold text-slate-700">{titulo}</p>
+                      <button onClick={() => copiarTexto(id, texto)} className={`${PRESS} h-8 px-3 rounded-full text-xs font-semibold ${copiadoFinde === id ? "bg-emerald-500 text-white" : "bg-white/80 ring-1 ring-slate-900/10 text-slate-700"}`}>{copiadoFinde === id ? "¡Copiado!" : "Copiar"}</button>
+                    </div>
+                    <textarea readOnly value={texto} rows={12} className="w-full bg-white/70 rounded-2xl ring-1 ring-slate-900/5 p-3 text-[13px] leading-relaxed text-slate-700 outline-none resize-y" />
+                  </div>
+                ))}
+                <div className="lg:col-span-2">
+                  <p className="text-sm font-semibold text-slate-700 mb-1.5">🖼️ Carrusel ({finde.imagenes.length} imágenes) · toca una para abrirla y guardarla</p>
+                  <div className="flex gap-2.5 overflow-x-auto pb-1">
+                    {finde.imagenes.map((_, i) => (
+                      <a key={i} href={`/api/finde/imagen?n=${i + 1}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/api/finde/imagen?n=${i + 1}`} alt={`Diapositiva ${i + 1}`} className="h-56 w-auto rounded-2xl ring-1 ring-slate-900/10" />
+                      </a>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">Para historias (vertical): {finde.historias.map((_, i) => <a key={i} href={`/api/finde/imagen?n=${i + 1}&f=historia`} target="_blank" rel="noopener noreferrer" className="font-semibold text-rose-600 hover:underline underline-offset-2 mr-2">{i + 1}</a>)}</p>
+                </div>
+              </div>
+            ) : <p className="text-sm text-slate-500">Todavía no hay agenda cerrada para el próximo finde: lanza el barrido diario y vuelve a mirar.</p>}
+          </section>
+        )}
 
         {/* Solicitudes de negocios (copia de seguridad del formulario "Destácalo") */}
         <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
