@@ -52,7 +52,7 @@ export async function registrarApariciones(paradas) {
     const k = p.lugarId;
     if (!claveValida(k) || !esNegocio(p)) continue;
     c.push(["SET", `lugar:${k}`, JSON.stringify({
-      clave: k, nombre: p.titulo, tipo: p.tipo || null, placeId: p.placeId || null,
+      clave: k, nombre: p.nombreGoogle || p.titulo, tipo: p.tipo || null, placeId: p.placeId || null,
       lat: p.lat ?? null, lon: p.lon ?? null, foto: p.fotoOficial || null,
       precio: p.precio || null, resenas: p.resenas || null, actualizado: Date.now(),
     })]);
