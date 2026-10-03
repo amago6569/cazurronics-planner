@@ -1,3 +1,4 @@
+import { llamarGemini } from '../../../lib/gemini';
 import { NextResponse } from 'next/server';
 import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada } from '../../../lib/planUtils';
 import { leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
@@ -25,12 +26,7 @@ export async function POST(request) {
       {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
-    const resGoogle = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ googleSearch: {} }], generationConfig: { temperature: 0.3 } })
-    });
-    
-    let textoIA = (await resGoogle.json()).candidates[0].content.parts[0].text;
+    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.3 });
     const jsonLimpio = textoIA.substring(textoIA.indexOf('{'), textoIA.lastIndexOf('}') + 1);
     const { parada } = await enriquecerParada(JSON.parse(jsonLimpio), { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY });
 

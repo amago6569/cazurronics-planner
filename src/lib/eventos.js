@@ -11,7 +11,8 @@ import { comando, guardarJSON, leerJSON, varios } from "./almacen";
 import { haversineKm } from "./planUtils";
 import { hoyEnLeon } from "./estadisticas";
 import { deduplicar, ordenarPorHora } from "./agenda";
-import { MUNICIPIOS, ZONAS } from "./zonas";
+import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
+import { llamarGemini as llamarGeminiConPlanB } from "./gemini";
 
 const DIAS_VENTANA = 14;
 // Mismos límites de la provincia que usa el mapa
@@ -121,23 +122,10 @@ function leerDiasSemana(v) {
 }
 const diaDeLaSemana = (fecha) => new Date(`${fecha}T12:00:00Z`).getUTCDay();
 
+// Las búsquedas del barrido usan modelos "lite" con su propia cuota (ver lib/gemini.js),
+// para no quitarle cuota a los planes de la gente
 async function llamarGemini(prompt, msMax = 50000) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-    method: "POST",
-    signal: AbortSignal.timeout(msMax),
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ googleSearch: {} }], generationConfig: { temperature: 0.1 } }),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Gemini respondió ${res.status}`);
-  const datos = await res.json();
-  const candidato = datos.candidates?.[0];
-  const texto = (candidato?.content?.parts || []).map((p) => p.text || "").join("\n");
-  // Webs que Google Search ha consultado DE VERDAD para esta respuesta (sirven para comprobar las fuentes)
-  const dominios = new Set((candidato?.groundingMetadata?.groundingChunks || [])
-    .map((c) => String(c?.web?.title || "").toLowerCase().replace(/^www\./, "").trim())
-    .filter((t) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)));
-  return { texto, dominios };
+  return llamarGeminiConPlanB(prompt, { para: "barrido", temperatura: 0.1, msMax });
 }
 
 export function extraerListaJSON(texto) {
@@ -476,7 +464,22 @@ export async function eventosDelDia(fecha, { lat, lon, radio } = {}) {
   if (!esFecha(fecha)) return [];
   const lista = (await leerJSON(`eventos:${fecha}`)) || [];
   if (lat == null || lon == null || !radio) return lista;
-  return lista.filter((e) => e.lat == null || haversineKm(Number(lat), Number(lon), e.lat, e.lon) <= Number(radio) * 1.2);
+  return lista.filter((e) => cercaDe(e, Number(lat), Number(lon), Number(radio)));
+}
+
+// ¿Está este evento dentro de la zona de búsqueda? Con coordenadas, por distancia.
+// Sin coordenadas, por su zona (León capital, Bierzo, Astorga...): así un plan de 3 km en la capital
+// no se llena de cosas de Babia o de los Ancares.
+const RADIO_ZONA = { leon: 4.5, alfoz: 11 };
+export function cercaDe(e, lat, lon, radio) {
+  if (e.lat != null && e.lon != null) return haversineKm(lat, lon, Number(e.lat), Number(e.lon)) <= radio * 1.2;
+  if (radio >= 60) return true; // toda la provincia
+  const zona = zonaDe(e);
+  if (zona === "otros") return false;
+  if (zona === zonaMasCercana(lat, lon)) return true;
+  const z = ZONAS.find((x) => x.id === zona);
+  const [zl, zo] = z.centroReal || [z.lat, z.lon];
+  return haversineKm(lat, lon, zl, zo) <= radio + (RADIO_ZONA[zona] || 25);
 }
 
 export async function eventosProximos(dias = DIAS_VENTANA) {
@@ -545,7 +548,7 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
 
   const delDia = fusionarPorDia([encontrados], fecha, fecha)[fecha] || [];
   const cerca = lat != null && lon != null
-    ? delDia.filter((e) => e.lat == null || haversineKm(Number(lat), Number(lon), e.lat, e.lon) <= Number(radio) * 1.2)
+    ? delDia.filter((e) => cercaDe(e, Number(lat), Number(lon), Number(radio)))
     : delDia;
 
   // Caché 6 h para la misma petición y suma a la agenda pública de ese día
@@ -568,6 +571,11 @@ export function unirEventos(...listas) {
 // Pone al día lo más atrasado: un tramo diario con más de 20 h, o uno del barrido gordo con más de 46 h
 // (en local, donde no hay cron, así la agenda se va llenando sola). Se llama en segundo plano con after().
 export async function asegurarBarridoReciente() {
+  // En producción ya están los crons de Vercel: aquí no se lanza nada, para no gastar la cuota de Gemini
+  // justo cuando mucha gente está pidiendo planes (solo en local, donde no hay cron)
+  if (process.env.VERCEL) return false;
+  // Como mucho un tramo cada 10 minutos
+  if (!(await comando(["SET", "barrido:pausa", "1", "NX", "EX", 600]))) return false;
   const ids = [...TRAMOS_DIARIOS, ...TRAMOS_GORDOS];
   const informes = await varios(ids.map((id) => ["GET", `eventos:tramo:${id}`]));
   const edad = (v) => { try { const f = JSON.parse(v)?.fin; return f ? Date.now() - Date.parse(f) : Infinity; } catch { return Infinity; } };

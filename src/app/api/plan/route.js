@@ -1,3 +1,4 @@
+import { llamarGemini, ErrorIA } from '../../../lib/gemini';
 import { NextResponse, after } from 'next/server';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from '../../../lib/planUtils';
 import { guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
@@ -52,14 +53,8 @@ export async function POST(request) {
       "tipo" es uno de: bar, restaurante, cafeteria, discoteca, monumento, parque, museo, exposicion, concierto, teatro, mercadillo, feria, fiesta, festival, evento, ruta, deporte.
     `;
 
-    const resGoogle = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ googleSearch: {} }], generationConfig: { temperature: 0.2 } })
-    });
-    const datosGoogle = await resGoogle.json();
-    if (!resGoogle.ok) throw new Error("Error en la IA");
-
-    let textoIA = datosGoogle.candidates[0].content.parts[0].text;
+    // Gemini con plan B: si un modelo está saturado, prueba otro (ver lib/gemini.js)
+    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.2 });
     const jsonLimpio = textoIA.substring(textoIA.indexOf('['), textoIA.lastIndexOf(']') + 1);
     const rutaBruta = JSON.parse(jsonLimpio);
 
@@ -104,5 +99,15 @@ export async function POST(request) {
     ]);
 
     return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia });
-  } catch (error) { return NextResponse.json({ exito: false, mensaje: error.message }, { status: 500 }); }
+  } catch (error) {
+    console.error('[plan]', error?.message || error);
+    const mensaje = error instanceof ErrorIA && (error.estado === 402 || error.estado === 403)
+      ? 'Estamos recargando la IA 🦁 Vuelve en un ratito y tendrás tu plan.'
+      : error instanceof ErrorIA && error.estado === 429
+      ? 'Hay muchísima gente montando planes ahora mismo 🦁 Prueba otra vez en un minuto.'
+      : error instanceof SyntaxError
+        ? 'La IA ha devuelto un plan a medias. Dale otra vez, que ahora sale.'
+        : 'La IA no ha respondido a tiempo. Prueba otra vez en unos segundos.';
+    return NextResponse.json({ exito: false, mensaje, ...(process.env.NODE_ENV === 'development' ? { detalle: error?.fallos || String(error?.stack || error).slice(0, 400) } : {}) }, { status: 200 });
+  }
 }
