@@ -43,7 +43,8 @@ export async function POST(request) {
       El usuario pide: "${instruccion}".
       RESTRICCIONES: Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
       Devuelve SOLO un JSON así:
-      {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "telefono": "No", "web": "No", "horario": "12-23"}
+      "lugar": solo si es un evento o ruta: el local, plaza o recinto concreto donde es; si es un negocio normal, null.
+      {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
     const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.3, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });

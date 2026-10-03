@@ -173,6 +173,7 @@ export default function PlanCompartido({ inicial }) {
                   </div>
                   <div className="px-3 pt-3.5">
                     <h3 className="text-lg font-bold tracking-tight text-slate-900 leading-snug">{p.titulo}</h3>
+                    {p.lugar && <p className="text-xs font-semibold text-rose-500 mt-0.5 truncate">📍 {p.lugar}</p>}
                     <p className="text-slate-600 text-sm mt-1 line-clamp-2 leading-relaxed">{p.descripcion}</p>
                   </div>
                 </button>
@@ -217,6 +218,7 @@ export default function PlanCompartido({ inicial }) {
               <div>
                 <span className="inline-block bg-gradient-to-r from-rose-100 to-orange-100 text-rose-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-2">Parada {abierta + 1} · {parada.hora}</span>
                 <h2 className="text-2xl font-bold tracking-tight text-slate-900 leading-tight">{parada.titulo}</h2>
+                {parada.lugar && <p className="text-sm font-semibold text-rose-500 mt-1">📍 {parada.lugar}</p>}
               </div>
               <button onClick={() => setAbierta(null)} aria-label="Cerrar" className={`${PRESS} shrink-0 w-11 h-11 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10`}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>

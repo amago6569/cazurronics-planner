@@ -278,6 +278,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   let parada = { ...paradaOriginal };
 
   parada.titulo = String(parada.titulo || '').replace(/,?\s*León,?\s*España/gi, '').trim();
+  parada.lugar = typeof parada.lugar === 'string' ? parada.lugar.trim().slice(0, 100) : null;
+  if (!parada.lugar || /^(null|no|n\/a|no disponible|ninguno)$/i.test(parada.lugar) || parada.lugar.toLowerCase() === parada.titulo.toLowerCase()) parada.lugar = null;
   const queryBusquedaReal = `${parada.titulo}, ${nombreZona}, provincia de León, España`;
 
   let objetivo = null;
@@ -323,6 +325,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       parada.lon = objetivo.geometry.location.lng;
       ubicacionResuelta = true;
       if (objetivo.place_id) parada.placeId = objetivo.place_id;
+      if (objetivo.name) parada.nombreGoogle = objetivo.name; // para comprobar después que es de verdad ese negocio
 
       if (typeof objetivo.rating === 'number') {
         parada.resenas = `${objetivo.rating}/5 (${objetivo.user_ratings_total || 0} reseñas)`;

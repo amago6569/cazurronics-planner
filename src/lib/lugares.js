@@ -29,12 +29,28 @@ export const claveValida = (k) => typeof k === "string" && /^[ps]_[\w-]{1,120}$/
 // inflan los números que luego enseñas a un negocio. Se desactiva en Captación → Ajustes.
 export const esPrueba = (request) => /(?:^|;\s*)cz_prueba=1(?:;|$)/.test(request?.headers?.get?.("cookie") || "");
 
+// ¿Es un NEGOCIO real (un local con ficha en Google) y no un evento, una ruta o una idea genérica?
+// Los eventos ("Ruta de la morcilla", "Tapeo por el Húmedo") se buscaban en Google y, si algún bar coincidía
+// por casualidad, le sumaban apariciones. Ahora solo cuentan los tipos de negocio con ficha real cuyo nombre
+// en Google se parece al de la parada.
+export const TIPOS_NEGOCIO = ["bar", "restaurante", "cafeteria", "cafetería", "taberna", "sidreria", "sidrería", "pub", "discoteca", "museo"];
+const PALABRAS_VACIAS = new Set(["bar", "restaurante", "cafeteria", "cafe", "pub", "taberna", "mesón", "meson", "de", "del", "la", "el", "los", "las", "y", "en", "leon", "casa", "museo"]);
+const palabras = (t) => slug(t).split("-").filter((w) => w.length >= 3 && !PALABRAS_VACIAS.has(w));
+const seParecen = (a, b) => {
+  const sa = slug(a), sb = slug(b);
+  if (!sa || !sb) return false;
+  if (sa.includes(sb) || sb.includes(sa)) return true;
+  const pb = new Set(palabras(b));
+  return palabras(a).some((w) => pb.has(w));
+};
+export const esNegocio = (p) => !!(p?.placeId && TIPOS_NEGOCIO.includes(String(p.tipo || "").toLowerCase()) && p.nombreGoogle && seParecen(p.titulo, p.nombreGoogle));
+
 // Al guardar un plan: ficha del sitio + contador de apariciones + rankings
 export async function registrarApariciones(paradas) {
   const c = [];
   for (const p of paradas) {
     const k = p.lugarId;
-    if (!claveValida(k)) continue;
+    if (!claveValida(k) || !esNegocio(p)) continue;
     c.push(["SET", `lugar:${k}`, JSON.stringify({
       clave: k, nombre: p.titulo, tipo: p.tipo || null, placeId: p.placeId || null,
       lat: p.lat ?? null, lon: p.lon ?? null, foto: p.fotoOficial || null,
@@ -91,9 +107,20 @@ export async function leerLugar(k) {
 
 // Top de un ranking con la ficha de cada sitio
 export async function topLugares(ranking = "ranking:apariciones", cuantos = 20) {
-  const lista = aRanking(await comando(["ZREVRANGE", ranking, 0, cuantos - 1, "WITHSCORES"]));
+  // Se piden de más porque luego se descartan los que no son negocios (datos antiguos) y los repetidos
+  const lista = aRanking(await comando(["ZREVRANGE", ranking, 0, Math.max(cuantos * 4, 40) - 1, "WITHSCORES"]));
   const fichas = await leerLugares(lista.map((r) => r.miembro));
-  return lista.map((r, i) => fichas[i] && { ...fichas[i], puntos: r.puntos }).filter(Boolean);
+  const vistos = new Set();
+  const salida = [];
+  lista.forEach((r, i) => {
+    const f = fichas[i];
+    if (!f || !f.placeId || !TIPOS_NEGOCIO.includes(String(f.tipo || "").toLowerCase())) return;
+    const nombre = slug(f.nombre);
+    if (vistos.has(nombre)) return;
+    vistos.add(nombre);
+    salida.push({ ...f, puntos: r.puntos });
+  });
+  return salida.slice(0, cuantos);
 }
 
 // Para el prompt del planificador: lo que gusta (y lo que no) dentro del radio elegido

@@ -456,6 +456,7 @@ export default function Home() {
 
                 <div className="px-3.5 pt-4 pb-3 flex-1 flex flex-col">
                   <h3 className="text-lg font-bold tracking-tight text-slate-900 leading-snug mb-1.5">{parada.titulo}</h3>
+                  {parada.lugar && <p className="text-xs font-semibold text-rose-500 mb-1.5 truncate">📍 {parada.lugar}</p>}
                   <p className="text-slate-600 text-sm mb-4 line-clamp-3 leading-relaxed">{parada.descripcion}</p>
                   <div className="flex justify-between items-center mt-auto pt-3 border-t border-slate-900/5">
                     <span className="text-xs font-semibold text-amber-700 bg-amber-100/80 px-2.5 py-1.5 rounded-full">⭐ {parada.resenas}</span>
@@ -495,6 +496,7 @@ export default function Home() {
                       {indiceSeleccionado !== null && <span className="font-bold">Parada {indiceSeleccionado + 1} ·</span>} {paradaSeleccionada.hora}
                     </span>
                     <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 leading-tight">{paradaSeleccionada.titulo}</h2>
+                    {paradaSeleccionada.lugar && <p className="text-sm font-semibold text-rose-500 mt-1">📍 {paradaSeleccionada.lugar}</p>}
                   </div>
                   <button onClick={cerrarModal} aria-label="Cerrar" className={`${PRESS} shrink-0 w-11 h-11 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10 hover:text-slate-900 hover:rotate-90`}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>
