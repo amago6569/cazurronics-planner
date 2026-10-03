@@ -4,11 +4,20 @@
 const leer = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } };
 const escribir = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-// Identificador anónimo de esta persona (para votos y valoraciones, sin cuentas ni datos personales)
+// La fecha de HOY en la hora de esta persona (AAAA-MM-DD). Antes se usaba la hora UTC, así que
+// entre las 00:00 y las 02:00 de España "hoy" todavía era ayer.
+export function hoyLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Identificador anónimo de esta persona (para votos y valoraciones, sin cuentas ni datos personales).
+// Aleatorio de verdad (crypto) para que dos personas nunca compartan identificador.
 export function idVotante() {
   let id = leer("cz-votante", null);
   if (!id) {
-    id = `v-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    try { id = `v-${crypto.randomUUID()}`; }
+    catch { id = `v-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`; }
     escribir("cz-votante", id);
   }
   return id;
@@ -30,9 +39,11 @@ export function registrarVisita() {
     sessionStorage.setItem("cz-visita", "1");
   } catch {}
   const params = new URLSearchParams(window.location.search);
-  const fuente = params.get("utm_source") || params.get("ref") || (document.referrer ? new URL(document.referrer).hostname.replace(/^www\./, "") : "directo");
+  let deDonde = "directo";
+  try { if (document.referrer) deDonde = new URL(document.referrer).hostname.replace(/^www\./, "") || "directo"; } catch {}
+  const fuente = params.get("utm_source") || params.get("ref") || deDonde;
   baliza("visita", { fuente });
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyLocal();
   const ultima = leer("cz-ultima-visita", null);
   if (ultima && ultima !== hoy) baliza("vuelve");
   escribir("cz-ultima-visita", hoy);
@@ -56,7 +67,7 @@ export function actualizarParadaRecordada(planId, indice, parada) {
 
 // El plan más reciente cuya fecha ya pasó y que aún no se ha valorado
 export function planPendienteDeValorar() {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyLocal();
   return leer("cz-planes", []).find((p) => !p.valorado && p.fecha && p.fecha < hoy) || null;
 }
 

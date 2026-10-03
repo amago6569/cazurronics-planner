@@ -8,11 +8,16 @@ export const alt = "Plan de Cazurronics Planner en León";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
+// El rosetón se lee del disco una vez por servidor, no en cada imagen
+let rosetonEnMemoria;
+const cargarRoseton = () => (rosetonEnMemoria ||= readFile(join(process.cwd(), "public", "roseton.png"))
+  .then((b) => `data:image/png;base64,${b.toString("base64")}`)
+  .catch((e) => { rosetonEnMemoria = undefined; throw e; }));
+
 // La imagen que aparece al compartir el enlace: rosetón + las paradas del plan
 export default async function Imagen({ params }) {
   const { id } = await params;
-  const plan = idPlanValido(id) ? await leerJSON(`plan:${id}`) : null;
-  const roseton = `data:image/png;base64,${(await readFile(join(process.cwd(), "public", "roseton.png"))).toString("base64")}`;
+  const [plan, roseton] = await Promise.all([idPlanValido(id) ? leerJSON(`plan:${id}`) : null, cargarRoseton()]);
   const paradas = (plan?.itinerario || []).slice(0, 4);
   const fecha = plan ? new Date(`${plan.fecha}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }) : "";
 

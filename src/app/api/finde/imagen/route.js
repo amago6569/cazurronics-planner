@@ -18,7 +18,11 @@ const ROSA = "#e11d48", NARANJA = "#f97316", TINTA = "#0f172a", GRIS = "#475569"
 const FONDO = "linear-gradient(160deg, #fff1e6 0%, #ffe4e6 42%, #e0f2fe 100%)";
 const tarjeta = { display: "flex", background: "rgba(255,255,255,0.82)", border: "3px solid white", boxShadow: "0 18px 40px -18px rgba(15,23,42,0.35)" };
 
-async function cargarRecursos() {
+// Rosetón y tipografías se leen del disco una vez por servidor (antes, en cada imagen)
+let recursosEnMemoria;
+const cargarRecursos = () => (recursosEnMemoria ||= leerRecursos().catch((e) => { recursosEnMemoria = undefined; throw e; }));
+
+async function leerRecursos() {
   const leer = (f) => readFile(join(process.cwd(), "public", f));
   const [roseton, negrita, media] = await Promise.all([
     leer("roseton.png"),

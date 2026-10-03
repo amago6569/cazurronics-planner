@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { leerJSON } from "../../../lib/almacen";
 import { idPlanValido } from "../../../lib/votos";
@@ -5,10 +6,12 @@ import PlanCompartido from "../../components/PlanCompartido";
 
 export const dynamic = "force-dynamic";
 
+// Con cache(), el título (generateMetadata) y la página comparten UNA sola lectura del plan por visita
+const leerPlan = cache((id) => (idPlanValido(id) ? leerJSON(`plan:${id}`) : null));
+
 async function cargarPlan(params) {
   const { id } = await params;
-  if (!idPlanValido(id)) return null;
-  return leerJSON(`plan:${id}`);
+  return leerPlan(id);
 }
 
 const fechaLarga = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });

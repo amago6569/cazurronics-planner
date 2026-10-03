@@ -1,7 +1,8 @@
-import { llamarGemini, ErrorIA } from '../../../lib/gemini';
+import { llamarGemini, extraerJSON, mensajeParaUsuario } from '../../../lib/gemini';
 import { NextResponse, after } from 'next/server';
-import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from '../../../lib/planUtils';
-import { guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
+import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, leerPeticionPlan } from '../../../lib/planUtils';
+import { enSegundoPlano, guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
+import { dentroDelLimite } from '../../../lib/freno';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos, asegurarBarridoReciente } from '../../../lib/eventos';
 import { claveLugar, esPrueba, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
@@ -9,10 +10,25 @@ import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from '../../../lib/
 
 export const maxDuration = 60;
 
+// Reparto del minuto que da Vercel: la IA tiene hasta el segundo 55 y la comprobación de sitios
+// (Places, fotos, Street View) hasta el 58. Así, si algo va lento, la persona recibe un mensaje claro
+// en vez de que Vercel corte la petición a medias.
+const MS_IA = 55000;
+const MS_TOTAL = 58000;
+
+// Una persona normal no pide 20 planes en 10 minutos; un script que vacía la cuota, sí
+const MAX_PLANES = 20;
+const VENTANA_S = 600;
+
 export async function POST(request) {
+  const inicio = Date.now();
   try {
-    const body = await request.json();
-    const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = body;
+    const peticion = leerPeticionPlan(await request.json().catch(() => null));
+    if (peticion.error) return NextResponse.json({ exito: false, mensaje: peticion.error }, { status: 400 });
+    if (!(await dentroDelLimite(request, 'plan', MAX_PLANES, VENTANA_S))) {
+      return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos planes seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
+    }
+    const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
     const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
     const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
 
@@ -35,12 +51,12 @@ export async function POST(request) {
       prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
       prefs?.evitar?.length ? `EVITA estos sitios (malas experiencias reales de usuarios): ${prefs.evitar.join(', ')}.` : '',
     ].filter(Boolean).join('\n');
-    
+
     const bloqueTiempo = previsionTiempo
       ? `PREVISIÓN DEL TIEMPO REAL: ${previsionTiempo}. ADAPTA EL PLAN PRINCIPAL ESTRICTAMENTE A ESTE CLIMA. Al final de la descripción añade SIEMPRE una nota secundaria: "(Alternativa por si cambia el tiempo: [sitio real])".` : '';
 
     const prompt = `
-      Eres Cazurronics Planner. Crea un plan en León. 
+      Eres Cazurronics Planner. Crea un plan en León.
       DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: "${apetece}". Fecha: ${fecha}.
       ${bloqueTiempo}
       ${bloqueAgenda}
@@ -54,15 +70,25 @@ export async function POST(request) {
     `;
 
     // Gemini con plan B: si un modelo está saturado, prueba otro (ver lib/gemini.js)
-    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.2 });
-    const jsonLimpio = textoIA.substring(textoIA.indexOf('['), textoIA.lastIndexOf(']') + 1);
-    const rutaBruta = JSON.parse(jsonLimpio);
+    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.2, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
+    const rutaBruta = extraerJSON(textoIA, '[');
+    if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
+
+    // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
+    // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
+    const contexto = { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL };
+    const enriquecidas = await Promise.all(
+      rutaBruta
+        .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim())
+        .map((p) => enriquecerParada(p, contexto).catch((e) => {
+          console.error('[plan] parada', e?.message || e);
+          return { parada: null, problemaConfigPlaces: null };
+        }))
+    );
 
     const rutaValidada = [];
     let problemaGlobal = null;
-
-    for (const paradaBruta of rutaBruta) {
-      const { parada, problemaConfigPlaces } = await enriquecerParada(paradaBruta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY });
+    for (const { parada, problemaConfigPlaces } of enriquecidas) {
       if (problemaConfigPlaces) problemaGlobal = problemaConfigPlaces;
       if (parada) rutaValidada.push(parada);
     }
@@ -93,21 +119,14 @@ export async function POST(request) {
       centro: [lat, lon], radio, presupuesto: { min: presupuestoMin, max: presupuestoMax },
       prevision: previsionTiempo, itinerario: rutaFinal, masEseDia,
     }, 120 * 24 * 3600), 'guardar plan');
-    await Promise.all([
-      sinRomper(esPrueba(request) ? null : registrarApariciones(rutaFinal), 'apariciones'),
-      sinRomper(registrar('plan'), 'estadísticas'),
-    ]);
+    // Rankings y estadísticas en segundo plano: la respuesta no los espera
+    if (!esPrueba(request)) enSegundoPlano(() => registrarApariciones(rutaFinal), 'apariciones');
+    enSegundoPlano(() => registrar('plan'), 'estadísticas');
 
     return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia });
   } catch (error) {
     console.error('[plan]', error?.message || error);
-    const mensaje = error instanceof ErrorIA && (error.estado === 402 || error.estado === 403)
-      ? 'Estamos recargando la IA 🦁 Vuelve en un ratito y tendrás tu plan.'
-      : error instanceof ErrorIA && error.estado === 429
-      ? 'Hay muchísima gente montando planes ahora mismo 🦁 Prueba otra vez en un minuto.'
-      : error instanceof SyntaxError
-        ? 'La IA ha devuelto un plan a medias. Dale otra vez, que ahora sale.'
-        : 'La IA no ha respondido a tiempo. Prueba otra vez en unos segundos.';
+    const mensaje = mensajeParaUsuario(error);
     return NextResponse.json({ exito: false, mensaje, ...(process.env.NODE_ENV === 'development' ? { detalle: error?.fallos || String(error?.stack || error).slice(0, 400) } : {}) }, { status: 200 });
   }
-}
+}

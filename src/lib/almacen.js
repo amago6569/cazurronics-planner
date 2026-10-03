@@ -6,38 +6,46 @@
 //   variables KV_REST_API_URL y KV_REST_API_TOKEN (o UPSTASH_REDIS_REST_URL / _TOKEN).
 // · En local, si no hay esas variables, guarda todo en memoria: funciona para probar,
 //   pero se borra al reiniciar `npm run dev`.
+import { after } from "next/server";
 
 const URL_REDIS = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const TOKEN_REDIS = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 export const usaRedis = Boolean(URL_REDIS && TOKEN_REDIS);
 
-if (!usaRedis && process.env.NODE_ENV === "production") {
+// (durante "next build" no avisa: cada proceso del build lo repetía decenas de veces)
+if (!usaRedis && process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
   console.warn("[almacén] Sin Redis configurado: los datos se guardan en memoria y se perderán. Conecta Upstash en Vercel.");
 }
 
 // ---------- Redis (Upstash REST) ----------
-async function redis(comando) {
-  const res = await fetch(URL_REDIS, {
+// Con tiempo máximo: si Upstash se queda colgado, la petición falla (y sinRomper la absorbe)
+// en vez de comerse el minuto entero que da Vercel.
+const MS_REDIS = 10000;
+
+async function pedirARedis(ruta, cuerpo) {
+  const res = await fetch(`${URL_REDIS}${ruta}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${TOKEN_REDIS}`, "Content-Type": "application/json" },
-    body: JSON.stringify(comando),
+    body: JSON.stringify(cuerpo),
     cache: "no-store",
+    signal: AbortSignal.timeout(MS_REDIS),
   });
-  const datos = await res.json();
+  const datos = await res.json().catch(() => null);
+  if (!datos) throw new Error(`[almacén] Upstash respondió ${res.status} sin datos`);
+  return datos;
+}
+
+async function redis(comando) {
+  const datos = await pedirARedis("", comando);
   if (datos.error) throw new Error(`[almacén] ${datos.error}`);
   return datos.result;
 }
 
 async function redisPipeline(comandos) {
   if (!comandos.length) return [];
-  const res = await fetch(`${URL_REDIS}/pipeline`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${TOKEN_REDIS}`, "Content-Type": "application/json" },
-    body: JSON.stringify(comandos),
-    cache: "no-store",
-  });
-  const datos = await res.json();
+  const datos = await pedirARedis("/pipeline", comandos);
+  if (!Array.isArray(datos)) throw new Error(`[almacén] ${datos.error || "respuesta inesperada del pipeline"}`);
   return datos.map((r) => {
     if (r.error) throw new Error(`[almacén] ${r.error}`);
     return r.result;
@@ -74,6 +82,7 @@ function ejecutarEnMemoria([cmd, ...a]) {
     case "HINCRBY": { const h = hashDe(a[0]); const n = Number(h.get(a[1]) || 0) + Number(a[2]); h.set(a[1], String(n)); return n; }
     case "HSET": { const h = hashDe(a[0]); let nuevos = 0; for (let i = 1; i < a.length; i += 2) { if (!h.has(a[i])) nuevos++; h.set(a[i], String(a[i + 1])); } return nuevos; }
     case "HSETNX": { const h = hashDe(a[0]); if (h.has(a[1])) return 0; h.set(a[1], String(a[2])); return 1; }
+    case "HGET": { const h = vivo(a[0]); return h instanceof Map ? (h.get(a[1]) ?? null) : null; }
     case "HGETALL": { const h = vivo(a[0]); if (!(h instanceof Map)) return []; return [...h.entries()].flat(); }
     case "ZINCRBY": {
       let z = vivo(a[0]); if (!(z instanceof Map)) { z = new Map(); mem.kv.set(a[0], z); }
@@ -141,4 +150,13 @@ export function nuevoId(largo = 10) {
 // Ejecuta una escritura "de apoyo" sin que un fallo del almacén rompa nunca la respuesta principal
 export async function sinRomper(promesa, etiqueta = "almacén") {
   try { return await promesa; } catch (e) { console.error(`[${etiqueta}]`, e?.message || e); return null; }
+}
+
+// Lo mismo, pero sin que la respuesta lo espere: estadísticas, rankings, cachés...
+// Empieza YA, en paralelo con lo demás, y after() de Next.js mantiene viva la función hasta que termine
+// (aunque la persona ya tenga su respuesta). Fuera de una petición (pruebas, scripts) simplemente sigue sola.
+export function enSegundoPlano(tarea, etiqueta = "almacén") {
+  const promesa = sinRomper(Promise.resolve().then(tarea), etiqueta);
+  try { after(promesa); } catch { /* fuera de una petición */ }
+  return promesa;
 }

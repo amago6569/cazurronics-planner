@@ -4,7 +4,7 @@
 // NADA se envía solo a los locales: el panel deja el correo o el mensaje de Instagram preparado
 // y lo mandas tú con un botón. Lo único automático es el aviso que te llega a ti (api/captacion/aviso).
 import { comando, varios, leerJSON, guardarJSON, aObjeto } from "./almacen";
-import { claveValida, tokenNegocio } from "./lugares";
+import { claveValida, leerLugares, tokenNegocio } from "./lugares";
 
 export const DOMINIO = (process.env.NEXT_PUBLIC_SITE_URL || "https://cazurronics.es").replace(/\/$/, "");
 
@@ -75,7 +75,9 @@ const limpiarInstagram = (v) => {
 // Guarda lo que cambia en un local. Solo acepta campos conocidos y los valida.
 export async function guardarSeguimiento(clave, cambios = {}) {
   if (!claveValida(clave)) return { exito: false, mensaje: "Local no válido" };
-  const antes = (await leerSeguimientos())[clave] || {};
+  // Solo el registro de este local (antes se leían todos para cambiar uno)
+  let antes = {};
+  try { antes = JSON.parse((await comando(["HGET", CLAVE_LOCALES, clave])) || "{}") || {}; } catch { /* registro estropeado: se empieza de cero */ }
   const reg = { ...antes };
 
   if ("email" in cambios) {
@@ -113,21 +115,6 @@ export async function marcarAvisados(claves, campo) {
   await varios(claves.map((k) => ["HSET", CLAVE_LOCALES, k, JSON.stringify({ ...(todos[k] || {}), [campo]: Date.now() })]));
 }
 
-// ---------- Cifras de cada local ----------
-// Ficha + contadores de varios locales en UNA sola petición a Redis
-async function fichasDe(claves) {
-  if (!claves.length) return [];
-  const r = await varios(claves.flatMap((k) => [["GET", `lugar:${k}`], ["HGETALL", `lugarstats:${k}`]]));
-  return claves.map((k, i) => {
-    let ficha = null;
-    try { ficha = r[i * 2] ? JSON.parse(r[i * 2]) : null; } catch { /* ficha estropeada */ }
-    if (!ficha) return null;
-    const s = aObjeto(r[i * 2 + 1]);
-    const n = (x) => Number(s[x]) || 0;
-    return { ...ficha, clave: k, stats: { apariciones: n("apariciones"), detalle: n("detalle"), llamar: n("llamar"), web: n("web"), bien: n("bien"), mal: n("mal"), nofui: n("nofui") } };
-  });
-}
-
 // ¿Supera el umbral? Nunca se propone un local que la gente valora mal (3 o más valoraciones y menos del 60 % positivas).
 export function evaluar(stats, ajustes) {
   const interacciones = (stats.detalle || 0) + (stats.llamar || 0) + (stats.web || 0);
@@ -148,7 +135,8 @@ export async function listarCaptacion() {
     comando(["ZREVRANGE", "ranking:apariciones", 0, 99]),
   ]);
   const claves = [...new Set([...(ranking || []), ...Object.keys(seguimientos)])].filter(claveValida);
-  const fichas = (await fichasDe(claves)).filter(Boolean);
+  // Ficha + contadores de todos en UNA sola petición al almacén
+  const fichas = (await leerLugares(claves)).filter(Boolean);
   const ahora = Date.now();
   const g = { listos: [], seguimiento: [], casi: [], cerrados: [] };
 

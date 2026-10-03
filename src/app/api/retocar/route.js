@@ -1,34 +1,55 @@
-import { llamarGemini } from '../../../lib/gemini';
+import { llamarGemini, extraerJSON, mensajeParaUsuario } from '../../../lib/gemini';
 import { NextResponse } from 'next/server';
-import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada } from '../../../lib/planUtils';
-import { leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
+import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada, leerPeticionPlan } from '../../../lib/planUtils';
+import { enSegundoPlano, leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
+import { dentroDelLimite } from '../../../lib/freno';
 import { claveLugar, esPrueba, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
 
 export const maxDuration = 60;
 
+// Mismo reparto del minuto que en /api/plan (ver allí)
+const MS_IA = 52000;
+const MS_TOTAL = 58000;
+const MAX_RETOQUES = 40; // por conexión y cada 10 minutos
+const VENTANA_S = 600;
+
 export async function POST(request) {
+  const inicio = Date.now();
   try {
-    const { itinerarioActual, indice, instruccion, fecha, presupuestoMin, presupuestoMax, radio, lat, lon, planId } = await request.json();
-    const paradaAntigua = itinerarioActual[indice];
+    const body = await request.json().catch(() => null);
+    const peticion = leerPeticionPlan(body);
+    if (peticion.error) return NextResponse.json({ exito: false, mensaje: peticion.error }, { status: 400 });
+    const { itinerarioActual, indice, planId } = body;
+    const instruccion = String(body.instruccion ?? '').trim().slice(0, 300);
+    const paradaAntigua = Array.isArray(itinerarioActual) && itinerarioActual.length <= 30 && Number.isInteger(indice) ? itinerarioActual[indice] : null;
+    if (!instruccion || !paradaAntigua || typeof paradaAntigua !== 'object') {
+      return NextResponse.json({ exito: false, mensaje: "No he entendido qué parada cambiar. Ábrela otra vez y dime qué prefieres." }, { status: 400 });
+    }
+    if (!(await dentroDelLimite(request, 'retoque', MAX_RETOQUES, VENTANA_S))) {
+      return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos cambios seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
+    }
+    const { fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
+
     const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
     const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
     const nombreZona = await obtenerLocalidad(lat, lon, MAPS_KEY) || 'un punto de León';
-    const sumaOtras = itinerarioActual.reduce((suma, p, i) => i === indice ? suma : suma + parsePrecio(p.precio), 0);
+    const sumaOtras = itinerarioActual.reduce((suma, p, i) => i === indice ? suma : suma + parsePrecio(p?.precio), 0);
     const presDisp = Math.max(Number(presupuestoMax) - sumaOtras, 3);
-    const nombresYa = itinerarioActual.filter((_, i) => i !== indice).map(p => p.titulo);
+    const nombresYa = itinerarioActual.filter((p, i) => i !== indice && p?.titulo).map(p => p.titulo);
 
     const prompt = `
-      Cazurronics Planner. Cambia la parada "${paradaAntigua.titulo}" (${paradaAntigua.hora}). 
+      Cazurronics Planner. Cambia la parada "${paradaAntigua.titulo}" (${paradaAntigua.hora}).
       El usuario pide: "${instruccion}".
       RESTRICCIONES: Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
       Devuelve SOLO un JSON así:
       {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
-    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.3 });
-    const jsonLimpio = textoIA.substring(textoIA.indexOf('{'), textoIA.lastIndexOf('}') + 1);
-    const { parada } = await enriquecerParada(JSON.parse(jsonLimpio), { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY });
+    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.3, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
+    const propuesta = extraerJSON(textoIA, '{');
+    if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
+    const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });
 
     if (!parada) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
 
@@ -44,11 +65,13 @@ export async function POST(request) {
         }
       })(), 'actualizar plan');
     }
-    await Promise.all([
-      sinRomper(esPrueba(request) ? null : registrarApariciones([parada]), 'apariciones'),
-      sinRomper(registrar('retoque'), 'estadísticas'),
-    ]);
+    // Rankings y estadísticas en segundo plano: la respuesta no los espera
+    if (!esPrueba(request)) enSegundoPlano(() => registrarApariciones([parada]), 'apariciones');
+    enSegundoPlano(() => registrar('retoque'), 'estadísticas');
 
     return NextResponse.json({ exito: true, parada });
-  } catch (error) { return NextResponse.json({ exito: false, mensaje: error.message }, { status: 500 }); }
-}
+  } catch (error) {
+    console.error('[retocar]', error?.message || error);
+    return NextResponse.json({ exito: false, mensaje: mensajeParaUsuario(error) }, { status: 200 });
+  }
+}

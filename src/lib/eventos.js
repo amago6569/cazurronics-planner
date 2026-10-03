@@ -7,12 +7,12 @@
 //  1. Datos abiertos de la Junta de Castilla y León: agenda cultural oficial, con fechas y coordenadas.
 //  2. Gemini con Google Search, en varias búsquedas dirigidas a las agendas locales
 //     (Ayuntamiento, Diputación, Diario de León, Leonoticias, iLeón, auditorios, museos, fiestas de pueblos...).
-import { comando, guardarJSON, leerJSON, varios } from "./almacen";
+import { comando, enSegundoPlano, guardarJSON, leerJSON, nuevoId, varios } from "./almacen";
 import { haversineKm } from "./planUtils";
 import { hoyEnLeon } from "./estadisticas";
 import { deduplicar, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
-import { llamarGemini as llamarGeminiConPlanB } from "./gemini";
+import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
 
 const DIAS_VENTANA = 14;
 // Mismos límites de la provincia que usa el mapa
@@ -128,11 +128,9 @@ async function llamarGemini(prompt, msMax = 50000) {
   return llamarGeminiConPlanB(prompt, { para: "barrido", temperatura: 0.1, msMax });
 }
 
+// La lista de eventos de la respuesta (aunque venga con ```json, frases o citas "[1]" alrededor)
 export function extraerListaJSON(texto) {
-  const ini = texto.indexOf("[");
-  const fin = texto.lastIndexOf("]");
-  if (ini === -1 || fin <= ini) return [];
-  try { const v = JSON.parse(texto.slice(ini, fin + 1)); return Array.isArray(v) ? v : []; } catch { return []; }
+  return extraerJSON(texto, "[") || [];
 }
 
 export function validarEventoIA(e, desde, hasta) {
@@ -405,12 +403,27 @@ export async function barrerEventos({ tramo } = {}) {
 // (aunque tenga otro nombre) no se duplica, y de cada repetido nos quedamos con la versión más completa.
 // Lo antiguo sin fuente comprobada (de versiones anteriores de la web) se limpia aquí.
 // Devuelve cuántos eventos nuevos han entrado.
-async function sumarALaAgenda(eventos, desde, hasta) {
+// Cerrojo de la agenda: un solo proceso a la vez reescribe eventos:FECHA. Si dos escribieran a la vez
+// (un cron y un plan, por ejemplo), el último borraría lo que acaba de meter el otro.
+async function conCerrojo(tarea) {
+  const marca = nuevoId(12);
+  let mio = false;
   for (let intento = 0; intento < 40; intento++) {
-    if (await comando(["SET", "barrido:fusion", "1", "NX", "EX", 30])) break;
+    if (await comando(["SET", "barrido:fusion", marca, "NX", "EX", 30])) { mio = true; break; }
     await new Promise((r) => setTimeout(r, 400));
   }
   try {
+    return await tarea();
+  } finally {
+    // Solo lo suelta quien lo cogió (antes, quien se cansaba de esperar podía borrar el cerrojo de otro)
+    if (mio && (await comando(["GET", "barrido:fusion"]).catch(() => null)) === marca) {
+      await comando(["DEL", "barrido:fusion"]).catch(() => null);
+    }
+  }
+}
+
+async function sumarALaAgenda(eventos, desde, hasta) {
+  return conCerrojo(async () => {
     const porDia = fusionarPorDia([eventos], desde, hasta);
     const fechas = Object.keys(porDia);
     if (!fechas.length) return 0;
@@ -426,9 +439,7 @@ async function sumarALaAgenda(eventos, desde, hasta) {
     });
     await varios(comandos);
     return nuevos;
-  } finally {
-    await comando(["DEL", "barrido:fusion"]).catch(() => null);
-  }
+  });
 }
 
 // Resumen para el panel: cada tramo con su última pasada, y el total de la agenda
@@ -551,16 +562,20 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
     ? delDia.filter((e) => cercaDe(e, Number(lat), Number(lon), Number(radio)))
     : delDia;
 
-  // Caché 6 h para la misma petición y suma a la agenda pública de ese día
-  await guardarJSON(clave, cerca, 6 * 3600).catch(() => null);
-  if (cerca.length) await sumarAlDia(fecha, cerca).catch(() => null);
+  // Caché 6 h para la misma petición y suma a la agenda pública de ese día.
+  // En segundo plano: el plan no espera por estas escrituras (ni por el cerrojo de la agenda).
+  enSegundoPlano(() => guardarJSON(clave, cerca, 6 * 3600), "barrido a medida (caché)");
+  if (cerca.length) enSegundoPlano(() => sumarAlDia(fecha, cerca), "barrido a medida (agenda)");
   return cerca;
 }
 
+// Con el mismo cerrojo que el barrido de los crons, para no pisarse
 async function sumarAlDia(fecha, nuevos) {
-  const actuales = (await leerJSON(`eventos:${fecha}`)) || [];
-  const fusion = fusionarPorDia([actuales, nuevos], fecha, fecha)[fecha] || [];
-  await guardarJSON(`eventos:${fecha}`, fusion, 21 * 24 * 3600);
+  await conCerrojo(async () => {
+    const actuales = (await leerJSON(`eventos:${fecha}`)) || [];
+    const fusion = fusionarPorDia([actuales, nuevos], fecha, fecha)[fecha] || [];
+    await guardarJSON(`eventos:${fecha}`, fusion, 21 * 24 * 3600);
+  });
 }
 
 // Une la agenda guardada con la del barrido a medida, sin duplicados

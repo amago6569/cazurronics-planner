@@ -119,7 +119,6 @@ export default function BusinessModal() {
     const alPulsar = (e) => { if (e.key === "Escape") cerrar(); };
     window.addEventListener("keydown", alPulsar);
     return () => window.removeEventListener("keydown", alPulsar);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto]);
 
   const enviando = estado === ESTADO.ENVIANDO;

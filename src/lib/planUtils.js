@@ -1,7 +1,37 @@
 // ============ UTILIDADES COMPARTIDAS ============
 // Usado por app/api/plan/route.js (generar plan) y app/api/retocar/route.js (cambiar una parada).
-// Si tu proyecto no usa la carpeta "app" en la raíz (por ejemplo, usas "src/app"), ajusta las rutas
-// de import en los dos route.js para que apunten aquí correctamente.
+import { comando, sinRomper } from './almacen';
+
+// Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
+// en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
+// Con "limite" (marca de tiempo), además, nunca se espera más allá de ese momento.
+const MS = { places: 8000, detalles: 6000, foto: 4000, streetView: 4000, geocoding: 5000, tiempo: 5000 };
+const conLimite = (ms, limite = Infinity) => ({ signal: AbortSignal.timeout(Math.max(300, Math.min(ms, limite - Date.now()))) });
+
+// ---------- Lo que llega del formulario ----------
+// Números de verdad (nada de texto colado en el prompt) y dentro de los límites que ya pone la propia web.
+const numeroEntre = (v, min, max, porDefecto) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : porDefecto;
+};
+const esFechaISO = (f) => typeof f === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f);
+
+// Devuelve los datos limpios, o { error } con el mensaje para la persona
+export function leerPeticionPlan(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  if (!esFechaISO(b.fecha)) return { error: '¡Necesito una fecha!' };
+  const lat = Number(b.lat), lon = Number(b.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return { error: 'Elige un punto en el mapa para el plan.' };
+  }
+  return {
+    fecha: b.fecha, lat, lon,
+    radio: numeroEntre(b.radio, 1, 150, 15),
+    presupuestoMin: numeroEntre(b.presupuestoMin, 0, 10000, 0),
+    presupuestoMax: numeroEntre(b.presupuestoMax, 0, 10000, 0),
+    apetece: String(b.apetece ?? '').slice(0, 600),
+  };
+}
 
 // Distancia en km entre dos puntos (fórmula de Haversine)
 export function haversineKm(lat1, lon1, lat2, lon2) {
@@ -86,11 +116,22 @@ export function ajustarAlPresupuesto(paradas, presupuestoMax) {
   return lista;
 }
 
-// Averigua el nombre real de la localidad (pueblo/ciudad) donde está el punto elegido en el mapa
+// Averigua el nombre real de la localidad (pueblo/ciudad) donde está el punto elegido en el mapa.
+// El resultado se guarda una semana por punto (redondeado a ~10 m): casi todo el mundo parte del centro
+// de León o de un pueblo buscado por nombre, así que la mayoría de planes no gastan cuota de Geocoding.
 export async function obtenerLocalidad(lat, lon, mapsKey) {
+  const claveCache = `geo:${Number(lat).toFixed(4)},${Number(lon).toFixed(4)}`;
+  const enCache = await sinRomper(comando(['GET', claveCache]), 'geocoding caché');
+  if (enCache) return enCache;
+  const nombre = await geocodificar(lat, lon, mapsKey);
+  if (nombre) await sinRomper(comando(['SET', claveCache, nombre, 'EX', 7 * 24 * 3600]), 'geocoding caché');
+  return nombre;
+}
+
+async function geocodificar(lat, lon, mapsKey) {
   try {
     const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=${mapsKey}&language=es`;
-    const res = await fetch(geoUrl);
+    const res = await fetch(geoUrl, conLimite(MS.geocoding));
     const data = await res.json();
 
     if (data.status && data.status !== 'OK') {
@@ -130,7 +171,7 @@ export const WMO_A_TEXTO = {
 export async function obtenerPrevisionTiempo(lat, lon, fecha) {
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FMadrid&start_date=${fecha}&end_date=${fecha}`;
-    const res = await fetch(url);
+    const res = await fetch(url, conLimite(MS.tiempo));
     const data = await res.json();
 
     if (data.error) {
@@ -152,16 +193,20 @@ export async function obtenerPrevisionTiempo(lat, lon, fecha) {
 }
 
 // Búsqueda de una foto real en Wikimedia Commons para un término de búsqueda dado
-export async function buscarFotoCommons(query) {
+// (Wikimedia pide identificarse con un User-Agent propio en TODAS las llamadas)
+const CABECERAS_COMMONS = { 'User-Agent': 'CazurronicsPlanner/10.0' };
+export async function buscarFotoCommons(query, limite) {
   try {
     const commonsRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json`, {
-      headers: { 'User-Agent': 'CazurronicsPlanner/10.0' }
+      headers: CABECERAS_COMMONS, ...conLimite(MS.foto, limite),
     });
     const commonsData = await commonsRes.json();
 
     if (commonsData.query?.search && commonsData.query.search.length > 0) {
       const fileTitle = commonsData.query.search[0].title;
-      const fileInfoRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json`);
+      const fileInfoRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json`, {
+        headers: CABECERAS_COMMONS, ...conLimite(MS.foto, limite),
+      });
       const fileInfoData = await fileInfoRes.json();
       const filePages = fileInfoData.query?.pages;
       const filePageId = Object.keys(filePages || {})[0];
@@ -178,12 +223,14 @@ export async function buscarFotoCommons(query) {
 
 // NUEVO: comprueba si Google tiene cobertura de Street View en ese punto (la consulta a "metadata" es
 // gratuita, no gasta cuota) y, si la hay, devuelve la URL de la imagen real de esa calle.
-export async function obtenerStreetView(lat, lon, mapsKey) {
+// OJO: esta clave acaba en el navegador (va dentro del iframe), así que NUNCA puede ser la de Gemini:
+// solo STREET_VIEW_API_KEY o GOOGLE_MAPS_API_KEY (restríngela por dominio en Google Cloud).
+export async function obtenerStreetView(lat, lon, limite) {
   try {
-    const svKey = process.env.STREET_VIEW_API_KEY || mapsKey;
-    // AQUÍ ESTABA EL FALLO: Usaba ${mapsKey} en vez de${svKey}
+    const svKey = process.env.STREET_VIEW_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    if (!svKey) return null;
     const metaUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lon}&key=${svKey}`;
-    const metaRes = await fetch(metaUrl);
+    const metaRes = await fetch(metaUrl, conLimite(MS.streetView, limite));
     const metaData = await metaRes.json();
 
     if (metaData.status === 'OK') {
@@ -227,10 +274,10 @@ const necesitaFicha = (tipo) => TIPOS_CON_FICHA_OBLIGATORIA.includes(String(tipo
 // reales: coordenadas verificadas, teléfono, web, horario, reseñas, foto real y Street View.
 // Devuelve la parada enriquecida, o null si debe descartarse (bar/restaurante/discoteca sin ficha real).
 export async function enriquecerParada(paradaOriginal, contexto) {
-  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey } = contexto;
+  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite } = contexto;
   let parada = { ...paradaOriginal };
 
-  parada.titulo = parada.titulo.replace(/,?\s*León,?\s*España/gi, '').trim();
+  parada.titulo = String(parada.titulo || '').replace(/,?\s*León,?\s*España/gi, '').trim();
   const queryBusquedaReal = `${parada.titulo}, ${nombreZona}, provincia de León, España`;
 
   let objetivo = null;
@@ -242,7 +289,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     const radioMetros = Number(radio) * 1000;
 
     const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(queryBusquedaReal)}&location=${lat},${lon}&radius=${radioMetros}&language=es&region=es&key=${mapsKey}`;
-    const resSearch = await fetch(searchUrl);
+    const resSearch = await fetch(searchUrl, conLimite(MS.places, limite));
     const dataSearch = await resSearch.json();
 
     if (dataSearch.status && dataSearch.status !== 'OK' && dataSearch.status !== 'ZERO_RESULTS') {
@@ -284,7 +331,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       if (objetivo.place_id) {
         try {
           const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${objetivo.place_id}&fields=photos,formatted_phone_number,website,opening_hours&language=es&key=${mapsKey}`;
-          const resDetails = await fetch(detailsUrl);
+          const resDetails = await fetch(detailsUrl, conLimite(MS.detalles, limite));
           const dataDetails = await resDetails.json();
           const detalle = dataDetails.result;
 
@@ -327,19 +374,20 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     return { parada: null, problemaConfigPlaces };
   }
 
-  if (!fotoRealEncontrada) {
-    fotoRealEncontrada = await buscarFotoCommons(queryBusquedaReal);
-  }
-  if (!fotoRealEncontrada) {
+  // La foto de reserva (Wikimedia) y el Street View no dependen el uno del otro: van a la vez
+  const buscarFoto = async () => {
+    if (fotoRealEncontrada) return fotoRealEncontrada;
+    const foto = await buscarFotoCommons(queryBusquedaReal, limite);
+    if (foto) return foto;
     const terminoGenerico = BUSQUEDA_GENERICA_POR_TIPO[parada.tipo] || 'Castilla y León turismo';
-    fotoRealEncontrada = await buscarFotoCommons(terminoGenerico);
-  }
-
-  parada.fotoOficial = fotoRealEncontrada || "https://images.unsplash.com/photo-1543785734-4b6e564642f8?auto=format&fit=crop&w=800&q=80";
-
+    return buscarFotoCommons(terminoGenerico, limite);
+  };
   // Street View: funciona igual para negocios verificados que para fiestas/monumentos con ubicación aproximada,
   // porque depende solo de las coordenadas, no de tener ficha de negocio en Places.
-  parada.streetView = await obtenerStreetView(parada.lat, parada.lon, mapsKey);
+  const [foto, streetView] = await Promise.all([buscarFoto(), obtenerStreetView(parada.lat, parada.lon, limite)]);
+
+  parada.fotoOficial = foto || "https://images.unsplash.com/photo-1543785734-4b6e564642f8?auto=format&fit=crop&w=800&q=80";
+  parada.streetView = streetView;
 
   return { parada, problemaConfigPlaces };
 }

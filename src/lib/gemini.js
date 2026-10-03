@@ -20,10 +20,11 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
     const queda = fin - Date.now();
     if (queda < 3000) break;
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      // La clave va en una cabecera, no en la URL (las URLs acaban en logs y trazas)
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
         method: "POST",
         signal: AbortSignal.timeout(queda),
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura } }),
         cache: "no-store",
       });
@@ -53,4 +54,58 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
   const err = new ErrorIA(saturado ? "saturado" : "Error en la IA", saturado ? 429 : 502);
   err.fallos = fallos;
   throw err;
+}
+
+// Lo que ve la persona cuando algo falla al montar o retocar un plan (nunca el error técnico)
+export function mensajeParaUsuario(error) {
+  if (error instanceof ErrorIA && (error.estado === 402 || error.estado === 403)) return "Estamos recargando la IA 🦁 Vuelve en un ratito y tendrás tu plan.";
+  if (error instanceof ErrorIA && error.estado === 429) return "Hay muchísima gente montando planes ahora mismo 🦁 Prueba otra vez en un minuto.";
+  if (error instanceof SyntaxError) return "La IA ha devuelto un plan a medias. Dale otra vez, que ahora sale.";
+  return "La IA no ha respondido a tiempo. Prueba otra vez en unos segundos.";
+}
+
+// ============ SACAR EL JSON DE LA RESPUESTA ============
+// Con Google Search activado, Gemini no puede devolver JSON "puro": a veces lo envuelve en ```json,
+// añade una frase antes o después, o cita fuentes con corchetes ("[1]"). Antes cortábamos del primer
+// "[" al último "]" y, si había un corchete de más, el plan entero fallaba. Ahora, si ese corte no vale,
+// buscamos el primer bloque bien cerrado que sea del tipo pedido.
+// tipo: "[" para una lista, "{" para un objeto. Devuelve null si no hay ninguno válido.
+export function extraerJSON(texto, tipo = "[") {
+  const t = String(texto || "").replace(/```(?:json)?/gi, "");
+  const cierre = tipo === "[" ? "]" : "}";
+  const esDelTipo = (v) => (tipo === "[" ? Array.isArray(v) : v !== null && typeof v === "object" && !Array.isArray(v));
+  const probar = (trozo) => { try { const v = JSON.parse(trozo); return esDelTipo(v) ? v : null; } catch { return null; } };
+
+  const ini = t.indexOf(tipo), fin = t.lastIndexOf(cierre);
+  if (ini === -1 || fin <= ini) return null;
+  const directo = probar(t.slice(ini, fin + 1));
+  if (directo) return directo;
+
+  // Recorremos el texto buscando bloques equilibrados (respetando lo que va entre comillas).
+  // Una lista solo vale si trae objetos: así una cita como "[1]" no se confunde con el plan.
+  let vacia = null;
+  for (let i = ini; i !== -1; i = t.indexOf(tipo, i + 1)) {
+    let nivel = 0, enCadena = false, escape = false;
+    for (let j = i; j < t.length; j++) {
+      const c = t[j];
+      if (enCadena) {
+        if (escape) escape = false;
+        else if (c === "\\") escape = true;
+        else if (c === '"') enCadena = false;
+        continue;
+      }
+      if (c === '"') enCadena = true;
+      else if (c === "[" || c === "{") nivel++;
+      else if (c === "]" || c === "}") {
+        nivel--;
+        if (nivel === 0) {
+          const v = probar(t.slice(i, j + 1));
+          if (v && tipo === "[" && !v.some((x) => x && typeof x === "object")) { if (!v.length) vacia ||= v; }
+          else if (v) return v;
+          break;
+        }
+      }
+    }
+  }
+  return vacia;
 }

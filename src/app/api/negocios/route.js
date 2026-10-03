@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { comando, varios } from "../../../lib/almacen";
+import { ipDe } from "../../../lib/freno";
 
 // POST /api/negocios — copia de seguridad de las solicitudes de negocios.
 // El formulario sigue mandando cada solicitud a tu Google Apps Script (como siempre) y ADEMÁS aquí.
@@ -27,7 +28,7 @@ export async function POST(request) {
 
   try {
     // Freno anti-spam: máximo una solicitud por minuto desde la misma conexión
-    const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "local";
+    const ip = ipDe(request);
     const libre = await comando(["SET", `negocios:freno:${ip}`, "1", "NX", "EX", 60]);
     if (!libre) return NextResponse.json({ exito: true, repetida: true });
     await varios([

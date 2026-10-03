@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { leerJSON, sinRomper } from "../../../../../lib/almacen";
+import { enSegundoPlano, leerJSON } from "../../../../../lib/almacen";
 import { idPlanValido, votanteValido, votar, resumenVotos } from "../../../../../lib/votos";
 import { registrar } from "../../../../../lib/estadisticas";
 
@@ -12,9 +12,10 @@ export async function POST(request, { params }) {
     const plan = await leerJSON(`plan:${id}`);
     if (!plan || !plan.itinerario?.[Number(indice)]) return NextResponse.json({ exito: false }, { status: 404 });
     await votar(id, indice, votante, voto);
-    await sinRomper(registrar("voto"), "estadísticas");
+    enSegundoPlano(() => registrar("voto"), "estadísticas");
     return NextResponse.json({ exito: true, votos: await resumenVotos(id, plan.itinerario.length, votante) });
   } catch (e) {
-    return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    console.error("[votar]", e?.message || e);
+    return NextResponse.json({ exito: false }, { status: 500 });
   }
 }

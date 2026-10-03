@@ -9,7 +9,7 @@ import Fondo from "./Fondo";
 import Valorar from "./Valorar";
 import AgendaFranjas from "./AgendaFranjas";
 import { GLASS, PRESS, BOTON_OSCURO, BOTON_CTA, TITULO_GRADIENTE } from "../../lib/estilos";
-import { baliza, compartirPlan, idVotante, registrarVisita } from "../../lib/cliente";
+import { baliza, compartirPlan, hoyLocal, idVotante, registrarVisita } from "../../lib/cliente";
 
 const MapSelectorDynamic = dynamic(() => import("./MapSelector"), { ssr: false });
 const nada = () => {};
@@ -22,28 +22,34 @@ export default function PlanCompartido({ inicial }) {
   const [aviso, setAviso] = useState("");
   const [valorar, setValorar] = useState(false);
 
-  // Visita + votos en "directo" (cada 8 s mientras la pestaña está visible)
+  // Visita + votos en "directo" (cada 8 s mientras la pestaña está visible, y al volver a ella).
+  // Mandamos la versión del plan que ya tenemos: si nadie lo ha retocado, el servidor solo manda los votos.
   useEffect(() => {
     registrarVisita();
     baliza("abre_compartido");
     const votante = idVotante();
+    let version = String(inicial.editado || inicial.creado || "");
     let vivo = true;
     const cargar = async () => {
       if (document.hidden) return;
       try {
-        const r = await fetch(`/api/planes/${inicial.id}?votante=${votante}`, { cache: "no-store" });
+        const r = await fetch(`/api/planes/${inicial.id}?votante=${votante}&v=${encodeURIComponent(version)}`, { cache: "no-store" });
         const d = await r.json();
-        if (vivo && d.exito) { setVotos(d.votos); setPlan(d.plan); }
+        if (!vivo || !d.exito) return;
+        setVotos(d.votos);
+        if (d.plan) { version = String(d.plan.editado || d.plan.creado || ""); setPlan(d.plan); }
       } catch {}
     };
     cargar();
     const t = setInterval(cargar, 8000);
-    return () => { vivo = false; clearInterval(t); };
-  }, [inicial.id]);
+    const alVolver = () => { if (!document.hidden) cargar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => { vivo = false; clearInterval(t); document.removeEventListener("visibilitychange", alVolver); };
+  }, [inicial.id, inicial.editado, inicial.creado]);
 
   // Si la fecha del plan ya pasó, preguntamos qué tal (una vez por persona)
   useEffect(() => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyLocal();
     let yaValorado = false;
     try { yaValorado = (JSON.parse(localStorage.getItem("cz-planes") || "[]").find((p) => p.id === inicial.id) || {}).valorado; } catch {}
     if (inicial.fecha >= hoy || yaValorado) return;

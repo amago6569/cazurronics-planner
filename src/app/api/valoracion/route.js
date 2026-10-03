@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { leerJSON, sinRomper } from "../../../lib/almacen";
+import { enSegundoPlano, leerJSON } from "../../../lib/almacen";
 import { esPrueba, registrarValoracion } from "../../../lib/lugares";
 import { idPlanValido, votanteValido } from "../../../lib/votos";
 import { registrar } from "../../../lib/estadisticas";
@@ -17,9 +17,10 @@ export async function POST(request) {
     if (esPrueba(request)) return NextResponse.json({ exito: true, nueva: true });
     // El lugar sale del plan guardado, no de lo que mande el navegador
     const nueva = await registrarValoracion({ planId, indice: Number(indice), votante, valor, lugarId: parada.lugarId });
-    if (nueva) await sinRomper(registrar("valoracion"), "estadísticas");
+    if (nueva) enSegundoPlano(() => registrar("valoracion"), "estadísticas");
     return NextResponse.json({ exito: true, nueva });
   } catch (e) {
-    return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    console.error("[valoración]", e?.message || e);
+    return NextResponse.json({ exito: false }, { status: 500 });
   }
 }

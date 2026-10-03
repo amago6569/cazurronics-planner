@@ -5,7 +5,7 @@
 //  · cada negocio puede ver sus estadísticas en un enlace privado firmado,
 //  · las páginas SEO tienen contenido propio ("dónde comer en León").
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { comando, varios, leerJSON, aObjeto, aRanking } from "./almacen";
+import { comando, varios, aObjeto, aRanking } from "./almacen";
 import { haversineKm } from "./planUtils";
 
 const SECRETO = process.env.NEGOCIOS_SECRETO || process.env.PANEL_CLAVE || "";
@@ -64,22 +64,35 @@ export async function registrarValoracion({ planId, indice, votante, valor, luga
   return true;
 }
 
+const leerFicha = (texto) => { try { return texto ? JSON.parse(texto) : null; } catch { return null; } };
+
+// Ficha + contadores de VARIOS sitios en una sola petición al almacén (antes, dos peticiones por sitio).
+// Devuelve una lista alineada con "claves" (null donde no hay ficha).
+export async function leerLugares(claves) {
+  const validas = claves.filter(claveValida);
+  const r = await varios(validas.flatMap((k) => [["GET", `lugar:${k}`], ["HGETALL", `lugarstats:${k}`]]));
+  const porClave = new Map(validas.map((k, i) => {
+    const ficha = leerFicha(r[i * 2]);
+    if (!ficha) return [k, null];
+    const s = aObjeto(r[i * 2 + 1]);
+    const n = (x) => Number(s[x]) || 0;
+    return [k, {
+      ...ficha, clave: k,
+      stats: { apariciones: n("apariciones"), detalle: n("detalle"), llamar: n("llamar"), web: n("web"), bien: n("bien"), mal: n("mal"), nofui: n("nofui") },
+    }];
+  }));
+  return claves.map((k) => porClave.get(k) || null);
+}
+
 export async function leerLugar(k) {
   if (!claveValida(k)) return null;
-  const [ficha, stats] = await Promise.all([leerJSON(`lugar:${k}`), comando(["HGETALL", `lugarstats:${k}`])]);
-  if (!ficha) return null;
-  const s = aObjeto(stats);
-  const n = (x) => Number(s[x]) || 0;
-  return {
-    ...ficha,
-    stats: { apariciones: n("apariciones"), detalle: n("detalle"), llamar: n("llamar"), web: n("web"), bien: n("bien"), mal: n("mal"), nofui: n("nofui") },
-  };
+  return (await leerLugares([k]))[0];
 }
 
 // Top de un ranking con la ficha de cada sitio
 export async function topLugares(ranking = "ranking:apariciones", cuantos = 20) {
   const lista = aRanking(await comando(["ZREVRANGE", ranking, 0, cuantos - 1, "WITHSCORES"]));
-  const fichas = await Promise.all(lista.map((r) => leerLugar(r.miembro)));
+  const fichas = await leerLugares(lista.map((r) => r.miembro));
   return lista.map((r, i) => fichas[i] && { ...fichas[i], puntos: r.puntos }).filter(Boolean);
 }
 
@@ -87,7 +100,8 @@ export async function topLugares(ranking = "ranking:apariciones", cuantos = 20) 
 export async function preferenciasComunidad(lat, lon, radio) {
   const lista = aRanking(await comando(["ZREVRANGE", "ranking:gusta", 0, 299, "WITHSCORES"]));
   const relevantes = lista.filter((r) => r.puntos >= 2 || r.puntos <= -2);
-  const fichas = await Promise.all(relevantes.map((r) => leerJSON(`lugar:${r.miembro}`)));
+  // Todas las fichas en una sola petición (se hace en cada plan, así que cuenta)
+  const fichas = (await varios(relevantes.map((r) => ["GET", `lugar:${r.miembro}`]))).map(leerFicha);
   const cerca = relevantes
     .map((r, i) => ({ ...r, ficha: fichas[i] }))
     .filter((r) => r.ficha && r.ficha.lat != null && haversineKm(lat, lon, r.ficha.lat, r.ficha.lon) <= Number(radio) * 1.1);
@@ -141,10 +155,8 @@ export async function buscarLugares(texto, max = 20) {
   const encontrados = [];
   fichas.forEach((f, i) => {
     if (encontrados.length >= max || !f) return;
-    try {
-      const ficha = JSON.parse(f);
-      if (slug(ficha.nombre).replace(/-/g, " ").includes(q)) encontrados.push(claves[i]);
-    } catch {}
+    const ficha = leerFicha(f);
+    if (ficha && slug(ficha.nombre).replace(/-/g, " ").includes(q)) encontrados.push(claves[i]);
   });
-  return (await Promise.all(encontrados.map(leerLugar))).filter(Boolean);
+  return (await leerLugares(encontrados)).filter(Boolean);
 }
