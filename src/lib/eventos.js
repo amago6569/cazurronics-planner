@@ -548,7 +548,9 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
     Devuelve SOLO un array JSON (máximo 15 elementos) con este formato:
     ${FORMATO_EVENTO}
   `;
-  const resultados = await Promise.allSettled(temas.map((t) => llamarGemini(prompt(t), 22000)));
+  // Solo la búsqueda de lo que pide la persona: cada una es una búsqueda de pago, y lo genérico (mercadillos,
+  // ferias, pueblos) ya lo traen los barridos automáticos de la agenda
+  const resultados = await Promise.allSettled(temas.slice(0, 1).map((t) => llamarGemini(prompt(t), 22000)));
   // Solo lo que tiene fuente comprobada (web consultada de verdad por Google, o URL que existe)
   const limite = Date.now() + 5000;
   const comprobados = await Promise.all(resultados.filter((r) => r.status === "fulfilled").map(async (r) => {
@@ -583,7 +585,7 @@ export function unirEventos(...listas) {
   return ordenarPorHora(deduplicar(listas.flat().filter(Boolean)));
 }
 
-// Pone al día lo más atrasado: un tramo diario con más de 20 h, o uno del barrido gordo con más de 46 h
+// Pone al día lo más atrasado: un tramo diario con más de 20 h, o uno del barrido gordo con más de 7 días
 // (en local, donde no hay cron, así la agenda se va llenando sola). Se llama en segundo plano con after().
 export async function asegurarBarridoReciente() {
   // En producción ya están los crons de Vercel: aquí no se lanza nada, para no gastar la cuota de Gemini
@@ -594,7 +596,7 @@ export async function asegurarBarridoReciente() {
   const ids = [...TRAMOS_DIARIOS, ...TRAMOS_GORDOS];
   const informes = await varios(ids.map((id) => ["GET", `eventos:tramo:${id}`]));
   const edad = (v) => { try { const f = JSON.parse(v)?.fin; return f ? Date.now() - Date.parse(f) : Infinity; } catch { return Infinity; } };
-  const atrasados = ids.map((id, i) => ({ id, edad: edad(informes[i]), max: (id.startsWith("m") ? 46 : 20) * 3600 * 1000 }))
+  const atrasados = ids.map((id, i) => ({ id, edad: edad(informes[i]), max: (id.startsWith("m") ? 168 : 20) * 3600 * 1000 }))
     .filter((t) => t.edad >= t.max)
     .sort((a, b) => (a.id[0] === b.id[0] ? b.edad - a.edad : a.id.startsWith("d") ? -1 : 1)); // primero los diarios
   for (const t of atrasados) {

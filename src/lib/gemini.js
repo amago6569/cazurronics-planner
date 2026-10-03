@@ -21,13 +21,18 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
     if (queda < 3000) break;
     try {
       // La clave va en una cabecera, no en la URL (las URLs acaban en logs y trazas)
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+      // Los modelos 3.x "piensan" y los tokens de pensamiento se cobran: con nivel bajo el plan sale igual y cuesta mucho menos
+      const pedir = (pensarPoco) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
         method: "POST",
         signal: AbortSignal.timeout(queda),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura } }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(pensarPoco ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } }),
         cache: "no-store",
       });
+      const pensarPoco = /^gemini-(flash|3)/.test(modelo);
+      let res = await pedir(pensarPoco);
+      // Si ese modelo no admite el ajuste (400), se repite sin él: nunca se rompe un plan por esto
+      if (res.status === 400 && pensarPoco) res = await pedir(false);
       const datos = await res.json().catch(() => ({}));
       if (!res.ok) {
         fallos.push(`${modelo}: ${res.status} ${String(datos?.error?.message || "").slice(0, 160)}`);

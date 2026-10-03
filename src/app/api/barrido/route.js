@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // Lo llaman los crons de Vercel (ver vercel.json), un tramo cada vez:
 //  · ?tramo=d0..d4  barrido diario de madrugada
 //  · ?tramo=r       repaso de novedades (mediodía y tarde)
-//  · ?tramo=m0..m7  barrido GORDO municipio a municipio (cada 2 días)
+//  · ?tramo=m0..m7  barrido GORDO municipio a municipio (cada domingo)
 // Sin ?tramo, hace el tramo más atrasado.
 // Vercel envía "Authorization: Bearer <CRON_SECRET>" si defines CRON_SECRET en las variables de entorno.
 export async function GET(request) {

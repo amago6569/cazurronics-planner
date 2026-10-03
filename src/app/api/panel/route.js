@@ -64,6 +64,10 @@ export async function POST(request) {
   const { accion, tramo } = await request.json().catch(() => ({}));
   if (accion !== "barrido" || tramo == null || !IDS_TRAMOS.includes(idTramo(tramo))) return NextResponse.json({ exito: false }, { status: 400 });
   try {
+    // Cada tramo gasta búsquedas de pago de Google: si ya se hizo hace menos de 6 h (cron o a mano), no se repite
+    const previo = await leerJSON(`eventos:tramo:${idTramo(tramo)}`).catch(() => null);
+    const hace = previo?.fin ? Date.now() - Date.parse(previo.fin) : Infinity;
+    if (hace < 6 * 3600 * 1000) return NextResponse.json({ exito: false, saltado: true, mensaje: "Ese tramo ya se hizo hace menos de 6 horas" });
     return NextResponse.json({ exito: true, informe: await barrerEventos({ tramo: idTramo(tramo) }) });
   } catch (e) {
     return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
