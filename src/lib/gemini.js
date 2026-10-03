@@ -7,6 +7,9 @@ const MODELOS = {
   usuario: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
   barrido: ["gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.0-flash"],
 };
+// Los modelos 3.x "piensan" antes de contestar y esos tokens se cobran. Con "low" el plan sale igual y cuesta bastante menos
+// (y tarda menos). GEMINI_PENSAMIENTO=auto en Vercel devuelve el comportamiento de fábrica; también vale minimal, medium o high.
+const NIVEL_PENSAMIENTO = String(process.env.GEMINI_PENSAMIENTO || "low").trim().toLowerCase();
 const REINTENTABLE = new Set([404, 408, 429, 500, 502, 503, 504]);
 
 export class ErrorIA extends Error {
@@ -24,15 +27,15 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
       // Los modelos 3.x "piensan" y los tokens de pensamiento se cobran: con nivel bajo el plan sale igual y cuesta mucho menos
       const pedir = (pensarPoco) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
         method: "POST",
-        signal: AbortSignal.timeout(queda),
+        signal: AbortSignal.timeout(Math.max(1000, fin - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(pensarPoco ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}) } }),
         cache: "no-store",
       });
-      const pensarPoco = /^gemini-(flash|3)/.test(modelo);
+      const pensarPoco = NIVEL_PENSAMIENTO !== "auto" && /^gemini-(flash|3)/.test(modelo);
       let res = await pedir(pensarPoco);
       // Si ese modelo no admite el ajuste (400), se repite sin él: nunca se rompe un plan por esto
-      if (res.status === 400 && pensarPoco) res = await pedir(false);
+      if (res.status === 400 && pensarPoco) { console.warn(`[gemini] ${modelo} no admite el nivel de pensamiento; se repite sin él`); res = await pedir(false); }
       const datos = await res.json().catch(() => ({}));
       if (!res.ok) {
         fallos.push(`${modelo}: ${res.status} ${String(datos?.error?.message || "").slice(0, 160)}`);

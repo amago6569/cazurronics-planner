@@ -326,6 +326,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       ubicacionResuelta = true;
       if (objetivo.place_id) parada.placeId = objetivo.place_id;
       if (objetivo.name) parada.nombreGoogle = objetivo.name; // para comprobar después que es de verdad ese negocio
+      if (Array.isArray(objetivo.types)) parada.tiposGoogle = objetivo.types.slice(0, 8); // qué es según Google (bar, restaurante, museo…)
 
       if (typeof objetivo.rating === 'number') {
         parada.resenas = `${objetivo.rating}/5 (${objetivo.user_ratings_total || 0} reseñas)`;

@@ -43,7 +43,28 @@ const seParecen = (a, b) => {
   const pb = new Set(palabras(b));
   return palabras(a).some((w) => pb.has(w));
 };
-export const esNegocio = (p) => !!(p?.placeId && TIPOS_NEGOCIO.includes(String(p.tipo || "").toLowerCase()) && p.nombreGoogle && seParecen(p.titulo, p.nombreGoogle));
+// El tipo de negocio lo dice Google si lo sabe (así un evento que se celebra en un museo o un bar cuenta para ESE local);
+// si no, vale el tipo que puso la IA.
+const TIPO_POR_GOOGLE = [["bar", "bar"], ["restaurant", "restaurante"], ["cafe", "cafeteria"], ["night_club", "discoteca"], ["museum", "museo"]];
+export function tipoNegocio(p) {
+  const g = Array.isArray(p?.tiposGoogle) ? p.tiposGoogle : [];
+  const deGoogle = TIPO_POR_GOOGLE.find(([k]) => g.includes(k))?.[1];
+  if (deGoogle) return deGoogle;
+  const t = String(p?.tipo || "").toLowerCase();
+  return TIPOS_NEGOCIO.includes(t) ? t : null;
+}
+// Nombre de Google más presentable: si viene todo en mayúsculas, a minúsculas con inicial en cada palabra
+const bonito = (n) => {
+  const s = String(n || "").trim();
+  if (!s || s !== s.toUpperCase() || !/[A-ZÁÉÍÓÚÑ]/.test(s)) return s;
+  return s.toLowerCase().replace(/(^|[\s\-(])([a-záéíóúñü])/g, (m, a, b) => a + b.toUpperCase()).replace(/ (De|Del|Y|En) /g, (m, w) => " " + w.toLowerCase() + " ");
+};
+// Cuenta como local si tiene ficha de Google, es un tipo de negocio y su nombre en Google es el de la parada
+// o el del sitio donde se celebra ("lugar").
+export const esNegocio = (p) => !!(p?.placeId && p.nombreGoogle && tipoNegocio(p) && (seParecen(p.titulo, p.nombreGoogle) || (p.lugar && seParecen(p.lugar, p.nombreGoogle))));
+
+// Para fichas ya guardadas (también las antiguas): un negocio real tiene ficha de Google y un tipo de negocio
+export const fichaEsNegocio = (f) => !!(f?.placeId && TIPOS_NEGOCIO.includes(String(f.tipo || "").toLowerCase()));
 
 // Al guardar un plan: ficha del sitio + contador de apariciones + rankings
 export async function registrarApariciones(paradas) {
@@ -52,7 +73,7 @@ export async function registrarApariciones(paradas) {
     const k = p.lugarId;
     if (!claveValida(k) || !esNegocio(p)) continue;
     c.push(["SET", `lugar:${k}`, JSON.stringify({
-      clave: k, nombre: p.nombreGoogle || p.titulo, tipo: p.tipo || null, placeId: p.placeId || null,
+      clave: k, nombre: bonito(p.nombreGoogle) || p.titulo, tipo: tipoNegocio(p) || p.tipo || null, placeId: p.placeId || null,
       lat: p.lat ?? null, lon: p.lon ?? null, foto: p.fotoOficial || null,
       precio: p.precio || null, resenas: p.resenas || null, actualizado: Date.now(),
     })]);
@@ -114,7 +135,7 @@ export async function topLugares(ranking = "ranking:apariciones", cuantos = 20) 
   const salida = [];
   lista.forEach((r, i) => {
     const f = fichas[i];
-    if (!f || !f.placeId || !TIPOS_NEGOCIO.includes(String(f.tipo || "").toLowerCase())) return;
+    if (!fichaEsNegocio(f)) return;
     const nombre = slug(f.nombre);
     if (vistos.has(nombre)) return;
     vistos.add(nombre);
@@ -183,7 +204,7 @@ export async function buscarLugares(texto, max = 20) {
   fichas.forEach((f, i) => {
     if (encontrados.length >= max || !f) return;
     const ficha = leerFicha(f);
-    if (ficha && slug(ficha.nombre).replace(/-/g, " ").includes(q)) encontrados.push(claves[i]);
+    if (fichaEsNegocio(ficha) && slug(ficha.nombre).replace(/-/g, " ").includes(q)) encontrados.push(claves[i]);
   });
   return (await leerLugares(encontrados)).filter(Boolean);
 }

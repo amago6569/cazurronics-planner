@@ -22,6 +22,8 @@ export default function Panel() {
   const [encontrados, setEncontrados] = useState(null);
   const [finde, setFinde] = useState(null); // resumen del finde (textos + imágenes)
   const [copiadoFinde, setCopiadoFinde] = useState("");
+  const [avisoBarrido, setAvisoBarrido] = useState(""); // por qué un barrido no ha gastado búsquedas
+  const [reinicio, setReinicio] = useState(""); // "" | "seguro" | "haciendo" | "hecho" | "error"
 
   const buscar = async (e) => {
     e?.preventDefault();
@@ -66,13 +68,30 @@ export default function Panel() {
   };
   const barrer = async (tipo) => {
     const { ids } = BARRIDOS[tipo];
+    setAvisoBarrido("");
+    let saltados = 0, horas = 0;
     try {
       for (let i = 0; i < ids.length; i++) {
         setBarriendo({ tipo, hecho: i, total: ids.length });
-        await fetch("/api/panel", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ accion: "barrido", tramo: ids[i] }) }).catch(() => null);
+        const r = await fetch("/api/panel", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ accion: "barrido", tramo: ids[i] }) }).catch(() => null);
+        const d = r ? await r.json().catch(() => null) : null;
+        if (d?.saltado) { saltados++; horas = Math.max(horas, d.horas || 1); }
       }
       await cargar(clave);
+      if (saltados) setAvisoBarrido(saltados === ids.length
+        ? `Ya estaba hecho hace poco (hace unas ${horas} h): no se ha repetido para no gastar búsquedas de Google.`
+        : `${saltados} de ${ids.length} partes ya estaban hechas hace poco y se han saltado para no gastar búsquedas de Google.`);
     } finally { setBarriendo(null); }
+  };
+
+  // Empezar de cero las estadísticas de locales (hay que confirmarlo con un segundo clic)
+  const reiniciarLocales = async () => {
+    setReinicio("haciendo");
+    try {
+      const r = await fetch("/api/panel", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ accion: "reiniciar-locales" }) });
+      const d = await r.json().catch(() => null);
+      if (d?.exito) { await cargar(clave); setReinicio("hecho"); } else setReinicio("error");
+    } catch { setReinicio("error"); }
   };
 
   const copiarEnlace = async (lugar) => {
@@ -220,7 +239,7 @@ export default function Panel() {
                 <p className="text-xs text-slate-500">{barrido ? `Última pasada: ${new Date(barrido.fin || barrido.inicio).toLocaleString("es-ES")} · ${barrido.total ?? 0} planes en la agenda${barrido.descartados ? ` · ${barrido.descartados} descartados por fuente falsa` : ""}` : "Todavía no se ha hecho ningún barrido"}</p>
               </div>
             </div>
-            {/* Lanzar a mano (los crons lo hacen solos: diario de madrugada, novedades a mediodía y tarde, gordo cada 2 días) */}
+            {/* Lanzar a mano (los crons lo hacen solos: diario de madrugada, novedades a mediodía y tarde, gordo cada domingo; si ya se hizo hace poco, no se repite) */}
             <div className="flex flex-wrap gap-2 mb-4">
               {Object.entries(BARRIDOS).map(([tipo, b]) => {
                 const activo = barriendo?.tipo === tipo;
@@ -232,6 +251,7 @@ export default function Panel() {
                 );
               })}
             </div>
+            {avisoBarrido && <p className="text-xs text-amber-700 bg-amber-50/80 rounded-xl px-3 py-2 mb-4">{avisoBarrido}</p>}
             {barrido?.tramos && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-4">
                 {barrido.tramos.map((t) => (
@@ -363,6 +383,20 @@ export default function Panel() {
               </table>
             </div>
           ) : !encontrados && <p className="text-sm text-slate-500">Cuando se generen planes aparecerán aquí los locales.</p>}
+          <div className="mt-4 pt-3 border-t border-slate-900/5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500">
+            <span className="min-w-0 flex-1">Los números son acumulados desde el lanzamiento: incluyen planes de prueba y datos anteriores a esta versión. Solo cuentan locales reales.</span>
+            {reinicio === "seguro" ? (
+              <>
+                <span className="w-full sm:w-auto font-semibold text-rose-600">¿Seguro? Se borran apariciones, fichas, llamadas y valoraciones de todos los locales.</span>
+                <button onClick={reiniciarLocales} className={`${PRESS} h-8 px-3 rounded-full text-xs font-semibold bg-rose-500 text-white`}>Sí, empezar de cero</button>
+                <button onClick={() => setReinicio("")} className={`${PRESS} h-8 px-3 rounded-full text-xs font-semibold bg-white/80 text-slate-600 ring-1 ring-slate-900/10`}>Cancelar</button>
+              </>
+            ) : (
+              <button onClick={() => setReinicio("seguro")} disabled={reinicio === "haciendo"} className={`${PRESS} h-8 px-3 rounded-full text-xs font-semibold bg-white/80 text-slate-600 ring-1 ring-slate-900/10 disabled:opacity-60`}>{reinicio === "haciendo" ? "Borrando…" : "Empezar estadísticas de cero"}</button>
+            )}
+            {reinicio === "hecho" && <span className="w-full font-semibold text-emerald-600">✅ Hecho: las estadísticas de locales empiezan de cero.</span>}
+            {reinicio === "error" && <span className="w-full font-semibold text-rose-600">No se pudo borrar. Inténtalo otra vez.</span>}
+          </div>
         </section>
       </div>
     </main>

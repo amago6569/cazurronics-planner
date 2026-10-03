@@ -257,6 +257,20 @@ export const TRAMOS_GORDOS = IDS_TRAMOS.filter((id) => id.startsWith("m"));
 export const idTramo = (t) => (typeof t === "number" || /^\d+$/.test(String(t)) ? `d${t}` : String(t));
 export const NUM_TRAMOS = TRAMOS_DIARIOS.length;
 
+// Cada búsqueda de Gemini con Google se paga: un tramo que se hizo hace poco no se repite.
+// Devuelve { hace } (en ms) si el tramo se completó dentro de ese margen, o null si toca hacerlo.
+// Si la última vez todas las búsquedas fallaron, no cuenta como hecho y se vuelve a intentar.
+export const HORAS_MIN_CRON = { d: 20, r: 4, m: 5 * 24 };   // los crons: diario cada 24 h, novedades cada 6 h, gordo cada semana
+export const HORAS_MIN_MANUAL = { d: 6, r: 6, m: 3 * 24 };  // los botones del panel
+export async function tramoReciente(id, horas) {
+  const informe = await leerJSON(`eventos:tramo:${id}`).catch(() => null);
+  if (!informe?.fin) return null;
+  const hace = Date.now() - Date.parse(informe.fin);
+  if (!(hace < horas * 3600 * 1000)) return null;
+  if ((informe.busquedas || 0) > 0 && (informe.errores || 0) >= informe.busquedas) return null;
+  return { hace };
+}
+
 async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta }, msMax = 42000) {
   const prompt = `
     Eres el documentalista de Cazurronics Planner. Busca en Internet ${tema} en ${donde || "León capital y en la provincia de León (España)"}
@@ -394,7 +408,7 @@ export async function barrerEventos({ tramo } = {}) {
 
   informe.nuevos = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta) : 0;
   Object.assign(informe, { encontrados, descartados, errores, busquedas: tareas.length, fin: new Date().toISOString() });
-  await guardarJSON(`eventos:tramo:${id}`, informe, 7 * 24 * 3600);
+  await guardarJSON(`eventos:tramo:${id}`, informe, 10 * 24 * 3600);
   await resumirBarridos();
   return informe;
 }

@@ -2,8 +2,8 @@ import { llamarGemini, extraerJSON, mensajeParaUsuario } from '../../../lib/gemi
 import { NextResponse } from 'next/server';
 import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada, leerPeticionPlan } from '../../../lib/planUtils';
 import { enSegundoPlano, leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
-import { dentroDelLimite } from '../../../lib/freno';
-import { claveLugar, esPrueba, registrarApariciones } from '../../../lib/lugares';
+import { dentroDelLimite, dentroDelTopeDiario } from '../../../lib/freno';
+import { claveLugar, esNegocio, esPrueba, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
 
 export const maxDuration = 60;
@@ -28,6 +28,10 @@ export async function POST(request) {
     }
     if (!(await dentroDelLimite(request, 'retoque', MAX_RETOQUES, VENTANA_S))) {
       return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos cambios seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
+    }
+    // Techo de gasto por día (RETOQUES_MAX_IP_DIA y RETOQUES_MAX_DIA en Vercel; 0 = sin tope)
+    if (!(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_IP_DIA ?? 200), request)) || !(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_DIA ?? 1500)))) {
+      return NextResponse.json({ exito: false, mensaje: 'Hoy se han hecho muchos cambios 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
     }
     const { fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
 
@@ -55,7 +59,7 @@ export async function POST(request) {
     if (!parada) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
 
     // NUEVO: identificador del lugar + actualizar el plan guardado (el enlace compartido ve el cambio)
-    parada.lugarId = claveLugar(parada);
+    parada.lugarId = esNegocio(parada) ? claveLugar(parada) : null; // un evento no cuenta como local
     if (typeof planId === 'string' && /^[0-9a-zA-Z]{6,20}$/.test(planId)) {
       await sinRomper((async () => {
         const guardado = await leerJSON(`plan:${planId}`);

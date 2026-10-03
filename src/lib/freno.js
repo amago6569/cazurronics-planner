@@ -21,3 +21,19 @@ export async function dentroDelLimite(request, nombre, max, segundos) {
     return true;
   }
 }
+
+// Tope por DÍA (hora de Madrid). Sin "request" cuenta a todo el mundo junto (techo de gasto si algo dispara las
+// peticiones desde muchas conexiones); con "request" cuenta solo a esa conexión.
+// max <= 0 lo desactiva. Si el almacén falla, nunca bloquea.
+export async function dentroDelTopeDiario(nombre, max, request = null) {
+  if (!(max > 0)) return true;
+  const dia = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }); // 2026-10-04
+  const clave = `freno:dia:${nombre}:${request ? ipDe(request) : "todos"}:${dia}`;
+  try {
+    const [, cuenta] = await varios([["SET", clave, "0", "NX", "EX", 36 * 3600], ["INCRBY", clave, 1]]);
+    return Number(cuenta) <= max;
+  } catch (e) {
+    console.error("[freno]", e?.message || e);
+    return true;
+  }
+}

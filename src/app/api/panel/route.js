@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { comando, leerJSON, usaRedis } from "../../../lib/almacen";
+import { comando, leerJSON, usaRedis, varios } from "../../../lib/almacen";
 import { leerResumen } from "../../../lib/estadisticas";
-import { buscarLugares, claveDePanelValida, tokenNegocio, topLugares } from "../../../lib/lugares";
-import { barrerEventos, eventosProximos, IDS_TRAMOS, idTramo } from "../../../lib/eventos";
+import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares } from "../../../lib/lugares";
+import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
 
 export const maxDuration = 60; // el panel lanza el barrido tramo a tramo
 export const dynamic = "force-dynamic";
@@ -62,12 +62,27 @@ export async function POST(request) {
   if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
   if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
   const { accion, tramo } = await request.json().catch(() => ({}));
+  // Empezar de cero las estadísticas de locales (apariciones, fichas, llamadas, valoraciones). No toca captación ni la agenda.
+  if (accion === "reiniciar-locales") {
+    try {
+      const rankings = ["ranking:apariciones", "ranking:comer", "ranking:gusta"];
+      const miembros = await Promise.all(rankings.map((r) => comando(["ZREVRANGE", r, 0, -1]).catch(() => [])));
+      const claves = [...new Set(miembros.flat().filter(claveValida))];
+      for (let i = 0; i < claves.length; i += 100) {
+        await varios(claves.slice(i, i + 100).flatMap((k) => [["DEL", `lugar:${k}`], ["DEL", `lugarstats:${k}`]]));
+      }
+      await varios(rankings.map((r) => ["DEL", r]));
+      return NextResponse.json({ exito: true, borrados: claves.length });
+    } catch (e) {
+      return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    }
+  }
   if (accion !== "barrido" || tramo == null || !IDS_TRAMOS.includes(idTramo(tramo))) return NextResponse.json({ exito: false }, { status: 400 });
   try {
-    // Cada tramo gasta búsquedas de pago de Google: si ya se hizo hace menos de 6 h (cron o a mano), no se repite
-    const previo = await leerJSON(`eventos:tramo:${idTramo(tramo)}`).catch(() => null);
-    const hace = previo?.fin ? Date.now() - Date.parse(previo.fin) : Infinity;
-    if (hace < 6 * 3600 * 1000) return NextResponse.json({ exito: false, saltado: true, mensaje: "Ese tramo ya se hizo hace menos de 6 horas" });
+    // Cada tramo gasta búsquedas de pago de Google: si ya se hizo hace poco (cron o a mano), no se repite
+    const id = idTramo(tramo);
+    const reciente = await tramoReciente(id, HORAS_MIN_MANUAL[String(id)[0]] ?? 6);
+    if (reciente) return NextResponse.json({ exito: false, saltado: true, horas: Math.max(1, Math.round(reciente.hace / 3600000)), mensaje: "Ya se hizo hace poco; no se repite para no gastar búsquedas de Google" });
     return NextResponse.json({ exito: true, informe: await barrerEventos({ tramo: idTramo(tramo) }) });
   } catch (e) {
     return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });

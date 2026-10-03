@@ -4,7 +4,7 @@
 // NADA se envía solo a los locales: el panel deja el correo o el mensaje de Instagram preparado
 // y lo mandas tú con un botón. Lo único automático es el aviso que te llega a ti (api/captacion/aviso).
 import { comando, varios, leerJSON, guardarJSON, aObjeto } from "./almacen";
-import { claveValida, leerLugares, tokenNegocio } from "./lugares";
+import { claveValida, leerLugares, slug, tokenNegocio } from "./lugares";
 
 export const DOMINIO = (process.env.NEXT_PUBLIC_SITE_URL || "https://cazurronics.es").replace(/\/$/, "");
 
@@ -144,7 +144,7 @@ export async function listarCaptacion() {
     const seg = seguimientos[f.clave] || {};
     const estado = ESTADOS.includes(seg.estado) ? seg.estado : "nuevo";
     const ev = evaluar(f.stats, ajustes);
-    const captable = TIPOS_CAPTABLES.includes(String(f.tipo || "").toLowerCase());
+    const captable = TIPOS_CAPTABLES.includes(String(f.tipo || "").toLowerCase()) && !!f.placeId; // sin ficha de Google no es un local real
     const local = {
       clave: f.clave, nombre: f.nombre, tipo: f.tipo || null, stats: f.stats,
       interacciones: ev.interacciones, aprobacion: ev.aprobacion, estado,
@@ -162,7 +162,12 @@ export async function listarCaptacion() {
   const masSalen = (a, b) => b.stats.apariciones - a.stats.apariciones;
   g.listos.sort(masSalen);
   g.casi.sort(masSalen);
-  g.casi = g.casi.slice(0, 12);
+  // Un mismo local no se propone dos veces aunque tenga dos fichas
+  // (y tampoco se vuelve a proponer uno al que ya se le ha escrito, aunque Google lo tenga con otra ficha)
+  const vistos = new Set([...g.seguimiento, ...g.cerrados].map((l) => slug(l.nombre)));
+  const sinRepetir = (lista) => lista.filter((l) => { const n = slug(l.nombre); if (vistos.has(n)) return false; vistos.add(n); return true; });
+  g.listos = sinRepetir(g.listos);
+  g.casi = sinRepetir(g.casi).slice(0, 12);
   g.seguimiento.sort((a, b) => Number(b.toca) - Number(a.toca) || (a.contactadoEn || 0) - (b.contactadoEn || 0));
   g.cerrados.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   for (const l of [...g.listos, ...g.seguimiento]) l.mensajes = mensajesPara(l, { remitente: ajustes.remitente });

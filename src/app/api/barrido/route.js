@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { asegurarBarridoReciente, barrerEventos, IDS_TRAMOS, idTramo } from "../../../lib/eventos";
+import { asegurarBarridoReciente, barrerEventos, HORAS_MIN_CRON, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
 
 export const maxDuration = 60; // cada tramo del barrido cabe en un minuto
 export const dynamic = "force-dynamic";
@@ -20,6 +20,11 @@ export async function GET(request) {
     const tramo = t == null ? null : idTramo(t);
     if (tramo != null && !IDS_TRAMOS.includes(tramo)) {
       return NextResponse.json({ exito: false, mensaje: `tramo debe ser uno de: ${IDS_TRAMOS.join(", ")}` }, { status: 400 });
+    }
+    // Si ese tramo ya se hizo hace poco (por ejemplo a mano desde el panel), no se repite: cada búsqueda se paga
+    if (tramo != null) {
+      const reciente = await tramoReciente(tramo, HORAS_MIN_CRON[String(tramo)[0]] ?? 4);
+      if (reciente) return NextResponse.json({ exito: true, saltado: true, informe: { tramo, hechoHaceHoras: Math.round(reciente.hace / 3600000) } });
     }
     const informe = tramo == null ? { lanzado: await asegurarBarridoReciente() } : await barrerEventos({ tramo });
     return NextResponse.json({ exito: true, informe });

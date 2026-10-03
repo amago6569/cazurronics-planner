@@ -2,9 +2,9 @@ import { llamarGemini, extraerJSON, mensajeParaUsuario } from '../../../lib/gemi
 import { NextResponse, after } from 'next/server';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, leerPeticionPlan } from '../../../lib/planUtils';
 import { enSegundoPlano, guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
-import { dentroDelLimite } from '../../../lib/freno';
+import { dentroDelLimite, dentroDelTopeDiario } from '../../../lib/freno';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos, asegurarBarridoReciente } from '../../../lib/eventos';
-import { claveLugar, esPrueba, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
+import { claveLugar, esNegocio, esPrueba, preferenciasComunidad, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
 import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from '../../../lib/agenda';
 
@@ -27,6 +27,13 @@ export async function POST(request) {
     if (peticion.error) return NextResponse.json({ exito: false, mensaje: peticion.error }, { status: 400 });
     if (!(await dentroDelLimite(request, 'plan', MAX_PLANES, VENTANA_S))) {
       return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos planes seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
+    }
+    // Techo de gasto por día: por conexión y para toda la web (se cambian con PLANES_MAX_IP_DIA y PLANES_MAX_DIA en Vercel; 0 = sin tope)
+    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 100), request))) {
+      return NextResponse.json({ exito: false, mensaje: 'Hoy has montado muchos planes 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
+    }
+    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 600)))) {
+      return NextResponse.json({ exito: false, mensaje: 'Hoy se han agotado los planes gratuitos 🦁 Vuelve mañana y te montamos el planazo.' }, { status: 429 });
     }
     const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
     const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
@@ -105,7 +112,7 @@ export async function POST(request) {
     rutaFinal.sort((a, b) => (leerHora(a.hora).min ?? 24 * 60) - (leerHora(b.hora).min ?? 24 * 60));
 
     // NUEVO: cada parada lleva su identificador de lugar (para estadísticas y valoraciones)
-    for (const parada of rutaFinal) parada.lugarId = claveLugar(parada);
+    for (const parada of rutaFinal) parada.lugarId = esNegocio(parada) ? claveLugar(parada) : null; // un evento no cuenta como local
 
     // NUEVO: guardamos el plan para poder compartirlo (/plan/ID) y votarlo en grupo
     const planId = nuevoId();
