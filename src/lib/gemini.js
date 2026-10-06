@@ -16,7 +16,30 @@ export class ErrorIA extends Error {
   constructor(mensaje, estado) { super(mensaje); this.estado = estado; }
 }
 
-export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2, google = true, msMax = 50000 } = {}) {
+// Precio aproximado (dólares) para medir lo que cuesta cada llamada. Cambia si Google cambia la tarifa:
+// https://ai.google.dev/pricing. Las búsquedas de Google de los modelos 3.x se cobran una a una
+// (5.000 gratis al mes, luego 14 $ cada 1.000); en los 2.x se cobra cada petición con búsqueda (1.500 gratis al día).
+const PRECIOS = [
+  [/^gemini-(flash-latest|3)/, { entrada: 0.75, salida: 3.75, busqueda: 0.014, porConsulta: true }],
+  [/^gemini-(2\.5-flash-lite|flash-lite)/, { entrada: 0.1, salida: 0.4, busqueda: 0.035, porConsulta: false }],
+  [/^gemini-2\.5-flash/, { entrada: 0.3, salida: 2.5, busqueda: 0.035, porConsulta: false }],
+  [/^gemini-2\.0/, { entrada: 0.1, salida: 0.4, busqueda: 0.035, porConsulta: false }],
+];
+
+// Tokens, búsquedas y coste aproximado de una respuesta de Gemini
+export function medirUso(modelo, datos) {
+  const u = datos?.usageMetadata || {};
+  const consultas = (datos?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
+  const precio = PRECIOS.find(([re]) => re.test(modelo))?.[1] || PRECIOS[0][1];
+  const entrada = Number(u.promptTokenCount) || 0;
+  const salida = (Number(u.candidatesTokenCount) || 0) + (Number(u.thoughtsTokenCount) || 0);
+  const busquedas = precio.porConsulta ? consultas : (consultas ? 1 : 0);
+  const dolares = (entrada * precio.entrada + salida * precio.salida) / 1e6 + busquedas * precio.busqueda;
+  return { modelo, entrada, salida, consultas, dolares: Math.round(dolares * 100000) / 100000 };
+}
+
+// json: true pide la respuesta directamente en JSON (solo sin Google Search: Gemini no admite las dos cosas a la vez)
+export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2, google = true, json = false, msMax = 50000 } = {}) {
   const fallos = [];
   const fin = Date.now() + msMax;
   for (const modelo of MODELOS[para] || MODELOS.usuario) {
@@ -29,7 +52,7 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
         method: "POST",
         signal: AbortSignal.timeout(Math.max(1000, fin - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}) } }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}) } }),
         cache: "no-store",
       });
       const pensarPoco = NIVEL_PENSAMIENTO !== "auto" && /^gemini-(flash|3)/.test(modelo);
@@ -51,7 +74,9 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
         .map((c) => String(c?.web?.title || "").toLowerCase().replace(/^www\./, "").trim())
         .filter((t) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)));
       if (fallos.length) console.warn("[gemini] plan B:", fallos.join(" | "), "→ usando", modelo);
-      return { texto, dominios, modelo };
+      const uso = medirUso(modelo, datos);
+      console.log(`[gemini-uso] ${para} ${modelo} entrada=${uso.entrada} salida=${uso.salida} busquedas=${uso.consultas} ~${uso.dolares}$`);
+      return { texto, dominios, modelo, uso };
     } catch (e) {
       if (e instanceof ErrorIA) { console.error("[gemini]", fallos.join(" | ")); throw e; }
       fallos.push(`${modelo}: ${e?.name === "TimeoutError" ? "tardó demasiado" : e?.message || e}`);
