@@ -127,8 +127,8 @@ export default function Comparar() {
           <section key={i} className={`${GLASS} rounded-[2rem] p-5`}>
             <p className="text-sm font-semibold text-slate-900 mb-3">{i + 1}. “{CASOS[i].apetece}” <span className="font-normal text-slate-500">· {CASOS[i].zona}, {CASOS[i].radio} km, {CASOS[i].presupuestoMin}-{CASOS[i].presupuestoMax} €</span></p>
             <div className="grid gap-3 md:grid-cols-2">
-              <Columna titulo="Con Google (el de ahora)" r={r.google} />
-              <Columna titulo="Ahorro (sin búsqueda)" r={r.ahorro} />
+              <Columna titulo="Con Google (el antiguo)" r={r.google} />
+              <Columna titulo="Ahorro (el de ahora, sin búsqueda)" r={r.ahorro} />
             </div>
           </section>
         ))}

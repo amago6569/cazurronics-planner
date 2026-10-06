@@ -42,7 +42,7 @@ export async function POST(request) {
     const sumaOtras = itinerarioActual.reduce((suma, p, i) => i === indice ? suma : suma + parsePrecio(p?.precio), 0);
     const presDisp = Math.max(Number(presupuestoMax) - sumaOtras, 3);
     const nombresYa = itinerarioActual.filter((p, i) => i !== indice && p?.titulo).map(p => p.titulo);
-    // Modo ahorro (PLANES_SIN_GOOGLE=1): sin búsqueda en Google; la IA elige entre los locales comprobados del radio
+    // Modo ahorro (el de serie; PLANES_CON_GOOGLE=1 lo apaga): sin búsqueda en Google; la IA elige entre los locales comprobados del radio
     // y lo que conoce, y Google Places lo comprueba después igual que siempre
     const conGoogle = planesConGoogle();
     const sitios = conGoogle ? null : await sinRomper(sitiosComprobados(lat, lon, radio, 30), 'sitios comprobados');
