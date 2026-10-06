@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada, leerPeticionPlan } from '../../../lib/planUtils';
 import { enSegundoPlano, leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
 import { dentroDelLimite, dentroDelTopeDiario } from '../../../lib/freno';
-import { claveLugar, esNegocio, esPrueba, registrarApariciones } from '../../../lib/lugares';
+import { claveLugar, esNegocio, esPrueba, registrarApariciones, sitiosComprobados, sitiosParaPrompt } from '../../../lib/lugares';
+import { planesConGoogle } from '../../../lib/montarPlan';
 import { registrar } from '../../../lib/estadisticas';
 
 export const maxDuration = 60;
@@ -41,17 +42,23 @@ export async function POST(request) {
     const sumaOtras = itinerarioActual.reduce((suma, p, i) => i === indice ? suma : suma + parsePrecio(p?.precio), 0);
     const presDisp = Math.max(Number(presupuestoMax) - sumaOtras, 3);
     const nombresYa = itinerarioActual.filter((p, i) => i !== indice && p?.titulo).map(p => p.titulo);
+    // Modo ahorro (PLANES_SIN_GOOGLE=1): sin búsqueda en Google; la IA elige entre los locales comprobados del radio
+    // y lo que conoce, y Google Places lo comprueba después igual que siempre
+    const conGoogle = planesConGoogle();
+    const sitios = conGoogle ? null : await sinRomper(sitiosComprobados(lat, lon, radio, 30), 'sitios comprobados');
+    const bloqueSitios = conGoogle ? '' : sitiosParaPrompt((sitios || []).filter((x) => !nombresYa.includes(x.n) && x.n !== paradaAntigua.titulo));
 
     const prompt = `
       Cazurronics Planner. Cambia la parada "${paradaAntigua.titulo}" (${paradaAntigua.hora}).
       El usuario pide: "${instruccion}".
       RESTRICCIONES: Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
+      ${bloqueSitios}
       Devuelve SOLO un JSON así:
       "lugar": solo si es un evento o ruta: el local, plaza o recinto concreto donde es; si es un negocio normal, null.
       {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
-    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.3, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
+    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
     const propuesta = extraerJSON(textoIA, '{');
     if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
     const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });

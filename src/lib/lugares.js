@@ -5,7 +5,7 @@
 //  · cada negocio puede ver sus estadísticas en un enlace privado firmado,
 //  · las páginas SEO tienen contenido propio ("dónde comer en León").
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { comando, varios, aObjeto, aRanking } from "./almacen";
+import { comando, varios, aObjeto, aRanking, leerJSON, guardarJSON } from "./almacen";
 import { haversineKm } from "./planUtils";
 
 const SECRETO = process.env.NEGOCIOS_SECRETO || process.env.PANEL_CLAVE || "";
@@ -207,4 +207,50 @@ export async function buscarLugares(texto, max = 20) {
     if (fichaEsNegocio(ficha) && slug(ficha.nombre).replace(/-/g, " ").includes(q)) encontrados.push(claves[i]);
   });
   return (await leerLugares(encontrados)).filter(Boolean);
+}
+
+// ---------- Catálogo de sitios reales para el planificador ----------
+// Todos los locales que ya han salido en algún plan tienen ficha comprobada en Google (nombre, tipo, nota, precio,
+// posición). El planificador los recibe como menú de sitios reales del radio, así la IA no necesita buscar en Google
+// en cada plan. El catálogo se arma una vez al día (una lectura por local) y cada plan solo hace UNA lectura.
+const CLAVE_CATALOGO = "catalogo:lugares";
+let catalogoEnMemoria = null; // { hasta, lista } — evita incluso esa lectura si la función sigue caliente
+
+async function leerCatalogo() {
+  if (catalogoEnMemoria && catalogoEnMemoria.hasta > Date.now()) return catalogoEnMemoria.lista;
+  let lista = await leerJSON(CLAVE_CATALOGO).catch(() => null);
+  if (!Array.isArray(lista)) {
+    const ranking = aRanking(await comando(["ZREVRANGE", "ranking:apariciones", 0, 1499, "WITHSCORES"]));
+    const fichas = ranking.length ? (await varios(ranking.map((r) => ["GET", `lugar:${r.miembro}`]))).map(leerFicha) : [];
+    const gusta = new Map(aRanking(await comando(["ZREVRANGE", "ranking:gusta", 0, 499, "WITHSCORES"])).map((r) => [r.miembro, r.puntos]));
+    const vistos = new Set();
+    lista = [];
+    fichas.forEach((f, i) => {
+      if (!fichaEsNegocio(f) || f.lat == null || f.lon == null) return;
+      const nombre = slug(f.nombre);
+      if (vistos.has(nombre)) return;
+      vistos.add(nombre);
+      lista.push({ n: f.nombre, t: f.tipo, la: f.lat, lo: f.lon, r: f.resenas || null, p: f.precio || null, v: ranking[i].puntos, g: gusta.get(ranking[i].miembro) || 0 });
+    });
+    await guardarJSON(CLAVE_CATALOGO, lista, 24 * 3600).catch(() => null);
+  }
+  catalogoEnMemoria = { hasta: Date.now() + 10 * 60 * 1000, lista };
+  return lista;
+}
+
+// Los mejores sitios reales dentro del radio: primero lo que gusta a la comunidad, luego lo que más sale en planes
+export async function sitiosComprobados(lat, lon, radio, max = 40) {
+  const lista = await leerCatalogo();
+  return lista
+    .filter((s) => s.g > -2 && haversineKm(lat, lon, s.la, s.lo) <= Number(radio) * 1.1)
+    .sort((a, b) => b.g - a.g || b.v - a.v)
+    .slice(0, max);
+}
+
+// Bloque de texto para el prompt (una línea corta por sitio, para gastar pocos tokens)
+export function sitiosParaPrompt(sitios) {
+  if (!sitios?.length) return "";
+  const lineas = sitios.map((s) => `- ${s.n} [${s.t}]${s.r ? ` · ${s.r}` : ""}${s.p ? ` · ${s.p}` : ""} · (${Number(s.la).toFixed(4)}, ${Number(s.lo).toFixed(4)})`);
+  return `SITIOS REALES COMPROBADOS EN GOOGLE DENTRO DEL RADIO (locales que ya han salido en planes, con su nota y posición). Úsalos cuando encajen con lo que pide el usuario; puedes añadir otros sitios reales que conozcas con seguridad:
+${lineas.join("\n")}`;
 }

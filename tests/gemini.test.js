@@ -1,6 +1,6 @@
 // npm test — Sacar el JSON de lo que responde la IA, aunque venga "adornado"
 import { describe, expect, it } from "vitest";
-import { ErrorIA, extraerJSON, mensajeParaUsuario } from "../src/lib/gemini";
+import { ErrorIA, extraerJSON, llamarGemini, medirUso, mensajeParaUsuario } from "../src/lib/gemini";
 
 describe("extraerJSON", () => {
   it("lee una lista limpia", () => {
@@ -41,5 +41,42 @@ describe("mensajeParaUsuario", () => {
     expect(mensajeParaUsuario(new ErrorIA("sin saldo", 403))).toMatch(/recargando/);
     expect(mensajeParaUsuario(new SyntaxError("x"))).toMatch(/a medias/);
     expect(mensajeParaUsuario(new Error("cualquier cosa"))).toMatch(/no ha respondido a tiempo/);
+  });
+});
+
+describe("medirUso", () => {
+  it("cobra cada búsqueda de Google en los modelos 3.x", () => {
+    const datos = { usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 500, thoughtsTokenCount: 500 }, candidates: [{ groundingMetadata: { webSearchQueries: ["a", "b", "c"] } }] };
+    const u = medirUso("gemini-flash-latest", datos);
+    expect(u).toMatchObject({ entrada: 1000, salida: 1000, consultas: 3 });
+    expect(u.dolares).toBeCloseTo((1000 * 0.75 + 1000 * 3.75) / 1e6 + 3 * 0.014, 5);
+  });
+
+  it("sin búsqueda solo cuenta los tokens", () => {
+    const u = medirUso("gemini-flash-latest", { usageMetadata: { promptTokenCount: 2000, candidatesTokenCount: 800 } });
+    expect(u.consultas).toBe(0);
+    expect(u.dolares).toBeCloseTo((2000 * 0.75 + 800 * 3.75) / 1e6, 5);
+  });
+
+  it("en los 2.x se cobra una vez por petición con búsqueda", () => {
+    const u = medirUso("gemini-2.5-flash-lite", { usageMetadata: { promptTokenCount: 0 }, candidates: [{ groundingMetadata: { webSearchQueries: ["a", "b"] } }] });
+    expect(u.dolares).toBeCloseTo(0.035, 5);
+  });
+});
+
+describe("llamarGemini sin Google", () => {
+  it("no manda la herramienta de búsqueda, pide JSON y devuelve lo que ha costado", async () => {
+    const original = globalThis.fetch;
+    let cuerpo = null;
+    globalThis.fetch = async (url, opciones) => {
+      cuerpo = JSON.parse(opciones.body);
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "[]" }] } }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 10 } }), { status: 200 });
+    };
+    try {
+      const r = await llamarGemini("hola", { google: false, json: true });
+      expect(cuerpo.tools).toBeUndefined();
+      expect(cuerpo.generationConfig.responseMimeType).toBe("application/json");
+      expect(r.uso).toMatchObject({ entrada: 100, salida: 10, consultas: 0 });
+    } finally { globalThis.fetch = original; }
   });
 });
