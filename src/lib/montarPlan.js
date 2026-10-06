@@ -7,7 +7,8 @@
 //  · conGoogle = false (ahorro): Gemini NO busca. Los eventos salen de la agenda verificada (barrido diario
 //    + barrido a medida de esta petición) y los sitios del catálogo de locales comprobados + lo que conoce.
 //    Después, como siempre, cada parada se comprueba en Google Places (nombre, nota, teléfono, horario).
-// Se elige con PLANES_SIN_GOOGLE=1 en Vercel (sin ella, el modo de siempre).
+// El modo ahorro es el de serie: en la comparación (/panel/comparar) los planes salen igual de bien y así ningún
+// plan paga búsquedas. PLANES_CON_GOOGLE=1 en Vercel vuelve al modo con búsqueda.
 import { llamarGemini, extraerJSON } from './gemini';
 import { sinRomper } from './almacen';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from './planUtils';
@@ -15,7 +16,7 @@ import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from '.
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
 import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from './agenda';
 
-export const planesConGoogle = () => !/^(1|si|sí|true)$/i.test(String(process.env.PLANES_SIN_GOOGLE || '').trim());
+export const planesConGoogle = () => /^(1|si|sí|true)$/i.test(String(process.env.PLANES_CON_GOOGLE || '').trim());
 
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso } o { exito: false, mensaje }
 export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000 } = {}) {

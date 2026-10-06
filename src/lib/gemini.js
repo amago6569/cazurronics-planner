@@ -5,7 +5,10 @@
 
 const MODELOS = {
   usuario: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
-  barrido: ["gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.0-flash"],
+  // Solo modelos 2.x: en ellos las búsquedas en Google entran en las 1.500 peticiones gratis al día. Los 3.x (como
+  // gemini-flash-lite-latest) cobran CADA búsqueda; cuando el 2.5 se saturaba (429) el barrido saltaba a uno 3.x y
+  // eso fue la mayor parte de la factura. Si los 2.x no responden, ese tramo se salta y se repite en la siguiente pasada.
+  barrido: ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash"],
 };
 // Los modelos 3.x "piensan" antes de contestar y esos tokens se cobran. Con "low" el plan sale igual y cuesta bastante menos
 // (y tarda menos). GEMINI_PENSAMIENTO=auto en Vercel devuelve el comportamiento de fábrica; también vale minimal, medium o high.
