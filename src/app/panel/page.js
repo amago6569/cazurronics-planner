@@ -62,7 +62,7 @@ export default function Panel() {
 
   // Cada barrido va por tramos, uno detrás de otro, para que cada uno quepa en el minuto de Vercel
   const BARRIDOS = {
-    diario: { texto: "Barrido diario", ids: ["d0", "d1", "d2", "d3", "d4"] },
+    diario: { texto: "Barrido diario", ids: ["d0", "d1", "d2", "d3", "d4", "d5"] },
     novedades: { texto: "Novedades", ids: ["r"] },
     gordo: { texto: "Barrido gordo", ids: ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7"] },
   };
