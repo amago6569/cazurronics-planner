@@ -10,7 +10,7 @@
 import { comando, enSegundoPlano, guardarJSON, leerJSON, nuevoId, varios } from "./almacen";
 import { haversineKm } from "./planUtils";
 import { hoyEnLeon } from "./estadisticas";
-import { deduplicar, ordenarPorHora } from "./agenda";
+import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
 
@@ -195,13 +195,31 @@ const CAPITAL_A_FONDO = [
   ["mercados, mercadillos, ferias, jornadas gastronómicas, catas y fiestas de barrio", "Mercado de la Plaza Mayor, Mercado del Conde Luna, ferias en la ciudad, fiestas de barrios de León, jornadas gastronómicas"],
 ];
 
+// Teatros y auditorios: una búsqueda por recinto y semana, para saber QUÉ obra o espectáculo hay (no solo el sitio).
+// Van en su propio tramo diario (d5): son 4 peticiones más al día, dentro de la cuota gratis de los modelos 2.x.
+const ESCENARIOS = [
+  {
+    zona: "leon", nombre: "León capital y alfoz", donde: "León capital y su alfoz (San Andrés del Rabanedo, Villaquilambre) (España)",
+    recintos: "Auditorio Ciudad de León, Teatro El Albéitar (Universidad de León), Teatro San Francisco, Auditorio Ángel Barja (Conservatorio), Palacio de Exposiciones y Congresos, Espacio Vías, salas de teatro y de monólogos, casas de cultura de San Andrés del Rabanedo y Villaquilambre",
+    pistas: "aytoleon.es (programación del Auditorio), unileon.es (Albéitar), Instituto Leonés de Cultura (dipuleon.es), venta de entradas (entradas.com, giglon, ticketmaster), Diario de León, Leonoticias, iLeón",
+  },
+  {
+    nombre: "provincia", donde: "la provincia de León fuera de la capital (España)",
+    recintos: "Teatro Bergidum (Ponferrada), Teatro Gullón (Astorga), Teatro Municipal de La Bañeza, Teatro Benevivere (Bembibre), Auditorio de Sahagún, casas de cultura de Villablino, Valencia de Don Juan, Cistierna, Villafranca del Bierzo, Cacabelos y La Robla",
+    pistas: "webs de los ayuntamientos y de esos teatros, Red de Teatros y Circuitos Escénicos de Castilla y León, Instituto Leonés de Cultura (dipuleon.es), venta de entradas, Diario de León, Diario de Ponferrada, InfoBierzo",
+  },
+];
+const PEDIR_OBRA = `Repasa la programación de CADA recinto uno por uno. En "titulo" pon el nombre de la obra, concierto o espectáculo
+    (y la compañía o artista si sale), NUNCA solo el nombre del teatro; en "lugar", el teatro o auditorio; en "categoria", teatro, concierto,
+    danza, monologo, cine, magia, infantil u otro; pon la hora y el precio de la entrada si salen.`;
+
 // Trocea una lista en grupos de n
 const trozos = (lista, n) => Array.from({ length: Math.ceil(lista.length / n) }, (_, i) => lista.slice(i * n, i * n + n));
 // Reparte búsquedas en tramos de máximo 10 (cada tramo cabe en el minuto que da Vercel)
 const enTramos = (prefijo, nombre, busquedas) => trozos(busquedas, 10).map((bs, i, todos) => ({ id: `${prefijo}${i}`, nombre: `${nombre} · parte ${i + 1}/${todos.length}`, busquedas: bs }));
 
 // Todos los tramos que existen:
-//  · d0..d4  barrido diario (de madrugada): temas generales y las comarcas por tipo de plan
+//  · d0..d5  barrido diario (de madrugada): temas generales, las comarcas por tipo de plan y la cartelera de teatros y auditorios
 //  · r       repaso de novedades (2 veces al día): hoy y los 3 próximos días, zona por zona
 //  · m0..m8  barrido GORDO (cada 2 días): municipio a municipio por toda la provincia + la capital a fondo
 export function definirTramos(desde = hoyEnLeon()) {
@@ -224,6 +242,15 @@ export function definirTramos(desde = hoyEnLeon()) {
     { id: "d2", nombre: "Diario · comarcas, cultura y música", busquedas: porZona(GRUPOS_ZONA[0]) },
     { id: "d3", nombre: "Diario · comarcas, fiestas, ferias y mercados", busquedas: porZona(GRUPOS_ZONA[1]) },
     { id: "d4", nombre: "Diario · comarcas, deporte, rutas y familia", busquedas: porZona(GRUPOS_ZONA[2]) },
+    { id: "d5", nombre: "Diario · teatros y auditorios", busquedas: [0, 1].flatMap((n) => {
+      const [a, b] = semana(desde, n);
+      return ESCENARIOS.map((x) => ({
+        nombre: `Teatros · ${x.nombre} · ${n ? "semana que viene" : "esta semana"}`,
+        ...(x.zona ? { zona: x.zona } : {}),
+        tema: `la programación de teatros, auditorios y salas (obras de teatro, conciertos, danza, ópera, zarzuela, monólogos, magia, circo y espectáculos infantiles) de estos recintos: ${x.recintos}`,
+        pistas: x.pistas, donde: x.donde, extra: PEDIR_OBRA, desde: a, hasta: b,
+      }));
+    }) },
   ];
   const corto = sumarDias(desde, 3);
   const repaso = [{
@@ -271,7 +298,7 @@ export async function tramoReciente(id, horas) {
   return { hace };
 }
 
-async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta }, msMax = 42000) {
+async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta, extra }, msMax = 42000) {
   const prompt = `
     Eres el documentalista de Cazurronics Planner. Busca en Internet ${tema} en ${donde || "León capital y en la provincia de León (España)"}
     que se celebren entre el ${desde} y el ${hasta}, ambos incluidos.
@@ -280,6 +307,7 @@ async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta }, msMax
     REGLAS: solo eventos con fecha confirmada en una fuente real; no inventes nada; la URL de "fuente" tiene que ser
     la página exacta donde lo has leído. Si un mismo evento sale en varias webs, ponlo UNA sola vez.
     Incluye también lo que no es de un solo día: mercados semanales (con diasSemana), exposiciones abiertas, ferias y festivales.
+    ${extra || ""}
     Devuelve SOLO un array JSON (máximo 30 elementos) con este formato:
     ${FORMATO_EVENTO}
   `;
@@ -518,13 +546,24 @@ export async function eventosProximos(dias = DIAS_VENTANA) {
   });
 }
 
+// Si la agenda del día no cabe entera, se guardan unos huecos para teatro y espectáculos:
+// así el plan sabe qué obra hay en cada teatro aunque ese día haya muchos conciertos y mercadillos.
+const HUECOS_ESCENA = 6;
 export function eventosParaPrompt(eventos, max = 30) {
   if (!eventos.length) return "";
-  const lineas = ordenarPorHora(deduplicar(eventos)).slice(0, max).map((e) =>
+  const todos = ordenarPorHora(deduplicar(eventos));
+  let elegidos = todos.slice(0, max);
+  if (todos.length > max) {
+    const escena = todos.filter((e) => familia(e) === "escena").slice(0, HUECOS_ESCENA);
+    const resto = todos.filter((e) => !escena.includes(e)).slice(0, max - escena.length);
+    elegidos = ordenarPorHora([...escena, ...resto]);
+  }
+  const lineas = elegidos.map((e) =>
     `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""} · fuente: ${e.fuente}`
   );
   return `AGENDA VERIFICADA DE ESE DÍA (barrido de fuentes locales: eventos, mercadillos, ferias, exposiciones y fiestas).
-OBLIGATORIO: si alguno encaja con lo que pide el usuario, el plan DEBE incluirlo (con su hora real y su campo "fuente"). Si hay varios compatibles, mezcla eventos con sitios para comer o tomar algo:
+OBLIGATORIO: si alguno encaja con lo que pide el usuario, el plan DEBE incluirlo (con su hora real y su campo "fuente"). Si hay varios compatibles, mezcla eventos con sitios para comer o tomar algo.
+Si propones un teatro, auditorio o sala, di qué obra o espectáculo hay ese día según esta agenda (título, hora y precio), no solo el sitio:
 ${lineas.join("\n")}`;
 }
 

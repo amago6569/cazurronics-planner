@@ -5,7 +5,7 @@ export const maxDuration = 60; // cada tramo del barrido cabe en un minuto
 export const dynamic = "force-dynamic";
 
 // Lo llaman los crons de Vercel (ver vercel.json), un tramo cada vez:
-//  · ?tramo=d0..d4  barrido diario de madrugada
+//  · ?tramo=d0..d5  barrido diario de madrugada (d5: teatros y auditorios)
 //  · ?tramo=r       repaso de novedades (mediodía y tarde)
 //  · ?tramo=m0..m7  barrido GORDO municipio a municipio (cada domingo)
 // Sin ?tramo, hace el tramo más atrasado.

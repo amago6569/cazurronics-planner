@@ -67,3 +67,22 @@ describe("zonaDe", () => {
     expect(zonaDe({ titulo: "Ruta", lat: 42.4577, lon: -6.0563 })).toBe("astorga");
   });
 });
+
+describe("teatros y auditorios", () => {
+  it("el barrido diario tiene su tramo de teatros (4 búsquedas: capital y provincia, dos semanas)", async () => {
+    const { definirTramos, TRAMOS_DIARIOS } = await import("../src/lib/eventos");
+    expect(TRAMOS_DIARIOS).toContain("d5");
+    const d5 = definirTramos("2026-10-08").find((t) => t.id === "d5");
+    expect(d5.busquedas).toHaveLength(4);
+    expect(d5.busquedas.every((b) => /obra/.test(b.extra) && b.desde && b.hasta)).toBe(true);
+  });
+
+  it("si la agenda no cabe, guarda huecos para teatro y espectáculos", async () => {
+    const { eventosParaPrompt } = await import("../src/lib/eventos");
+    const conciertos = Array.from({ length: 40 }, (_, i) => ({ titulo: `Grupo ${i} en directo`, categoria: "concierto", hora: "10:00", lugar: `Bar ${i}`, fecha: "2026-10-10", fuente: "https://x.es" }));
+    const obra = { titulo: "La vida es sueño", categoria: "teatro", hora: "21:00", lugar: "Teatro El Albéitar", fecha: "2026-10-10", fuente: "https://x.es" };
+    const texto = eventosParaPrompt([...conciertos, obra], 30);
+    expect(texto).toContain("La vida es sueño");
+    expect(texto.split("\n").filter((l) => l.startsWith("- "))).toHaveLength(30);
+  });
+});
