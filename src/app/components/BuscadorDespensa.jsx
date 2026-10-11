@@ -1,6 +1,8 @@
 "use client";
-// Buscador de la Despensa de León: eliges productos, zona, radio y presupuesto, y sale el top 3 de cada producto.
-// Todo se filtra en el navegador con el catálogo que ya trae la página: cada búsqueda cuesta 0 € (ni IA ni Google).
+// Buscador de la Despensa de León. Dos formas de buscar:
+//  · Escribes lo que quieres y la IA elige entre las tiendas comprobadas (/api/despensa/buscar, ~0,0007 $ por búsqueda).
+//    Si pides algo que no tenemos, se apunta y se busca esa noche.
+//  · Eliges productos con los botones: se filtra en el navegador con el catálogo que ya trae la página (0 €).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
 import { PRODUCTOS, enlaceMaps, productoPorId, topTiendas } from "../../lib/despensaProductos";
@@ -14,6 +16,14 @@ const PRESUPUESTOS = [
 ];
 const MAX_PRODUCTOS = 4;
 const MEDALLAS = ["🥇", "🥈", "🥉"];
+const EJEMPLOS = [
+  { emoji: "🎁", texto: "Cecina buena para regalar" },
+  { emoji: "🧀", texto: "Queso curado de oveja" },
+  { emoji: "🧁", texto: "Mantecadas para llevar a Madrid" },
+  { emoji: "🍷", texto: "Un Prieto Picudo para una cena" },
+  { emoji: "🥖", texto: "Pan de horno de leña" },
+];
+const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 
 const centroDe = (id) => { const z = zonaPorId(id); const [lat, lon] = z.centroReal || [z.lat, z.lon]; return { lat, lon, nombre: z.id === "leon" ? "León" : z.corto }; };
 const chip = (activo) => `${PRESS} shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 rounded-full text-sm font-semibold ring-1 ${activo ? "bg-slate-900 text-white ring-slate-900 shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/60 text-slate-700 ring-slate-900/5 hover:bg-white hover:-translate-y-0.5"}`;
@@ -41,7 +51,8 @@ function Tienda({ t, i }) {
             {[t.localidad, t.km != null && `a ${String(t.km).replace(".", ",")} km`].filter(Boolean).join(" · ")}
             <span className={`ml-2 inline-flex items-center h-5 px-2 rounded-full text-[11px] font-semibold ${t.precio === "capricho" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{t.precio === "capricho" ? "✨ Capricho" : "💸 Calidad-precio"}</span>
           </p>
-          {t.especialidad && <p className="text-sm font-semibold text-slate-800 mt-2">{t.especialidad}</p>}
+          {t.motivo && <p className="text-sm font-semibold text-rose-700 mt-2 leading-relaxed">✨ {t.motivo}</p>}
+          {t.especialidad && <p className={`text-sm font-semibold text-slate-800 ${t.motivo ? "mt-1.5" : "mt-2"}`}>{t.especialidad}</p>}
           {t.porque && <p className="text-sm text-slate-600 mt-0.5 leading-relaxed">{t.porque}</p>}
           <div className="flex flex-wrap gap-2 mt-3">
             <a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] hover:bg-slate-800 hover:-translate-y-0.5`}>📍 Cómo llegar</a>
@@ -60,6 +71,9 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
   const [radio, setRadio] = useState(15);
   const [presupuesto, setPresupuesto] = useState("igual");
   const [aviso, setAviso] = useState("");
+  const [texto, setTexto] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [ia, setIa] = useState(null); // lo que ha elegido la IA para lo que has escrito
   const resultadosRef = useRef(null);
   const [resultadosALaVista, setResultadosALaVista] = useState(false);
 
@@ -79,6 +93,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
   );
 
   const alternar = (id) => {
+    setIa(null);
     if (elegidos.includes(id)) { setAviso(""); setElegidos(elegidos.filter((x) => x !== id)); return; }
     if (elegidos.length >= MAX_PRODUCTOS) { setAviso(`Como mucho ${MAX_PRODUCTOS} productos a la vez`); return; }
     setAviso("");
@@ -96,12 +111,62 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
   };
   const verResultados = () => resultadosRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
+  const buscar = async () => {
+    if (buscando) return;
+    if (texto.trim().length < 3) { setAviso("Escribe qué quieres comprar"); return; }
+    setBuscando(true); setAviso("");
+    setTimeout(verResultados, 50);
+    try {
+      const r = await fetch("/api/despensa/buscar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto, lat: centro.lat, lon: centro.lon, radio, presupuesto }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!d?.exito) { setAviso(d?.mensaje || "No hemos podido buscar. Prueba otra vez."); setIa(null); return; }
+      setIa({ ...d, pregunta: texto.trim() });
+    } catch {
+      setAviso("Sin conexión. Prueba otra vez en un momento.");
+    } finally {
+      setBuscando(false);
+    }
+  };
+
+  // Lo que ha elegido la IA, agrupado por lo que compras en cada sitio (máximo 3 por grupo)
+  const gruposIA = useMemo(() => {
+    const grupos = [];
+    for (const t of ia?.tiendas || []) {
+      const clave = (t.para || "").toLowerCase();
+      let g = grupos.find((x) => x.clave === clave);
+      if (!g) { g = { clave, titulo: t.para, tiendas: [] }; grupos.push(g); }
+      if (g.tiendas.length < 3) g.tiendas.push(t);
+    }
+    return grupos;
+  }, [ia]);
+
   const total = resultados.reduce((n, r) => n + r.top.length, 0);
+  const conTexto = texto.trim().length >= 3;
 
   return (
     <>
       <section className={`${GLASS} rounded-[2.25rem] p-5 sm:p-7 space-y-6 cz-up`}>
-        <Paso n="1" titulo="¿Qué quieres comprar?" extra={<span className="text-xs text-slate-500 tabular-nums">{elegidos.length}/{MAX_PRODUCTOS}</span>}>
+        <Paso n="1" titulo="¿Qué quieres comprar?">
+          <textarea
+            rows="2" value={texto} maxLength={300} onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); buscar(); } }}
+            className={`${INPUT} resize-none leading-relaxed`} aria-label="Qué quieres comprar"
+            placeholder="Ej: cecina buena para regalar y un queso curado"
+          />
+          <div className="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:flex-wrap">
+            {EJEMPLOS.map((s) => (
+              <button key={s.texto} type="button" onClick={() => setTexto(s.texto)} className={`${PRESS} shrink-0 flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-white/60 ring-1 ring-slate-900/5 text-[13px] font-medium text-slate-700 hover:bg-white hover:ring-rose-200 hover:text-rose-600 hover:-translate-y-0.5`}>
+                <span>{s.emoji}</span>{s.texto}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-baseline justify-between gap-2 mt-4 mb-2.5 px-1">
+            <p className="text-[13px] font-semibold text-slate-500">O elige productos</p>
+            <span className="text-xs text-slate-500 tabular-nums">{elegidos.length}/{MAX_PRODUCTOS}</span>
+          </div>
           <div className="grid grid-flow-col grid-rows-3 auto-cols-max justify-items-start gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:flex sm:flex-wrap">
             {PRODUCTOS.map((p) => (
               <button key={p.id} type="button" aria-pressed={elegidos.includes(p.id)} onClick={() => alternar(p.id)} className={`${chip(elegidos.includes(p.id))} ${conTiendas.has(p.id) ? "" : "opacity-70"}`}>
@@ -138,16 +203,63 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
         </Paso>
 
         {aviso && <p className="text-sm font-semibold text-rose-600 px-1 cz-fade" role="status">{aviso}</p>}
+
+        {/* En el móvil este botón va abajo, al alcance del pulgar */}
+        <div className="hidden sm:block">
+          <button type="button" onClick={buscar} disabled={buscando || !conTexto} className={`${BOTON_CTA} w-full disabled:opacity-50 disabled:hover:translate-y-0`}>
+            {buscando ? "Buscando en la despensa…" : conTexto ? "✨ Buscar lo que he escrito" : "✨ Escribe arriba qué buscas"}
+          </button>
+        </div>
       </section>
 
       <div ref={resultadosRef} className="scroll-mt-24 space-y-4 sm:space-y-5">
-        {resultados.length === 0 && (
+        {buscando && (
+          <section className={`${GLASS} rounded-[2rem] p-6 text-center cz-fade`} aria-live="polite">
+            <p className="text-3xl animate-bounce">🧺</p>
+            <p className="font-bold text-slate-900 mt-2">Buscando en la despensa…</p>
+            <p className="text-sm text-slate-500 mt-1">Repasamos las tiendas comprobadas de la zona</p>
+          </section>
+        )}
+        {!buscando && ia && (
+          <>
+            <section className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up`}>
+              <div className="px-1 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-rose-600">✨ Para «{ia.pregunta}»</p>
+                  <h2 className="text-xl font-bold tracking-tight text-slate-900 mt-0.5">Tu top a {ia.radio} km de {ia.sitio || centro.nombre}</h2>
+                  {ia.frase && <p className="text-sm text-slate-600 mt-1 leading-relaxed">{ia.frase}</p>}
+                </div>
+                <button type="button" onClick={() => setIa(null)} className={`${PRESS} shrink-0 h-9 px-3 rounded-full text-[13px] font-semibold text-slate-500 bg-white/60 ring-1 ring-slate-900/5 hover:text-rose-600`}>Cerrar</button>
+              </div>
+              {gruposIA.map((g) => (
+                <div key={g.clave} className="mt-4">
+                  {gruposIA.length > 1 && <h3 className="px-1 mb-2 text-[15px] font-bold text-slate-900 first-letter:uppercase">{g.titulo}</h3>}
+                  <ol className="grid gap-2.5 lg:grid-cols-3">{g.tiendas.map((t, i) => <Tienda key={t.placeId || t.nombre} t={t} i={i} />)}</ol>
+                </div>
+              ))}
+              {!gruposIA.length && !ia.buscamos && (
+                <div className="bg-white/55 rounded-[1.4rem] p-5 text-center mt-4">
+                  <p className="font-semibold text-slate-800">No hemos encontrado nada que encaje a {ia.radio} km.</p>
+                  <p className="text-sm text-slate-500 mt-1">Prueba con otras palabras o con más kilómetros.</p>
+                </div>
+              )}
+            </section>
+            {ia.buscamos && (
+              <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
+                <p className="text-2xl">🔎</p>
+                <p className="font-bold text-slate-900 mt-1">Aún no tenemos «{ia.buscamos}» comprobado por aquí</p>
+                <p className="text-sm text-slate-600 mt-1 leading-relaxed">Esta noche nuestra IA lo busca en prensa, guías y reseñas, y solo publica las tiendas que existen de verdad. Vuelve mañana y repite la búsqueda.</p>
+              </section>
+            )}
+          </>
+        )}
+        {!buscando && !ia && resultados.length === 0 && (
           <section className={`${GLASS} rounded-[2rem] p-6 text-center`}>
             <p className="text-3xl">🧺</p>
             <p className="font-bold text-slate-900 mt-2">Elige al menos un producto</p>
           </section>
         )}
-        {resultados.map(({ producto, top }) => (
+        {!buscando && !ia && resultados.map(({ producto, top }) => (
           <section key={producto.id} className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up`}>
             <div className="px-1 mb-3">
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{producto.emoji} {producto.nombre}</h2>
@@ -167,9 +279,12 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
       </div>
 
       {/* Móvil: el botón al alcance del pulgar para saltar a los resultados */}
-      {elegidos.length > 0 && !resultadosALaVista && (
+      {/* Con texto escrito: buscar con la IA. Sin texto: saltar a los resultados de los productos elegidos */}
+      {((conTexto && !buscando && ia?.pregunta !== texto.trim()) || (!conTexto && elegidos.length > 0 && !ia && !resultadosALaVista)) && (
         <div className="sm:hidden cz-fade fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 bg-gradient-to-t from-white/80 via-white/50 to-transparent pointer-events-none">
-          <button type="button" onClick={verResultados} className={`${BOTON_CTA} w-full pointer-events-auto`}>🧺 Ver mi top {total ? `(${total} ${total === 1 ? "tienda" : "tiendas"})` : "3"}</button>
+          {conTexto
+            ? <button type="button" onClick={buscar} className={`${BOTON_CTA} w-full pointer-events-auto`}>✨ Buscar lo que he escrito</button>
+            : <button type="button" onClick={verResultados} className={`${BOTON_CTA} w-full pointer-events-auto`}>🧺 Ver mi top {total ? `(${total} ${total === 1 ? "tienda" : "tiendas"})` : "3"}</button>}
         </div>
       )}
     </>

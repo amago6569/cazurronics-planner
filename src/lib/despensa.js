@@ -8,14 +8,16 @@
 //  3. ...y una ficha real en Google Places. Igual que con los bares: sin ficha, fuera.
 //  4. Se guarda y no se vuelve a buscar en 90 días.
 //
-// Lo que paga cada consulta de la gente: NADA. La página solo lee este catálogo y lo filtra.
+// Lo que paga cada consulta de la gente: NADA si elige productos (la página filtra este catálogo).
+// Si escribe lo que busca, una IA barata elige entre estas tiendas (lib/despensaBuscar.js). Si pide algo que no
+// tenemos, queda apuntado y se busca en la siguiente pasada nocturna (igual que el resto: gratis).
 //
 // Coste de la comprobación en Google Places (API nueva, tarifa de octubre de 2026):
 //  · Text Search "solo ID" (places.id): GRATIS sin límite. Nos dice qué ficha es.
 //  · Place Details Essentials (ubicación, dirección, tipos): 10.000 gratis al mes, luego 5 $ cada 1.000.
 // TOPE_PLACES_MES corta las comprobaciones de pago al mes: aunque no quedase nada gratis,
 // el peor caso es 900 × 5 $ / 1.000 = 4,5 $ al mes. Lo pendiente se retoma el mes siguiente.
-import { comando, leerJSON, guardarJSON, varios } from "./almacen";
+import { aObjeto, comando, leerJSON, guardarJSON, varios } from "./almacen";
 import { PRODUCTOS } from "./despensaProductos";
 import { hoyEnLeon } from "./estadisticas";
 import { ZONAS, zonaDe } from "./zonas";
@@ -57,11 +59,11 @@ export function validarTiendaIA(t) {
   };
 }
 
-async function buscarConIA(producto, zona) {
-  const p = PRODUCTO[producto], z = ZONAS.find((x) => x.id === zona);
+async function buscarConIA(busca, zona) {
+  const z = ZONAS.find((x) => x.id === zona);
   const prompt = `
     Eres el documentalista de Cazurronics, una web de planes en León (España). Busca en Internet dónde comprar
-    ${p.busca} en ${z.nombre} (provincia de León). Pueblos de la zona: ${z.pueblos.slice(0, 25).join(", ")}.
+    ${busca} en ${z.nombre} (provincia de León). Pueblos de la zona: ${z.pueblos.slice(0, 25).join(", ")}.
     Mira prensa local (Diario de León, Leonoticias, iLeón, El Bierzo Digital...), guías gastronómicas, foros,
     reseñas, premios y webs de los propios negocios. Haz varias búsquedas distintas.
     Queremos los MEJORES o los más especiales, no un listado: máximo 5.
@@ -149,8 +151,9 @@ async function fuenteValida(tienda, dominios) {
   return (await comprobarUrl(tienda.fuente)) === "ok";
 }
 
-export async function barrerCombinacion(producto, zona) {
-  const { tiendas, dominios } = await buscarConIA(producto, zona);
+// Busca con IA y comprueba cada tienda. Devuelve { encontradas, buenas } o { sinCupo }. Si Places falla, lanza error.
+async function buscarYComprobar(busca, zona) {
+  const { tiendas, dominios } = await buscarConIA(busca, zona);
   // Cada tienda se comprueba a la vez (fuente + Places) para caber en el minuto de Vercel
   const fichas = await Promise.all(tiendas.map(async (t) => {
     if (!(await fuenteValida(t, dominios))) return null;
@@ -160,15 +163,64 @@ export async function barrerCombinacion(producto, zona) {
   const fallo = fichas.find((f) => f?.error);
   if (fallo) throw new Error(`Google Places: ${fallo.error}`);
   // Sin cupo de Places este mes: no se guarda, se repite el mes que viene
-  if (fichas.includes("sinCupo")) return { producto, zona, sinCupo: true, encontradas: tiendas.length, guardadas: 0 };
+  if (fichas.includes("sinCupo")) return { sinCupo: true, encontradas: tiendas.length };
   const buenas = [];
   tiendas.forEach((t, i) => {
     const f = fichas[i];
     if (f && !buenas.some((b) => b.placeId === f.placeId)) buenas.push({ ...t, ...f });
   });
   buenas.sort((a, b) => b.puntuacion - a.puntuacion);
-  await guardarJSON(claveCombo(producto, zona), { fecha: new Date().toISOString(), tiendas: buenas.slice(0, 5) });
-  return { producto, zona, encontradas: tiendas.length, guardadas: Math.min(5, buenas.length) };
+  return { encontradas: tiendas.length, buenas: buenas.slice(0, 5) };
+}
+
+export async function barrerCombinacion(producto, zona) {
+  const r = await buscarYComprobar(PRODUCTO[producto].busca, zona);
+  if (r.sinCupo) return { producto, zona, sinCupo: true, encontradas: r.encontradas, guardadas: 0 };
+  await guardarJSON(claveCombo(producto, zona), { fecha: new Date().toISOString(), tiendas: r.buenas });
+  return { producto, zona, encontradas: r.encontradas, guardadas: r.buenas.length };
+}
+
+// ---------- 3b. Lo que pide la gente y no tenemos ----------
+// El buscador apunta aquí lo que falta ("aceite de oliva" en Astorga). La pasada nocturna lo busca igual que
+// una combinación normal y lo guarda aparte; desde ese momento la IA del buscador ya puede recomendarlo.
+const PETICIONES = "despensa:peticiones"; // campo = clave de la petición · valor = { texto, zona, fecha }
+const LIBRES = "despensa:libres"; // campo = clave de la petición · valor = fecha en que se buscó
+const claveLibre = (id) => `despensa:libre:${id}`;
+const POR_PASADA_PETICIONES = 2;
+export const idPeticion = (texto, zona) => `${normalizar(texto).replace(/ /g, "-").slice(0, 60)}--${zona}`;
+
+export function limpiarPeticion(texto) {
+  const t = limpiar(texto, 60).replace(/[^\p{L}\p{N} ,.'-]/gu, "").trim();
+  return t.length >= 3 ? t : null;
+}
+
+export async function pedirBusqueda(texto, zona) {
+  const limpio = limpiarPeticion(texto);
+  if (!limpio || !ZONAS.some((z) => z.id === zona)) return false;
+  await comando(["HSETNX", PETICIONES, idPeticion(limpio, zona), JSON.stringify({ texto: limpio, zona, fecha: new Date().toISOString() })]);
+  return true;
+}
+
+async function leerPeticiones() {
+  const [pedidas, hechas] = await Promise.all([comando(["HGETALL", PETICIONES]), comando(["HGETALL", LIBRES])]);
+  const yaHechas = aObjeto(hechas);
+  const todas = Object.entries(aObjeto(pedidas)).map(([id, v]) => { try { return { id, ...JSON.parse(v), hecha: Boolean(yaHechas[id]) }; } catch { return null; } }).filter(Boolean);
+  todas.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+  return { todas, hechas: yaHechas };
+}
+
+// Las que faltan, de la más antigua a la más nueva (solo las 30 últimas: si alguien llenase la lista, no atasca nada)
+export function peticionesPendientes(todas, cuantas = POR_PASADA_PETICIONES) {
+  return todas.filter((p) => !p.hecha).slice(0, 30).reverse().slice(0, cuantas);
+}
+
+async function barrerPeticion(p) {
+  const r = await buscarYComprobar(p.texto, p.zona);
+  if (r.sinCupo) return { peticion: p.texto, zona: p.zona, sinCupo: true, encontradas: r.encontradas, guardadas: 0 };
+  const fecha = new Date().toISOString();
+  await guardarJSON(claveLibre(p.id), { texto: p.texto, zona: p.zona, fecha, tiendas: r.buenas }, 180 * 86400);
+  await comando(["HSET", LIBRES, p.id, fecha]);
+  return { peticion: p.texto, zona: p.zona, encontradas: r.encontradas, guardadas: r.buenas.length };
 }
 
 // ---------- 4. La pasada nocturna ----------
@@ -192,19 +244,29 @@ export async function barrerDespensa({ cuantas = POR_PASADA } = {}) {
   if (!claveMaps()) return { saltado: "Falta GOOGLE_MAPS_API_KEY: sin comprobar en Places no se publica ninguna tienda" };
   const gastadas = Number(await comando(["GET", claveGasto()])) || 0;
   if (gastadas >= TOPE_PLACES_MES) return { saltado: `Tope de comprobaciones de Google del mes alcanzado (${TOPE_PLACES_MES})` };
-  const toca = pendientes(await fechasGuardadas(), inicio, cuantas);
-  const resultados = await Promise.allSettled(toca.map((c) => barrerCombinacion(c.producto, c.zona)));
+  // Primero lo que ha pedido la gente; el resto de huecos, para el catálogo normal
+  const pedidas = peticionesPendientes((await leerPeticiones().catch(() => ({ todas: [] }))).todas, Math.min(POR_PASADA_PETICIONES, cuantas));
+  const toca = [
+    ...pedidas.map((p) => ({ peticion: p.texto, zona: p.zona, hacer: () => barrerPeticion(p) })),
+    ...pendientes(await fechasGuardadas(), inicio, cuantas - pedidas.length).map((c) => ({ ...c, hacer: () => barrerCombinacion(c.producto, c.zona) })),
+  ];
+  const resultados = await Promise.allSettled(toca.map((c) => c.hacer()));
   const informe = {
     fin: new Date().toISOString(),
     segundos: Math.round((Date.now() - inicio) / 1000),
-    combinaciones: resultados.map((r, i) => (r.status === "fulfilled" ? r.value : { ...toca[i], error: String(r.reason?.message || r.reason).slice(0, 160) })),
+    combinaciones: resultados.map((r, i) => {
+      if (r.status === "fulfilled") return r.value;
+      const { hacer: _, ...c } = toca[i];
+      return { ...c, error: String(r.reason?.message || r.reason).slice(0, 160) };
+    }),
   };
   await guardarJSON("despensa:ultimoBarrido", informe);
   return informe;
 }
 
 // ---------- 5. Leer el catálogo (la web y el panel) ----------
-export async function leerDespensa() {
+// conPedidas: también las tiendas de lo que pidió la gente (las usa la IA del buscador; la página no las necesita)
+export async function leerDespensa({ conPedidas = false } = {}) {
   const res = await varios(COMBINACIONES.map((c) => ["GET", claveCombo(c.producto, c.zona)])).catch(() => []);
   const tiendas = [];
   let hechas = 0;
@@ -215,18 +277,35 @@ export async function leerDespensa() {
     hechas++;
     for (const t of d.tiendas || []) tiendas.push({ ...t, producto: COMBINACIONES[i].producto, zona: COMBINACIONES[i].zona });
   });
+  if (conPedidas) {
+    const ids = Object.keys(aObjeto(await comando(["HGETALL", LIBRES]).catch(() => [])));
+    const libres = ids.length ? await varios(ids.map((id) => ["GET", claveLibre(id)])).catch(() => []) : [];
+    (libres || []).forEach((v, i) => {
+      let d = null;
+      try { d = JSON.parse(v); } catch { /* caducada */ }
+      for (const t of d?.tiendas || []) tiendas.push({ ...t, producto: `libre:${ids[i]}`, productoNombre: d.texto, zona: d.zona });
+    });
+  }
   return { tiendas, hechas, total: COMBINACIONES.length };
 }
 
 export async function resumenDespensa() {
-  const [{ tiendas, hechas, total }, ultimo, gastadas] = await Promise.all([
-    leerDespensa(),
+  const [{ tiendas, hechas, total }, ultimo, gastadas, peticiones, busquedas] = await Promise.all([
+    leerDespensa({ conPedidas: true }),
     leerJSON("despensa:ultimoBarrido").catch(() => null),
     comando(["GET", claveGasto()]).catch(() => 0),
+    leerPeticiones().catch(() => ({ todas: [] })),
+    comando(["HGET", "stats:total", "despensa"]).catch(() => 0),
   ]);
   const usadas = Number(gastadas) || 0;
   return {
     hechas, total, tiendas: tiendas.length,
+    // Lo que escribe la gente y no teníamos: pista de qué tiendas interesan
+    peticiones: {
+      busquedas: Number(busquedas) || 0, // búsquedas escritas desde siempre
+      pendientes: peticiones.todas.filter((p) => !p.hecha).length,
+      ultimas: peticiones.todas.slice(0, 8).map(({ texto, zona, hecha }) => ({ texto, zona, hecha })),
+    },
     places: { mes: mesActual(), usadas, tope: TOPE_PLACES_MES, peorCasoDolares: Math.round(usadas * PRECIO_DETALLE_DOLARES * 100) / 100 },
     ultimo,
   };

@@ -20,7 +20,7 @@ export default async function Despensa() {
       etiqueta="Despensa de León"
       titulo="Lo mejor de León,"
       destacado="para llevar a casa"
-      intro="Elige qué quieres comprar, por dónde te mueves y cuánto quieres gastar. Te damos las 3 mejores tiendas de cada cosa. Las busca nuestra IA en prensa, guías y reseñas, y solo salen las que existen de verdad."
+      intro="Escribe qué quieres comprar, o elige productos, y dinos por dónde te mueves. Te damos las 3 mejores tiendas de cada cosa. Las busca nuestra IA en prensa, guías y reseñas, y solo salen las que existen de verdad."
       ctaRef="despensa"
       actual="/despensa"
     >

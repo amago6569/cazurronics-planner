@@ -65,3 +65,45 @@ describe("topTiendas", () => {
 it("el enlace a Maps lleva la ficha", () => {
   expect(enlaceMaps({ nombre: "Cecinas Nieto", localidad: "Astorga", placeId: "abc" })).toContain("query_place_id=abc");
 });
+
+describe("buscar con tus palabras", async () => {
+  const { candidatosCerca, leerPeticionDespensa, lugarEnTexto, productosEnTexto, validarRespuesta } = await import("../src/lib/despensaBuscar");
+  const { limpiarPeticion, peticionesPendientes } = await import("../src/lib/despensa");
+  const t = (nombre, extra) => ({ nombre, localidad: "León", producto: "cecina", puntuacion: 7, precio: "calidad-precio", lat: 42.5987, lon: -5.5671, ...extra });
+
+  it("lee la petición y pone valores seguros", () => {
+    expect(leerPeticionDespensa({ texto: "  cecina ", lat: 42.6, lon: -5.57, radio: 999, presupuesto: "x" })).toMatchObject({ texto: "cecina", radio: 15, presupuesto: "igual" });
+    expect(leerPeticionDespensa({ texto: "a", lat: 42.6, lon: -5.57 }).error).toBeTruthy();
+    expect(leerPeticionDespensa({ texto: "cecina", lat: "x" }).error).toBeTruthy();
+  });
+  it("encuentra el sitio que nombras", () => {
+    expect(lugarEnTexto("mantecadas en Astorga para regalar")).toBe("astorga");
+    expect(lugarEnTexto("vino por el Bierzo")).toBe("bierzo");
+    expect(lugarEnTexto("cecina de León")).toBeNull();
+  });
+  it("adivina el producto del catálogo", () => {
+    expect(productosEnTexto("un queso curado")).toContain("quesos");
+    expect(productosEnTexto("cecina buena para regalar")).toContain("cecina");
+  });
+  it("los candidatos respetan radio y presupuesto, y lo pedido va primero", () => {
+    const tiendas = [t("A", { puntuacion: 9 }), t("B", { producto: "quesos", puntuacion: 5, precio: "capricho" }), t("Lejos", { lat: 42.46, lon: -6.06 })];
+    const c = candidatosCerca(tiendas, { lat: 42.5987, lon: -5.5671, radio: 15, presupuesto: "igual", pedidos: ["quesos"] });
+    expect(c.map((x) => x.nombre)).toEqual(["B", "A"]);
+    expect(c[0].ref).toBe("t1");
+    expect(candidatosCerca(tiendas, { lat: 42.5987, lon: -5.5671, radio: 15, presupuesto: "ajustado" }).map((x) => x.nombre)).toEqual(["A"]);
+  });
+  it("solo acepta tiendas de la lista, sin repetir", () => {
+    const candidatos = candidatosCerca([t("A"), t("B")], { lat: 42.5987, lon: -5.5671, radio: 15 });
+    const r = validarRespuesta({ frase: "Hola", tiendas: [{ ref: "t2", para: "Cecina", motivo: "La mejor" }, { ref: "t2" }, { ref: "t9" }, { nombre: "Inventada" }], falta: "aceite de oliva" }, candidatos);
+    expect(r.tiendas.map((x) => x.nombre)).toEqual(["B"]);
+    expect(r).toMatchObject({ frase: "Hola", falta: "aceite de oliva" });
+    expect(validarRespuesta({ falta: "null" }, candidatos).falta).toBeNull();
+    expect(validarRespuesta(null, candidatos)).toMatchObject({ tiendas: [], falta: null });
+  });
+  it("lo que falta se limpia y la cola va de la más antigua a la más nueva", () => {
+    expect(limpiarPeticion("<b>aceite</b> de oliva!!")).toBe("aceite de oliva");
+    expect(limpiarPeticion("??")).toBeNull();
+    const todas = [{ id: "c", fecha: "3" }, { id: "b", fecha: "2", hecha: true }, { id: "a", fecha: "1" }];
+    expect(peticionesPendientes(todas, 2).map((p) => p.id)).toEqual(["a", "c"]);
+  });
+});
