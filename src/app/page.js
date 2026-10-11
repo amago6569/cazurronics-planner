@@ -795,7 +795,7 @@ export default function Home() {
 
           {/* NUEVO: enlaces a las páginas de contenido (ayudan a que Google encuentre la web) */}
           <nav aria-label="Más de León" className="order-6 lg:col-span-12 flex flex-wrap items-center justify-center gap-2 pt-1 cz-up" style={{ animationDelay: "320ms" }}>
-            {[["/agenda-leon", "📅 Agenda de León"], ["/que-hacer-en-leon", "✨ Qué hacer en León"], ["/donde-comer-en-leon", "🍷 Dónde comer en León"]].map(([href, texto]) => (
+            {[["/agenda-leon", "📅 Agenda de León"], ["/que-hacer-en-leon", "✨ Qué hacer en León"], ["/donde-comer-en-leon", "🍷 Dónde comer en León"], ["/despensa", "🧺 Despensa de León"]].map(([href, texto]) => (
               <Link key={href} href={href} className={`${PRESS} h-9 px-3.5 inline-flex items-center rounded-full bg-white/50 ring-1 ring-white text-[13px] font-medium text-slate-600 hover:bg-white hover:text-rose-600`}>{texto}</Link>
             ))}
           </nav>

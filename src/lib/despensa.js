@@ -154,8 +154,11 @@ export async function barrerCombinacion(producto, zona) {
   // Cada tienda se comprueba a la vez (fuente + Places) para caber en el minuto de Vercel
   const fichas = await Promise.all(tiendas.map(async (t) => {
     if (!(await fuenteValida(t, dominios))) return null;
-    return comprobarEnPlaces(t, zona).catch((e) => { console.warn("[despensa] places:", e.message); return null; });
+    return comprobarEnPlaces(t, zona).catch((e) => { console.warn("[despensa] places:", e.message); return { error: e.message }; });
   }));
+  // Si Google Places falla (clave sin la API nueva activada, caída...), no se guarda nada: se repite en otra pasada
+  const fallo = fichas.find((f) => f?.error);
+  if (fallo) throw new Error(`Google Places: ${fallo.error}`);
   // Sin cupo de Places este mes: no se guarda, se repite el mes que viene
   if (fichas.includes("sinCupo")) return { producto, zona, sinCupo: true, encontradas: tiendas.length, guardadas: 0 };
   const buenas = [];
@@ -227,4 +230,11 @@ export async function resumenDespensa() {
     places: { mes: mesActual(), usadas, tope: TOPE_PLACES_MES, peorCasoDolares: Math.round(usadas * PRECIO_DETALLE_DOLARES * 100) / 100 },
     ultimo,
   };
+}
+
+// Lo que necesita la página pública (sin campos internos), ya listo para pasarlo al navegador
+export async function catalogoParaWeb() {
+  const { tiendas } = await leerDespensa().catch(() => ({ tiendas: [] }));
+  return tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, producto, zona }) =>
+    ({ nombre, localidad, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, producto, zona }));
 }

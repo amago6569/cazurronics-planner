@@ -7,6 +7,7 @@ export const PAGINAS = [
   ["/agenda-leon", "📅 Agenda de León"],
   ["/que-hacer-en-leon", "✨ Qué hacer en León"],
   ["/donde-comer-en-leon", "🍷 Dónde comer en León"],
+  ["/despensa", "🧺 Despensa de León"],
   ["/finde", "🔥 Lo mejor del finde"],
   ["/que-hacer-hoy-en-leon", "☀️ Qué hacer hoy"],
   ["/que-hacer-manana-en-leon", "🗓️ Mañana"],
