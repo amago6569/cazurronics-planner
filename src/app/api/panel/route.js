@@ -3,6 +3,7 @@ import { comando, leerJSON, usaRedis, varios } from "../../../lib/almacen";
 import { leerResumen } from "../../../lib/estadisticas";
 import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares } from "../../../lib/lugares";
 import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
+import { barrerDespensa, resumenDespensa } from "../../../lib/despensa";
 
 export const maxDuration = 60; // el panel lanza el barrido tramo a tramo
 export const dynamic = "force-dynamic";
@@ -35,13 +36,14 @@ async function datosDelPanel(request) {
     const lugares = await buscarLugares(buscar);
     return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda, solicitudes] = await Promise.all([
+  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
     leerJSON("eventos:ultimoBarrido"),
     eventosProximos(14),
     comando(["LRANGE", "negocios:solicitudes", 0, 99]).catch(() => []),
+    resumenDespensa().catch(() => null),
   ]);
   const conEnlace = (l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) });
   return NextResponse.json({
@@ -52,6 +54,7 @@ async function datosDelPanel(request) {
     favoritos: gusta.map(conEnlace),
     barrido,
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
+    despensa,
     solicitudes: (solicitudes || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean),
   }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -73,6 +76,14 @@ export async function POST(request) {
       }
       await varios(rankings.map((r) => ["DEL", r]));
       return NextResponse.json({ exito: true, borrados: claves.length });
+    } catch (e) {
+      return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    }
+  }
+  // Una pasada de la Despensa a mano (6 combinaciones de producto y comarca; solo hace las que faltan)
+  if (accion === "despensa") {
+    try {
+      return NextResponse.json({ exito: true, informe: await barrerDespensa() });
     } catch (e) {
       return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
     }

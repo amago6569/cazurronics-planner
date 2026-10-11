@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Fondo from "../components/Fondo";
 import Captacion from "../components/Captacion";
+import PanelDespensa from "../components/PanelDespensa";
 import { GLASS, PRESS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../lib/estilos";
 
 const OBJETIVO_ROSETON = 500; // planes para completar el rosetón de la campaña (24 cristales)
@@ -317,6 +318,9 @@ export default function Panel() {
             ) : <p className="text-sm text-slate-500">Todavía no hay agenda cerrada para el próximo finde: lanza el barrido diario y vuelve a mirar.</p>}
           </section>
         )}
+
+        {/* Despensa de León: catálogo de tiendas por producto y gasto en Google Places */}
+        <PanelDespensa clave={clave} despensa={datos.despensa} alTerminar={() => cargar(clave)} />
 
         {/* Captación: locales que ya rinden en la web, listos para escribirles (el envío lo haces tú) */}
         <Captacion clave={clave} />
