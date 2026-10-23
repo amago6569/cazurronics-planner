@@ -73,7 +73,7 @@ export function productosEnTexto(texto) {
 }
 
 // ---------- Todo lo que puede recomendar la IA, en un mismo formato ----------
-// ficha (lib/despensaFichas.js): premios y especialidades investigados con fuente. Un premio suma 1 punto; tener
+// ficha (lib/despensaFichas.js): premios y especialidades sacados de sus reseñas de Google (o, las antiguas, con fuente). Un premio suma 1 punto; tener
 // especialidades conocidas, 0,3. Y lo que se sabe que hace bien cuenta como producto suyo (cecina en una frutería, no;
 // cecina premiada en una tienda de productos de León, sí).
 export function candidatoDeGoogle(t, ficha = null) {
@@ -86,6 +86,7 @@ export function candidatoDeGoogle(t, ficha = null) {
     producto: `tienda:${cats[0]?.id || "otra"}`, productoNombre: cats.map((c) => c.nombre).join(", ") || "Tienda",
     productos: [...new Set([...cats.flatMap((c) => c.productos), ...productosEnTexto([...especialidades, ...premios.map((p) => p.que)].join(" "))])],
     especialidad: especialidades.length ? especialidades.join(", ") : null,
+    deResenas: ficha?.origen === "resenas" && (especialidades.length > 0 || premios.length > 0),
     porque: ficha?.destaca || null,
     premios: premios.map((p) => (p.anio ? `${p.que} (${p.anio})` : p.que)),
     precio: null, puntuacion: Math.min(10, Math.round((puntuacionGoogle(t) + extra) * 10) / 10),
@@ -169,7 +170,7 @@ export function promptBusqueda(texto, candidatos, { radio, presupuesto, sitio })
 
     Tiendas comprobadas (ref | nombre | pueblo | distancia | producto o tipo de tienda | especialidad | por qué es buena | premios | precio | nota | valoración en Google):
     ${lista || "(ninguna en esta zona todavía)"}
-    Las especialidades y los premios están investigados y comprobados: son lo que más vale. Si alguien es exigente
+    Las especialidades y los premios salen de lo que cuenta la gente en sus reseñas y están comprobados: son lo que más vale. Si alguien es exigente
     ("la mejor", "de verdad", "premiada", "para regalar", "algo especial") o pide algo muy concreto, elige primero las
     tiendas con ese premio o esa especialidad y cuéntalo en el motivo ("Su cecina ganó ... en 2024").
     Las que no traen especialidad: elígelas por el tipo de tienda, la valoración y la cercanía, y no les inventes especialidades.
@@ -219,8 +220,8 @@ export function respaldo(candidatos, pedidos) {
 }
 
 // Lo que ve el navegador de cada tienda (sin campos internos)
-const publica = ({ nombre, localidad, producto, especialidad, porque, premios, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, km: dist, para, motivo }) =>
-  ({ nombre, localidad, producto, especialidad, porque, premios: premios || [], precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, km: dist, para, motivo });
+const publica = ({ nombre, localidad, producto, especialidad, deResenas, porque, premios, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, km: dist, para, motivo }) =>
+  ({ nombre, localidad, producto, especialidad, deResenas: !!deResenas, porque, premios: premios || [], precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, km: dist, para, motivo });
 
 export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) {
   // Si nombra un sitio, se busca allí (con al menos 30 km, que las comarcas son grandes)

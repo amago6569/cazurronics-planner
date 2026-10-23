@@ -82,21 +82,23 @@ export default function PanelDespensa({ clave, despensa, alTerminar }) {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-800">🏆 Premios y especialidades de cada tienda</p>
-              <p className="text-xs text-slate-500">La IA investiga 18 tiendas por pasada, tres pasadas cada noche, siempre con fuente. Unos 0,02 $ al día.</p>
+              <p className="text-xs text-slate-500">La IA lee las reseñas de Google de 30 tiendas por pasada, tres pasadas cada noche, y saca lo que la gente alaba. Se renueva cada 30 días.</p>
             </div>
             <button onClick={investigar} disabled={investigando} className={`${PRESS} h-9 px-3.5 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-800 text-sm font-semibold disabled:opacity-60`}>{investigando ? "Investigando… (1 min)" : "Investigar tiendas ahora"}</button>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-            {[["Investigadas", `${fichas.investigadas} / ${fichas.tiendas}`], ["Con premio", `${fichas.conPremio}`], ["Con especialidad", `${fichas.conEspecialidad}`], ["Pendientes", `${fichas.pendientes}`]].map(([k, v]) => (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
+            {[["Investigadas", `${fichas.investigadas} / ${fichas.tiendas}`], ["Con premio", `${fichas.conPremio}`], ["Con especialidad", `${fichas.conEspecialidad}`], ["Pendientes", `${fichas.pendientes}`], ...(fichas.google ? [["Reseñas leídas este mes", `${fichas.google.usadas} / ${fichas.google.tope}`]] : [])].map(([k, v]) => (
               <div key={k} className="bg-white/70 ring-1 ring-slate-900/5 rounded-xl p-2.5">
                 <p className="text-base font-bold tabular-nums text-slate-900">{v}</p>
                 <p className="text-[11px] text-slate-500 leading-snug">{k}</p>
               </div>
             ))}
           </div>
+          {fichas.google && <p className="text-xs text-slate-500 mt-2">Google regala 1.000 lecturas de reseñas al mes (tarifa aparte de las búsquedas). Si no regalase ninguna, lo de este mes costaría como mucho {fichas.google.peorCasoDolares.toFixed(2)} $. Al llegar al tope, se para hasta el mes siguiente.</p>}
           {fichas.ultimo && (
             <p className="text-xs text-slate-500 mt-2">
-              Última pasada · {new Date(fichas.ultimo.fin).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: {fichas.ultimo.nada || `${fichas.ultimo.investigadas} tiendas, ${fichas.ultimo.conPremio} con premio, ${fichas.ultimo.conEspecialidad} con especialidad${fichas.ultimo.sinFuente ? `, ${fichas.ultimo.sinFuente} descartadas por no tener fuente` : ""}`}
+              Última pasada · {new Date(fichas.ultimo.fin).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: {fichas.ultimo.nada || `${fichas.ultimo.investigadas} tiendas, ${fichas.ultimo.conPremio} con premio, ${fichas.ultimo.conEspecialidad} con especialidad`}
+              {fichas.ultimo.sinCupo && <span className="text-amber-700"> · parada por el tope del mes</span>}
               {fichas.ultimo.error && <span className="text-rose-600"> · error: {fichas.ultimo.error}</span>}
             </p>
           )}
