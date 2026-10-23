@@ -4,14 +4,17 @@
 //    Si pides algo que no tenemos, se apunta y se busca esa noche.
 //  · Eliges productos con los botones: se filtra en el navegador con el catálogo que ya trae la página (0 €).
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
 import { PRODUCTOS, enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
-import { ZONAS, zonaPorId } from "../../lib/zonas";
+import { ZONAS, zonaDe, zonaPorId } from "../../lib/zonas";
+
+// El mismo mapa que los planes: buscas un pueblo o tocas el mapa, eliges el radio y salen las tiendas marcadas
+const Mapa = dynamic(() => import("./MapSelector"), { ssr: false, loading: () => <div className="h-[250px] rounded-[2rem] bg-white/50 animate-pulse" /> });
 
 // 200 km = toda la provincia. Sin presupuesto: la IA lo deduce de lo que escribes.
 const RADIOS = [5, 10, 15, 30, 60, 200];
 const PRESUPUESTO = "igual";
-const nombreRadio = (r) => (r >= 200 ? "Toda" : `${r} km`);
 const dondeRadio = (r, sitio) => (r >= 200 ? "en toda la provincia" : `a ${r} km de ${sitio}`);
 const MAX_PRODUCTOS = 4;
 const MEDALLAS = ["🥇", "🥈", "🥉"];
@@ -82,6 +85,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
   const [zona, setZona] = useState("leon");
   const [centro, setCentro] = useState(() => centroDe("leon"));
   const [radio, setRadio] = useState(15);
+  const radioSeguro = radio === "" ? 1 : radio; // la caja del mapa se puede vaciar mientras escribes
   const [aviso, setAviso] = useState("");
   const [texto, setTexto] = useState("");
   const [buscando, setBuscando] = useState(false);
@@ -100,8 +104,8 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
 
   const conTiendas = useMemo(() => new Set(tiendas.map((t) => t.producto)), [tiendas]);
   const resultados = useMemo(
-    () => elegidos.map((id) => ({ producto: productoPorId(id), top: topTiendas(tiendas, { producto: id, lat: centro.lat, lon: centro.lon, radio, presupuesto: PRESUPUESTO }) })),
-    [elegidos, tiendas, centro, radio],
+    () => elegidos.map((id) => ({ producto: productoPorId(id), top: topTiendas(tiendas, { producto: id, lat: centro.lat, lon: centro.lon, radio: radioSeguro, presupuesto: PRESUPUESTO }) })),
+    [elegidos, tiendas, centro, radioSeguro],
   );
 
   const alternar = (id) => {
@@ -111,7 +115,15 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
     setAviso("");
     setElegidos([...elegidos, id]);
   };
-  const elegirZona = (id) => { setZona(id); setCentro(centroDe(id)); if (id !== "leon" && radio < 30) setRadio(30); };
+  const elegirZona = (id) => { setZona(id); setCentro(centroDe(id)); if (id !== "leon" && radioSeguro < 30) setRadio(30); };
+  const toda = () => { setZona("toda"); setRadio(200); };
+  // Tocar el mapa o buscar un pueblo en él
+  const ponerCentro = ([lat, lon]) => {
+    const z = zonaPorId(zonaDe({ lat, lon }));
+    setZona("mapa");
+    setCentro({ lat, lon, nombre: z ? (z.id === "leon" ? "León" : z.corto) : "tu punto" });
+  };
+  const centroMapa = useMemo(() => [centro.lat, centro.lon], [centro]);
   const cercaDeMi = () => {
     if (!navigator.geolocation) { setAviso("Tu navegador no deja usar la ubicación"); return; }
     setAviso("Buscando dónde estás…");
@@ -131,7 +143,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
     try {
       const r = await fetch("/api/despensa/buscar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto, lat: centro.lat, lon: centro.lon, radio, presupuesto: PRESUPUESTO }),
+        body: JSON.stringify({ texto, lat: centro.lat, lon: centro.lon, radio: radioSeguro, presupuesto: PRESUPUESTO }),
       });
       const d = await r.json().catch(() => null);
       if (!d?.exito) { setAviso(d?.mensaje || "No hemos podido buscar. Prueba otra vez."); setIa(null); return; }
@@ -156,6 +168,18 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
   }, [ia]);
 
   const total = resultados.reduce((n, r) => n + r.top.length, 0);
+  // Lo que se marca en el mapa: lo que ha elegido la IA, o todas las tiendas de los productos elegidos dentro del radio (el top 3, destacado)
+  const enMapa = useMemo(() => {
+    const pin = (t, destacada) => ({ lat: t.lat, lon: t.lon, nombre: t.nombre, localidad: t.localidad, enlace: enlaceMaps(t), emoji: productoPorId(t.producto)?.emoji || "🏅", destacada });
+    if (ia) return (ia.tiendas || []).filter((t) => Number.isFinite(t.lat)).map((t) => pin(t, true));
+    const vistas = new Set();
+    return elegidos.flatMap((id) => {
+      const top = new Set(topTiendas(tiendas, { producto: id, lat: centro.lat, lon: centro.lon, radio: radioSeguro, presupuesto: PRESUPUESTO }).map((t) => t.nombre));
+      return topTiendas(tiendas, { producto: id, lat: centro.lat, lon: centro.lon, radio: radioSeguro, presupuesto: PRESUPUESTO, cuantas: 40 })
+        .filter((t) => Number.isFinite(t.lat) && !vistas.has(`${t.nombre}|${t.lat}`) && vistas.add(`${t.nombre}|${t.lat}`))
+        .map((t) => pin(t, top.has(t.nombre)));
+    });
+  }, [ia, elegidos, tiendas, centro, radioSeguro]);
   // Ruta con la mejor tienda de cada cosa (solo si buscas 2 o más cosas). Desde tu ubicación si la has dado.
   const origen = useMemo(() => (zona === "yo" ? centro : null), [zona, centro]);
   const rutaIA = useMemo(() => (gruposIA.length > 1 ? rutaMaps(gruposIA.map((g) => g.tiendas[0]), origen) : null), [gruposIA, origen]);
@@ -195,18 +219,18 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
         <Paso n="2" titulo="¿Por dónde?">
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
             <button type="button" aria-pressed={zona === "yo"} onClick={cercaDeMi} className={chip(zona === "yo")}>📍 Cerca de mí</button>
+            <button type="button" aria-pressed={zona === "toda"} onClick={toda} className={chip(zona === "toda")}>🗺️ Toda la provincia</button>
             {ZONAS.map((z) => (
               <button key={z.id} type="button" aria-pressed={zona === z.id} onClick={() => elegirZona(z.id)} className={chip(zona === z.id)}>
                 <span>{z.emoji}</span>{z.corto}
               </button>
             ))}
           </div>
-          <p className="mt-4 mb-2 px-1 text-[13px] font-semibold text-slate-500">¿Hasta dónde te mueves?</p>
-          <div className="grid grid-cols-6 gap-1 p-1.5 bg-white/45 rounded-2xl ring-1 ring-slate-900/5" role="radiogroup" aria-label="Distancia">
-            {RADIOS.map((r) => (
-              <button key={r} type="button" role="radio" aria-checked={radio === r} aria-label={r >= 200 ? "Toda la provincia" : `${r} km`} onClick={() => setRadio(r)} className={`${PRESS} h-10 rounded-xl text-[13px] sm:text-sm font-semibold tabular-nums whitespace-nowrap ${radio === r ? "bg-white text-slate-900 shadow-[0_6px_16px_-8px_rgba(15,23,42,0.45)]" : "text-slate-500 hover:text-slate-800"}`}>{nombreRadio(r)}</button>
-            ))}
-          </div>
+          <p className="mt-4 mb-2 px-1 text-[13px] font-semibold text-slate-500">Busca un pueblo o toca el mapa</p>
+          <Mapa radiusKm={radio} setRadiusKm={(r) => { setRadio(r); if (zona === "toda") setZona("mapa"); }} center={centroMapa} setCenter={ponerCentro} tiendas={enMapa} />
+          <p className="mt-2 px-1 text-xs text-slate-500" aria-live="polite">
+            {enMapa.length ? `${enMapa.length} ${enMapa.length === 1 ? "tienda marcada" : "tiendas marcadas"} ${dondeRadio(radioSeguro, centro.nombre)}. Toca una para ver cómo llegar.` : `Sin tiendas marcadas ${dondeRadio(radioSeguro, centro.nombre)} todavía.`}
+          </p>
         </Paso>
 
         {aviso && <p className="text-sm font-semibold text-rose-600 px-1 cz-fade" role="status">{aviso}</p>}
@@ -274,15 +298,15 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
           <section key={producto.id} className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up`}>
             <div className="px-1 mb-3">
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{producto.emoji} {producto.nombre}</h2>
-              <p className="text-sm text-slate-500">Top 3 {dondeRadio(radio, centro.nombre)}</p>
+              <p className="text-sm text-slate-500">Top 3 {dondeRadio(radioSeguro, centro.nombre)}</p>
             </div>
             {top.length ? (
               <ol className="grid gap-2.5 lg:grid-cols-3">{top.map((t, i) => <Tienda key={t.placeId || t.nombre} t={t} i={i} />)}</ol>
             ) : (
               <div className="bg-white/55 rounded-[1.4rem] p-5 text-center">
-                <p className="font-semibold text-slate-800">Todavía no tenemos {producto.nombre.toLowerCase()} {dondeRadio(radio, centro.nombre)}.</p>
+                <p className="font-semibold text-slate-800">Todavía no tenemos {producto.nombre.toLowerCase()} {dondeRadio(radioSeguro, centro.nombre)}.</p>
                 <p className="text-sm text-slate-500 mt-1">{conTiendas.has(producto.id) ? "Prueba con más kilómetros u otra zona." : "Cada noche nuestra IA revisa tiendas nuevas de la provincia. Vuelve en unos días."}</p>
-                {radio < 200 && <button type="button" onClick={() => setRadio(RADIOS.find((r) => r > radio))} className={`${PRESS} mt-3 h-10 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:text-rose-600`}>{RADIOS.find((r) => r > radio) >= 200 ? "Buscar en toda la provincia" : `Ampliar a ${RADIOS.find((r) => r > radio)} km`}</button>}
+                {radioSeguro < 200 && <button type="button" onClick={() => { const r = RADIOS.find((x) => x > radioSeguro); if (r >= 200) toda(); else setRadio(r); }} className={`${PRESS} mt-3 h-10 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:text-rose-600`}>{RADIOS.find((r) => r > radioSeguro) >= 200 ? "Buscar en toda la provincia" : `Ampliar a ${RADIOS.find((r) => r > radioSeguro)} km`}</button>}
               </div>
             )}
           </section>

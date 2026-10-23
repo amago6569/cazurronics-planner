@@ -72,7 +72,9 @@ describe("buscar con tus palabras", async () => {
   const t = (nombre, extra) => ({ nombre, localidad: "León", producto: "cecina", puntuacion: 7, precio: "calidad-precio", lat: 42.5987, lon: -5.5671, ...extra });
 
   it("lee la petición y pone valores seguros", () => {
-    expect(leerPeticionDespensa({ texto: "  cecina ", lat: 42.6, lon: -5.57, radio: 999, presupuesto: "x" })).toMatchObject({ texto: "cecina", radio: 15, presupuesto: "igual" });
+    expect(leerPeticionDespensa({ texto: "  cecina ", lat: 42.6, lon: -5.57, radio: 999, presupuesto: "x" })).toMatchObject({ texto: "cecina", radio: 200, presupuesto: "igual" });
+    expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 23.4 })).toMatchObject({ radio: 23 });
+    expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 0 })).toMatchObject({ radio: 15 });
     expect(leerPeticionDespensa({ texto: "a", lat: 42.6, lon: -5.57 }).error).toBeTruthy();
     expect(leerPeticionDespensa({ texto: "cecina", lat: "x" }).error).toBeTruthy();
   });

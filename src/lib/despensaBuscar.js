@@ -11,7 +11,6 @@ import { llamarGemini, extraerJSON } from "./gemini";
 import { PRODUCTOS, productoPorId } from "./despensaProductos";
 import { ZONAS, zonaDe } from "./zonas";
 
-const RADIOS = [5, 10, 15, 30, 60, 200]; // 200 = toda la provincia
 const MAX_CANDIDATOS = 80;
 const MAX_RESULTADOS = 9;
 
@@ -31,7 +30,9 @@ export function leerPeticionDespensa(c) {
   if (texto.length < 3) return { error: "Escribe qué quieres comprar" };
   const lat = Number(c?.lat), lon = Number(c?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return { error: "Falta la zona" };
-  const radio = RADIOS.includes(Number(c?.radio)) ? Number(c.radio) : 15;
+  // Del mapa llega cualquier radio de 1 a 150 km; 200 = toda la provincia
+  const r = Math.round(Number(c?.radio));
+  const radio = Number.isFinite(r) && r >= 1 ? Math.min(r, 200) : 15;
   const presupuesto = ["ajustado", "capricho"].includes(c?.presupuesto) ? c.presupuesto : "igual";
   return { texto, lat, lon, radio, presupuesto };
 }
@@ -115,8 +116,8 @@ export function validarRespuesta(r, candidatos) {
 }
 
 // Lo que ve el navegador de cada tienda (sin campos internos)
-const publica = ({ nombre, localidad, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, km: dist, para, motivo }) =>
-  ({ nombre, localidad, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, km: dist, para, motivo });
+const publica = ({ nombre, localidad, producto, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, km: dist, para, motivo }) =>
+  ({ nombre, localidad, producto, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, km: dist, para, motivo });
 
 export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) {
   // Si nombra un sitio, se busca allí (con al menos 30 km, que las comarcas son grandes)

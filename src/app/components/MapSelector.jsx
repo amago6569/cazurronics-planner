@@ -19,12 +19,32 @@ function MapUpdater({ center, zoom }) {
   return null;
 }
 
+// Despensa: encuadra el radio y las tiendas marcadas (en los planes no se usa)
+function AjustarVista({ center, radiusKm, tiendas }) {
+  const map = useMap();
+  const clave = `${center[0]},${center[1]},${radiusKm},${tiendas.map((t) => `${t.lat},${t.lon}`).join(";")}`;
+  useEffect(() => {
+    const r = Math.min(Number(radiusKm) || 1, 150);
+    const caja = L.latLng(center[0], center[1]).toBounds(r * 2000);
+    tiendas.forEach((t) => caja.extend([t.lat, t.lon]));
+    map.flyToBounds(caja, { padding: [24, 24], duration: 1.2, maxZoom: 15 });
+  }, [clave]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+const iconoTienda = (t) => L.divIcon({
+  className: 'cz-pin-tienda',
+  html: `<div style="background:${t.destacada ? "linear-gradient(135deg,#fb7185,#f97316)" : "white"};border-radius:50%;width:${t.destacada ? 36 : 30}px;height:${t.destacada ? 36 : 30}px;display:flex;justify-content:center;align-items:center;border:3px solid white;box-shadow:0 5px 15px rgba(15,23,42,0.35);font-size:${t.destacada ? 18 : 15}px;">${t.emoji || "🧺"}</div>`,
+  iconSize: [36, 36], iconAnchor: [18, 18],
+});
+
 function MapClickHandler({ setCenter }) {
   useMapEvents({ click(e) { setCenter([e.latlng.lat, e.latlng.lng]); } });
   return null;
 }
 
-export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, itinerario }) {
+// tiendas (solo Despensa): [{ lat, lon, nombre, localidad, emoji, enlace, destacada }] para marcarlas en el mapa
+export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, itinerario, tiendas }) {
   const [busqueda, setBusqueda] = useState("");
 
   const buscarUbicacion = async (e) => {
@@ -85,10 +105,18 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
             );
           })}
 
+          {tiendas && tiendas.map((t) => (
+            <Marker key={`${t.nombre}|${t.lat}|${t.lon}`} position={[t.lat, t.lon]} icon={iconoTienda(t)} zIndexOffset={t.destacada ? 500 : 0}>
+              <Popup><b className="text-slate-900">{t.nombre}</b><br/><span className="text-slate-500">{t.localidad}</span>{t.enlace && <><br/><a href={t.enlace} target="_blank" rel="noopener noreferrer" className="font-bold text-rose-600">📍 Cómo llegar</a></>}</Popup>
+            </Marker>
+          ))}
+
           {coordenadasRuta.length > 1 && <Polyline positions={coordenadasRuta} color="#3b82f6" weight={5} opacity={0.6} dashArray="10, 10" />}
           {!itinerario && <ImageOverlay url="/roseton.png" bounds={rosetonBounds} opacity={0.4} className="animate-pulse" />}
           
-          <MapUpdater center={coordenadasRuta.length > 0 ? coordenadasRuta[0] : center} zoom={itinerario ? 15 : undefined} />
+          {tiendas
+            ? <AjustarVista center={center} radiusKm={radiusKm} tiendas={tiendas} />
+            : <MapUpdater center={coordenadasRuta.length > 0 ? coordenadasRuta[0] : center} zoom={itinerario ? 15 : undefined} />}
           {!itinerario && <MapClickHandler setCenter={setCenter} />}
         </MapContainer>
       </div>
