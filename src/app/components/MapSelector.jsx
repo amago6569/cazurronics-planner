@@ -12,6 +12,11 @@ L.Icon.Default.mergeOptions({
 });
 
 const LIMITES_LEON = [ [41.8, -7.35], [43.45, -4.45] ];
+const MAX_KM = 150;
+
+// Despensa (fino): desde 200 m. La barra va en escala logarítmica para que los metros también se puedan elegir con el dedo.
+const deBarra = (p, min) => { const km = min * (MAX_KM / min) ** (p / 1000); return km < 10 ? Math.round(km * 10) / 10 : Math.round(km); };
+const aBarra = (km, min) => Math.round((1000 * Math.log(Math.max(km, min) / min)) / Math.log(MAX_KM / min));
 
 function MapUpdater({ center, zoom }) {
   const map = useMap();
@@ -27,7 +32,7 @@ function AjustarVista({ center, radiusKm, tiendas }) {
     const r = Math.min(Number(radiusKm) || 1, 150);
     const caja = L.latLng(center[0], center[1]).toBounds(r * 2000);
     tiendas.forEach((t) => caja.extend([t.lat, t.lon]));
-    map.flyToBounds(caja, { padding: [24, 24], duration: 1.2, maxZoom: 15 });
+    map.flyToBounds(caja, { padding: [24, 24], duration: 1.2, maxZoom: 17 });
   }, [clave]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -45,9 +50,23 @@ function MapClickHandler({ setCenter }) {
 
 // tiendas (solo Despensa): [{ lat, lon, nombre, localidad, emoji, enlace, destacada }] para marcarlas en el mapa.
 // soloVer (resultados de la Despensa): solo el mapa con las tiendas, sin buscador, rosetón ni distancia.
-export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, itinerario, tiendas, soloVer = false }) {
+// fino (Despensa): radio desde 200 m en vez de 1 km.
+export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, itinerario, tiendas, soloVer = false, fino = false }) {
   const elegir = !itinerario && !soloVer;
+  const minKm = fino ? 0.2 : 1;
   const [busqueda, setBusqueda] = useState("");
+  const [ubicando, setUbicando] = useState("");
+
+  // El navegador pregunta "¿Dejas que cazurronics.es sepa dónde estás?" y el mapa se pone ahí
+  const usarMiUbicacion = () => {
+    if (!navigator.geolocation) { setUbicando("Tu navegador no deja usar la ubicación. Busca el pueblo o toca el mapa."); return; }
+    setUbicando("Buscando dónde estás…");
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setCenter([p.coords.latitude, p.coords.longitude]); setUbicando(""); },
+      (e) => setUbicando(e?.code === 1 ? "Sin permiso para la ubicación. Busca el pueblo o toca el mapa." : "No hemos podido saber dónde estás. Busca el pueblo o toca el mapa."),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+    );
+  };
 
   const buscarUbicacion = async (e) => {
     if (e) e.preventDefault();
@@ -84,6 +103,14 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
           <button type="button" onClick={buscarUbicacion} className="bg-white text-indigo-500 font-black px-5 py-2 rounded-full shadow-[0_5px_15px_rgba(99,102,241,0.2)] hover:shadow-[0_8px_20px_rgba(99,102,241,0.3)] hover:-translate-y-0.5 transition-all">
             🔍 Buscar
           </button>
+        </div>
+      )}
+      {elegir && (
+        <div className="px-1 -mt-1">
+          <button type="button" onClick={usarMiUbicacion} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white/90 text-sm font-bold text-rose-600 shadow-[0_5px_15px_rgba(244,63,94,0.15)] hover:-translate-y-0.5 transition-all">
+            📍 Usar mi ubicación
+          </button>
+          {ubicando && <p className="mt-1.5 text-xs font-semibold text-slate-500" role="status">{ubicando}</p>}
         </div>
       )}
 
@@ -131,13 +158,14 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
               {/* CAJA DE DISTANCIA AHORA PERMITE VACIARLA TOTALMENTE */}
               <input 
                 type="number" 
-                min="1" 
-                max="150" 
+                min={minKm} 
+                max={MAX_KM} 
+                step={fino ? 0.1 : 1}
                 value={radiusKm} 
                 onChange={(e) => { 
                   if (e.target.value === '') { setRadiusKm(''); return; }
                   let val = Number(e.target.value); 
-                  if (val > 150) val = 150; 
+                  if (val > MAX_KM) val = MAX_KM; 
                   setRadiusKm(val); 
                 }} 
                 className="w-20 pr-8 pl-3 py-1 bg-white border-0 text-sm font-black text-indigo-500 text-center outline-none" 
@@ -147,11 +175,12 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
           </div>
           <input 
             type="range" 
-            min="1" 
-            max="150" 
+            min={fino ? 0 : 1} 
+            max={fino ? 1000 : MAX_KM} 
             step="1" 
-            value={radiusKm === '' ? 1 : radiusKm} 
-            onChange={(e) => setRadiusKm(Number(e.target.value))} 
+            value={fino ? aBarra(radiusKm === '' ? minKm : radiusKm, minKm) : (radiusKm === '' ? 1 : radiusKm)} 
+            onChange={(e) => setRadiusKm(fino ? deBarra(Number(e.target.value), minKm) : Number(e.target.value))} 
+            aria-label="Distancia máxima"
             className="w-full h-3 bg-white rounded-full appearance-none cursor-pointer roseton-slider shadow-inner" 
           />
         </div>

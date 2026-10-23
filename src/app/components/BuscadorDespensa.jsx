@@ -13,7 +13,8 @@ import { zonaDe, zonaPorId } from "../../lib/zonas";
 const Mapa = dynamic(() => import("./MapSelector"), { ssr: false, loading: () => <div className="h-[250px] rounded-[2rem] bg-white/50 animate-pulse" /> });
 
 const PRESUPUESTO = "igual"; // sin presupuesto: la IA lo deduce de lo que escribes
-const dondeRadio = (r, sitio) => (r >= 150 ? "en toda la provincia" : `a ${r} km de ${sitio}`);
+const distancia = (r) => (r < 1 ? `${Math.round(r * 1000)} m` : `${String(r).replace(".", ",")} km`);
+const dondeRadio = (r, sitio) => (r >= 150 ? "en toda la provincia" : `a ${distancia(r)} de ${sitio}`);
 const LABEL = "flex items-center gap-2 text-[13px] font-semibold text-slate-700 mb-2 px-1";
 const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 const LEON = { lat: 42.5987, lon: -5.5671, nombre: "León" };
@@ -51,7 +52,7 @@ function Tienda({ t }) {
 export default function BuscadorDespensa({ tiendas = [], productoInicial = null }) {
   const [centro, setCentro] = useState(LEON);
   const [radio, setRadio] = useState(15);
-  const radioSeguro = radio === "" ? 1 : radio; // la caja del mapa se puede vaciar mientras escribes
+  const radioSeguro = radio === "" || radio < 0.2 ? 0.2 : radio; // la caja del mapa se puede vaciar mientras escribes
   const [aviso, setAviso] = useState("");
   const [texto, setTexto] = useState("");
   const [buscando, setBuscando] = useState(false);
@@ -126,7 +127,7 @@ export default function BuscadorDespensa({ tiendas = [], productoInicial = null 
 
         <div className="rounded-[1.75rem] p-2.5 sm:p-4 [&_input[type=text]]:min-w-0 [&_button]:whitespace-nowrap [&_button]:shrink-0 bg-gradient-to-br from-white/60 to-sky-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
           <label className={`${LABEL} mt-1 mb-3`}><span>📍</span> Hasta dónde te mueves <span className="font-normal text-slate-400">· toca el mapa</span></label>
-          <Mapa radiusKm={radio} setRadiusKm={setRadio} center={centroMapa} setCenter={ponerCentro} tiendas={[]} />
+          <Mapa fino radiusKm={radio} setRadiusKm={setRadio} center={centroMapa} setCenter={ponerCentro} tiendas={[]} />
         </div>
 
         {aviso && <p className="text-sm font-semibold text-rose-600 px-1 cz-fade" role="status">{aviso}</p>}

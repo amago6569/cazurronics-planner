@@ -8,14 +8,16 @@ describe("fichas de las tiendas", () => {
     expect(f.especialidades).toEqual([]);
     expect(f.destaca).toBeNull();
     expect(f.premios).toEqual([{ que: "1.º premio cecina", anio: 2024, fuente: "https://diariodeleon.es/x" }]);
-    expect(validarFicha({ especialidades: ["nicanores"], fuente: "https://vertexaisearch.cloud.google.com/x" }).especialidades).toEqual([]);
+    // Una redirección de Google vale aquí: luego se sigue hasta la página real
+    expect(validarFicha({ especialidades: ["nicanores"], fuente: "https://vertexaisearch.cloud.google.com/x" }).especialidades).toEqual(["nicanores"]);
+    expect(validarFicha({ especialidades: ["nicanores"], fuente: "https://www.google.com/search?q=x" }).especialidades).toEqual([]);
     expect(validarFicha({ especialidades: ["nicanores", "hojaldres"], fuente: "https://confiteria.es" })).toMatchObject({ especialidades: ["nicanores", "hojaldres"], fuente: "https://confiteria.es" });
   });
   it("tocan las que no tienen ficha o la tienen caducada, León y mejor nota primero", () => {
     const ahora = Date.parse("2026-10-23");
     const t = (placeId, zona, nota, resenas) => ({ placeId, zona, nota, resenas });
     const tiendas = [t("a", "bierzo", 4.9, 300), t("b", "leon", 4.6, 200), t("c", "leon", 4.8, 200), t("d", "leon", 4.9, 400)];
-    const fichas = { d: { f: "2026-10-01T00:00:00Z", vacia: false, v: 2 }, c: { f: "2026-07-01T00:00:00Z", vacia: true, v: 2 }, a: { f: "2026-10-20T00:00:00Z", vacia: true } };
+    const fichas = { d: { f: "2026-10-01T00:00:00Z", vacia: false, v: 3 }, c: { f: "2026-07-01T00:00:00Z", vacia: true, v: 3 }, a: { f: "2026-10-20T00:00:00Z", vacia: true } };
     expect(tiendasQueTocan(tiendas, fichas, ahora).map((x) => x.placeId)).toEqual(["c", "b", "a"]);
   });
   it("el prompt lleva nombre y dirección de cada tienda", () => {
@@ -36,5 +38,24 @@ describe("el buscador usa premios y especialidades", () => {
     const fichas = { nicanores: { especialidades: ["nicanores", "hojaldres"], premios: [], destaca: null, fuente: "https://b.es" } };
     const c = candidatosCerca(unirCandidatos([], google, [], fichas), { lat: 42.5987, lon: -5.5671, radio: 15, pedidos: [], palabras: palabrasClave("unos nicanores buenos") });
     expect(c[0].placeId).toBe("nicanores");
+  });
+});
+
+describe("fuentes de la IA", async () => {
+  const { fuentesDelTramo, esRedireccion } = await import("../src/lib/fuentes");
+  it("reconoce las redirecciones de Google", () => {
+    expect(esRedireccion("https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc")).toBe(true);
+    expect(esRedireccion("https://www.diariodeleon.es/x")).toBe(false);
+  });
+  it("da las páginas que respaldan el trozo de cada tienda (posiciones en bytes)", () => {
+    const texto = '[{"n":1,"especialidades":["cecina añeja"]},{"n":2,"especialidades":["pan"]}]';
+    const b = (i) => Buffer.byteLength(texto.slice(0, i), "utf8");
+    const i2 = texto.indexOf('"n":2');
+    const grounding = { chunks: [{ uri: "https://a" }, { uri: "https://b" }], supports: [{ segment: { startIndex: b(10) }, groundingChunkIndices: [0] }, { segment: { startIndex: b(i2 + 5) }, groundingChunkIndices: [1] }] };
+    expect(fuentesDelTramo(texto, grounding, 1, i2)).toEqual(["https://a"]);
+    expect(fuentesDelTramo(texto, grounding, i2, texto.length)).toEqual(["https://b"]);
+  });
+  it("un premio sin enlace se guarda para buscarle la página si se pide", () => {
+    expect(validarFicha({ premios: [{ que: "Premio", fuente: null }] }, { sinFuente: true }).premios).toHaveLength(1);
   });
 });

@@ -81,7 +81,9 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
       if (fallos.length) console.warn("[gemini] plan B:", fallos.join(" | "), "→ usando", modelo);
       const uso = medirUso(modelo, datos);
       console.log(`[gemini-uso] ${para} ${modelo} entrada=${uso.entrada} salida=${uso.salida} busquedas=${uso.consultas} ~${uso.dolares}$`);
-      return { texto, dominios, modelo, uso };
+      // Las páginas que ha consultado y qué trozo de la respuesta sale de cada una (para saber la fuente de cada dato)
+      const grounding = { chunks: (candidato?.groundingMetadata?.groundingChunks || []).map((c) => ({ uri: c?.web?.uri || null, title: c?.web?.title || null })), supports: candidato?.groundingMetadata?.groundingSupports || [] };
+      return { texto, dominios, modelo, uso, grounding };
     } catch (e) {
       if (e instanceof ErrorIA) { console.error("[gemini]", fallos.join(" | ")); throw e; }
       fallos.push(`${modelo}: ${e?.name === "TimeoutError" ? "tardó demasiado" : e?.message || e}`);
