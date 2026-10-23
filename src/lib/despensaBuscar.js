@@ -39,13 +39,18 @@ export function leerPeticionDespensa(c) {
   return { texto, lat, lon, radio, presupuesto };
 }
 
-// Si el texto nombra un pueblo o una comarca ("en Astorga", "por el Bierzo"), manda ese sitio sobre la zona elegida
+// Si el texto dice DÓNDE comprar ("en Astorga", "por el Bierzo", "cerca de Boñar"), manda ese sitio sobre el mapa.
+// Un pueblo pegado al producto ("nicanores de Boñar", "mantecadas de Astorga") es el nombre del producto, no el sitio:
+// se busca donde está la persona, que esas cosas se venden en muchas tiendas.
+const ANTES_DEL_SITIO = "(?:en|por|cerca de|cerca del|junto a|al lado de|alrededor de|zona de|zona del|alrededores de|desde)";
 export function lugarEnTexto(texto) {
   const t = ` ${normalizar(texto)} `;
   let mejor = null;
   for (const z of ZONAS) {
     for (const nombre of [...z.pueblos, normalizar(z.corto), normalizar(z.nombre)]) {
       if (nombre.length < 4 || !t.includes(` ${nombre} `)) continue;
+      // Los nombres ya vienen normalizados (solo letras, números y espacios): no hace falta escaparlos
+      if (!new RegExp(` ${ANTES_DEL_SITIO} (?:el |la |los |las )?${nombre} `).test(t)) continue;
       if (!mejor || nombre.length > mejor.nombre.length) mejor = { zona: z.id, nombre };
     }
   }
@@ -143,7 +148,9 @@ export function promptBusqueda(texto, candidatos, { radio, presupuesto, sitio })
     Los mercadillos solo están los días que pone: dilo en el motivo.
 
     Tu trabajo:
-    1. Entiende qué quiere comprar (puede ser más de una cosa) y para qué.
+    1. Entiende qué quiere comprar (puede ser más de una cosa) y para qué. Un pueblo pegado al producto ("nicanores de Boñar",
+       "mantecadas de Astorga", "botillo del Bierzo") es el nombre del producto, no dónde comprarlo: elige tiendas de la lista
+       que lo vendan o que sean del tipo que lo vende (dulces → pastelerías y confiterías; embutido → charcuterías y carnicerías).
     2. Elige las mejores tiendas de la lista para eso: hasta 3 por cada cosa que pide, ${MAX_RESULTADOS} como mucho.
        Prioriza lo que mejor encaja con lo que ha escrito, luego la nota y luego la cercanía.
     3. NUNCA inventes tiendas ni datos: solo refs de la lista. Si ninguna encaja con algo, no lo rellenes con otra cosa.
@@ -151,7 +158,7 @@ export function promptBusqueda(texto, candidatos, { radio, presupuesto, sitio })
        ("aceite de oliva", "queso de cabra"). También si pide una variante concreta que ninguna tienda dice tener en su
        especialidad: pide "cecina de chivo" y solo hay cecina de vacuno → recomienda la de vacuno si encaja, dilo en la frase,
        y pon "falta": "cecina de chivo". Si pide algo que no se compra en una tienda de producto, "falta" es null.
-    5. "lugar": el pueblo o barrio que nombra la persona ("en Boñar" → "Boñar"), o null si no nombra ninguno.
+    5. "lugar": el pueblo o barrio donde quiere comprar ("en Boñar" → "Boñar"), o null. "Nicanores de Boñar" no es un lugar: null.
     Escribe en español de España, cercano y breve, sin exagerar.
     Devuelve SOLO este JSON:
     {"frase":"una frase para la persona sobre lo que le recomiendas","tiendas":[{"ref":"t1","para":"lo que compra ahí, 1 a 3 palabras","motivo":"por qué encaja con lo que ha pedido, una frase"}],"falta":null,"lugar":null}
@@ -173,6 +180,14 @@ export function validarRespuesta(r, candidatos) {
   const falta = typeof r?.falta === "string" && !/^(null|ninguno|nada)$/i.test(r.falta.trim()) ? limpiar(r.falta, 60) || null : null;
   const lugar = typeof r?.lugar === "string" && !/^(null|ninguno)$/i.test(r.lugar.trim()) ? limpiar(r.lugar, 40) || null : null;
   return { frase: limpiar(r?.frase, 240) || null, tiendas, falta, lugar };
+}
+
+// Sin respuesta de la IA: las 3 mejores (nota y cercanía) de cada cosa que se reconoce en el texto
+export function respaldo(candidatos, pedidos) {
+  const vistas = new Set();
+  return pedidos.flatMap((p) => candidatos.filter((t) => (t.productos || [t.producto]).includes(p)).slice(0, 3).map((t) => ({ ...t, para: productoPorId(p)?.nombre || nombreProducto(t), motivo: null })))
+    .filter((t) => !vistas.has(t.ref) && vistas.add(t.ref))
+    .slice(0, MAX_RESULTADOS);
 }
 
 // Lo que ve el navegador de cada tienda (sin campos internos)
@@ -200,9 +215,18 @@ export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) 
     leerTiendasGoogle(zonas).catch(() => []),
     leerMercadillos(zonas).catch(() => []),
   ]);
-  const candidatos = candidatosCerca(unirCandidatos(tiendas, deGoogle, mercadillos), { ...centro, radio: radioUsado, presupuesto, pedidos: productosEnTexto(texto) });
-  const { texto: respuesta } = await llamarGemini(promptBusqueda(texto, candidatos, { radio: radioUsado, presupuesto, sitio }), { para: "despensa", google: false, json: true, temperatura: 0.2, msMax: 25000 });
-  const elegido = validarRespuesta(extraerJSON(respuesta, "{"), candidatos);
+  const pedidos = productosEnTexto(texto);
+  const candidatos = candidatosCerca(unirCandidatos(tiendas, deGoogle, mercadillos), { ...centro, radio: radioUsado, presupuesto, pedidos });
+  let elegido;
+  try {
+    const { texto: respuesta } = await llamarGemini(promptBusqueda(texto, candidatos, { radio: radioUsado, presupuesto, sitio }), { para: "despensa", google: false, json: true, temperatura: 0.2, msMax: 25000 });
+    elegido = validarRespuesta(extraerJSON(respuesta, "{"), candidatos);
+  } catch (e) {
+    // Si la IA falla, no te quedas sin nada: salen las mejores tiendas cercanas de lo que pides
+    console.error("[despensa/buscar] IA:", e?.message || e);
+    elegido = { frase: null, tiendas: [], falta: null, lugar: null };
+  }
+  if (!elegido.tiendas.length) elegido.tiendas = respaldo(candidatos, pedidos);
 
   // Lo que falta se apunta para la pasada de esta noche, en la zona donde se busca (o León si está fuera de la provincia)
   let buscamos = null;

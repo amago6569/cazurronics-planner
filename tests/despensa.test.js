@@ -91,8 +91,13 @@ describe("buscar con tus palabras", async () => {
     expect(lugarEnTexto("mantecadas en Astorga para regalar")).toBe("astorga");
     expect(lugarEnTexto("vino por el Bierzo")).toBe("bierzo");
     expect(lugarEnTexto("cecina de León")).toBeNull();
+    // Un pueblo pegado al producto es su nombre, no dónde comprarlo: se busca donde está la persona
+    expect(lugarEnTexto("nicanores de Boñar")).toBeNull();
+    expect(lugarEnTexto("mantecadas de Astorga y botillo del Bierzo")).toBeNull();
+    expect(lugarEnTexto("nicanores cerca de Boñar")).not.toBeNull();
   });
   it("adivina el producto del catálogo", () => {
+    expect(productosEnTexto("nicanores de Boñar")).toContain("dulces");
     expect(productosEnTexto("un queso curado")).toContain("quesos");
     expect(productosEnTexto("cecina buena para regalar")).toContain("cecina");
   });

@@ -13,7 +13,8 @@ export const PAGINAS = [
   ["/que-hacer-manana-en-leon", "🗓️ Mañana"],
 ];
 
-export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ctaRef, children, actual, arriba }) {
+// sencilla (Despensa): sin el bloque de "crear plan" ni los enlaces de abajo, solo la herramienta
+export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ctaRef, children, actual, arriba, sencilla = false }) {
   return (
     <main className="min-h-[100dvh] px-4 pt-4 pb-16 sm:px-6 text-slate-800 antialiased">
       <Fondo />
@@ -36,6 +37,7 @@ export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ct
 
         {children}
 
+        {!sencilla && <>
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-8 text-center`}>
           <p className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">¿No sabes por dónde empezar?</p>
           <p className="text-slate-600 mt-2 mb-5">Dime qué te apetece, tu presupuesto y la zona, y te monto la ruta en menos de un minuto. Gratis.</p>
@@ -47,6 +49,7 @@ export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ct
             <Link key={href} href={href} className="h-9 px-3.5 inline-flex items-center rounded-full bg-white/50 ring-1 ring-white text-[13px] font-medium text-slate-600 hover:bg-white hover:text-rose-600 transition-colors">{texto}</Link>
           ))}
         </nav>
+        </>}
       </div>
     </main>
   );
