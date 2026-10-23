@@ -82,7 +82,10 @@ describe("buscar con tus palabras", async () => {
 
   it("lee la petición y pone valores seguros", () => {
     expect(leerPeticionDespensa({ texto: "  cecina ", lat: 42.6, lon: -5.57, radio: 999, presupuesto: "x" })).toMatchObject({ texto: "cecina", radio: 200, presupuesto: "igual" });
-    expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 23.4 })).toMatchObject({ radio: 23 });
+    expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 23.4 })).toMatchObject({ radio: 23.4 });
+    // Desde 200 m
+    expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 0.2 })).toMatchObject({ radio: 0.2 });
+    expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 0.1 })).toMatchObject({ radio: 15 });
     expect(leerPeticionDespensa({ texto: "cecina", lat: 42.6, lon: -5.57, radio: 0 })).toMatchObject({ radio: 15 });
     expect(leerPeticionDespensa({ texto: "a", lat: 42.6, lon: -5.57 }).error).toBeTruthy();
     expect(leerPeticionDespensa({ texto: "cecina", lat: "x" }).error).toBeTruthy();
