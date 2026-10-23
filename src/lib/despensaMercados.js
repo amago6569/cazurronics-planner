@@ -9,10 +9,12 @@ import { guardarJSON, varios } from "./almacen";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { comprobarUrl, dominioConsultado } from "./eventos";
 import { ubicarEnMaps } from "./despensaTiendas";
+import { esRedireccion, seguirRedireccion } from "./fuentes";
 import { ZONAS } from "./zonas";
 
 const DIAS_RENUEVA = 30;
 const DIAS_CADUCA = 45;
+const DIAS_REINTENTO_VACIA = 3;
 export const DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 const clave = (zona) => `despensa:mercadillos:${zona}`;
 
@@ -23,7 +25,8 @@ const limpiar = (t, max) => String(t || "").replace(/<[^>]+>/g, " ").replace(/\s
 export function validarMercadillo(m) {
   if (!m || typeof m !== "object") return null;
   const pueblo = limpiar(m.pueblo, 60);
-  const fuente = typeof m.fuente === "string" && /^https?:\/\//.test(m.fuente) && !/vertexaisearch|grounding-api/.test(m.fuente) ? m.fuente : null;
+  // Las redirecciones de Google valen aquí: luego se siguen hasta la página real (lib/fuentes.js)
+  const fuente = typeof m.fuente === "string" && /^https?:\/\//.test(m.fuente) ? m.fuente : null;
   const dias = [...new Set((Array.isArray(m.dias) ? m.dias : [m.dias]).map((d) => DIAS_SEMANA.find((x) => normalizar(x) === normalizar(d))).filter(Boolean))]
     .sort((a, b) => DIAS_SEMANA.indexOf(a) - DIAS_SEMANA.indexOf(b));
   if (!pueblo || !fuente || !dias.length) return null;
@@ -61,7 +64,11 @@ async function buscarMercadillos(zona) {
   const lista = (extraerJSON(texto, "[") || []).map(validarMercadillo).filter(Boolean).slice(0, 15);
   // Fuente de verdad (como los eventos) y sitio en el mapa
   const buenos = await Promise.all(lista.map(async (m) => {
-    if (!dominioConsultado(m.fuente, dominios) && (await comprobarUrl(m.fuente)) !== "ok") return null;
+    if (esRedireccion(m.fuente)) {
+      const real = await seguirRedireccion(m.fuente);
+      if (!real) return null;
+      m = { ...m, fuente: real };
+    } else if (!dominioConsultado(m.fuente, dominios) && (await comprobarUrl(m.fuente)) !== "ok") return null;
     const sitio = await ubicarEnMaps(m.lugar ? `${m.lugar}, ${m.pueblo}` : m.pueblo).catch(() => null);
     return sitio ? { ...m, ...sitio, zona } : null;
   }));
@@ -73,9 +80,10 @@ async function zonaQueToca(ahora = Date.now()) {
   const res = await varios(ZONAS.map((z) => ["GET", clave(z.id)])).catch(() => []);
   let peor = null;
   ZONAS.forEach((z, i) => {
-    let fecha = 0;
-    try { fecha = Date.parse(JSON.parse(res[i])?.fecha) || 0; } catch { /* nunca */ }
-    if (fecha < ahora - DIAS_RENUEVA * 86400000 && (!peor || fecha < peor.fecha)) peor = { zona: z.id, fecha };
+    let fecha = 0, vacia = false;
+    try { const d = JSON.parse(res[i]); fecha = Date.parse(d?.fecha) || 0; vacia = !(d?.lista || []).length; } catch { /* nunca */ }
+    // Una comarca sin ningún mercadillo se vuelve a mirar a los 3 días (suele ser que no se pudo comprobar la fuente)
+    if (fecha < ahora - (vacia ? DIAS_REINTENTO_VACIA : DIAS_RENUEVA) * 86400000 && (!peor || fecha < peor.fecha)) peor = { zona: z.id, fecha };
   });
   return peor?.zona || null;
 }

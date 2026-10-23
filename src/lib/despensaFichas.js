@@ -16,6 +16,7 @@ import { llamarGemini, extraerJSON } from "./gemini";
 import { comprobarUrl, dominioConsultado } from "./eventos";
 import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { categoriaPorId } from "./despensaProductos";
+import { esRedireccion, fuentesDelTramo, seguirRedireccion } from "./fuentes";
 
 const CLAVE = "despensa:fichas";
 const POR_CONSULTA = 3;
@@ -23,18 +24,20 @@ const CONSULTAS_A_LA_VEZ = 6;
 const DIAS_VALE = 90;
 const DIAS_VALE_VACIA = 60;
 // Sube al cambiar cómo se investiga: las fichas de una versión anterior se vuelven a investigar
-const VERSION = 2;
+const VERSION = 3;
 
 const limpiar = (t, max) => String(t || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
-const urlValida = (u) => (typeof u === "string" && /^https?:\/\/[^\s]+$/.test(u) && !/vertexaisearch|grounding-api|google\.[a-z.]+\/(search|maps)/.test(u) ? u : null);
+// Los enlaces de redirección de Google valen: luego se siguen hasta la página real (lib/fuentes.js)
+const urlValida = (u) => (typeof u === "string" && /^https?:\/\/[^\s]+$/.test(u) && !/google\.[a-z.]+\/(search|maps)/.test(u) ? u : null);
 
 // Lo que devuelve la IA para una tienda, limpio. Sin fuente, no hay especialidades; un premio sin su fuente, fuera.
-export function validarFicha(f) {
+// sinFuente: deja los premios sin enlace (luego se les busca la página que los respalda)
+export function validarFicha(f, { sinFuente = false } = {}) {
   if (!f || typeof f !== "object") return null;
   const fuente = urlValida(f.fuente);
   const premios = (Array.isArray(f.premios) ? f.premios : [])
     .map((p) => ({ que: limpiar(p?.que, 120), anio: /^(19|20)\d\d$/.test(String(p?.anio)) ? Number(p.anio) : null, fuente: urlValida(p?.fuente) }))
-    .filter((p) => p.que && p.fuente)
+    .filter((p) => p.que && (p.fuente || sinFuente))
     .slice(0, 4);
   const especialidades = fuente ? [...new Set((Array.isArray(f.especialidades) ? f.especialidades : []).map((e) => limpiar(e, 50)).filter((e) => e.length >= 3))].slice(0, 6) : [];
   const destaca = fuente ? limpiar(f.destaca, 180) || null : null;
@@ -65,27 +68,49 @@ export function promptFichas(tiendas) {
   `;
 }
 
-// La fuente vale si la IA la ha consultado o si la página existe (como en los eventos)
-async function fuenteBuena(url, dominios) {
-  if (!url) return false;
-  return dominioConsultado(url, dominios) || (await comprobarUrl(url)) === "ok";
+// La página real de una fuente, o null si no vale. Una redirección de Google lleva a una página que la IA ha
+// consultado: vale. Otro enlace vale si la IA ha consultado ese sitio o si la página existe (como en los eventos).
+async function fuenteReal(url, dominios) {
+  if (!url) return null;
+  if (esRedireccion(url)) return seguirRedireccion(url);
+  return dominioConsultado(url, dominios) || (await comprobarUrl(url)) === "ok" ? url : null;
+}
+
+// Dónde empieza y acaba en la respuesta la entrada de la tienda n (para saber qué páginas la respaldan)
+function tramoDe(texto, n) {
+  const pos = (k) => { const m = new RegExp(`"n"\\s*:\\s*${k}\\b`).exec(texto); return m ? m.index : -1; };
+  const desde = pos(n);
+  const sig = pos(n + 1);
+  return [desde, sig > desde ? sig : texto.length];
 }
 
 async function investigar(tiendas) {
-  const { texto, dominios } = await llamarGemini(promptFichas(tiendas), { para: "barrido", temperatura: 0.1, msMax: 40000 });
+  const { texto, dominios, grounding } = await llamarGemini(promptFichas(tiendas), { para: "barrido", temperatura: 0.1, msMax: 40000 });
   const lista = extraerJSON(texto, "[") || [];
   const hoy = new Date().toISOString();
   return Promise.all(tiendas.map(async (t, i) => {
     const bruta = lista.find((x) => Number(x?.n) === i + 1) || lista[i];
-    const f = validarFicha(bruta) || { especialidades: [], premios: [], destaca: null, fuente: null };
+    const f = validarFicha(bruta, { sinFuente: true }) || { especialidades: [], premios: [], destaca: null, fuente: null };
     // Para el informe: lo que la IA dijo saber antes de comprobar fuentes
     const dijo = (Array.isArray(bruta?.especialidades) && bruta.especialidades.length) || (Array.isArray(bruta?.premios) && bruta.premios.length) ? 1 : 0;
-    const [okFuente, okPremios] = await Promise.all([fuenteBuena(f.fuente, dominios), Promise.all(f.premios.map((p) => fuenteBuena(p.fuente, dominios)))]);
+    // Si el enlace que da la IA no vale, la página que Google dice que respalda lo que ha escrito de esta tienda
+    const [desde, hasta] = tramoDe(texto, i + 1);
+    const respaldo = fuentesDelTramo(texto, grounding, desde, hasta)[0];
+    const deRespaldo = respaldo ? seguirRedireccion(respaldo) : Promise.resolve(null);
+    const [fuente, fuentesPremios, otra] = await Promise.all([
+      fuenteReal(urlValida(bruta?.fuente), dominios),
+      Promise.all(f.premios.map((p) => fuenteReal(p.fuente, dominios))),
+      deRespaldo,
+    ]);
+    const buena = fuente || otra;
+    const conFuente = buena ? validarFicha({ ...bruta, fuente: buena }) : null;
+    const especialidades = conFuente?.especialidades || [];
+    const destaca = conFuente?.destaca || null;
     const ficha = {
-      especialidades: okFuente ? f.especialidades : [],
-      destaca: okFuente ? f.destaca : null,
-      fuente: okFuente ? f.fuente : null,
-      premios: f.premios.filter((_, k) => okPremios[k]),
+      especialidades,
+      destaca,
+      fuente: especialidades.length || destaca ? buena : null,
+      premios: f.premios.map((p, k) => ({ ...p, fuente: fuentesPremios[k] || otra })).filter((p) => p.fuente),
       f: hoy,
       v: VERSION,
     };
