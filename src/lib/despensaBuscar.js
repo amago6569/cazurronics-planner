@@ -11,7 +11,7 @@ import { llamarGemini, extraerJSON } from "./gemini";
 import { PRODUCTOS, productoPorId } from "./despensaProductos";
 import { ZONAS, zonaDe } from "./zonas";
 
-const RADIOS = [5, 15, 30, 60];
+const RADIOS = [5, 10, 15, 30, 60];
 const MAX_CANDIDATOS = 80;
 const MAX_RESULTADOS = 9;
 

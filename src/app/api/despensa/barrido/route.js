@@ -5,7 +5,7 @@ export const maxDuration = 60; // 6 búsquedas a la vez + la comprobación en Go
 export const dynamic = "force-dynamic";
 
 // Lo llaman los crons de Vercel (vercel.json) tres veces cada noche: cada pasada busca 6 combinaciones
-// de producto y comarca que falten o tengan más de 90 días. Con 153 combinaciones, la Despensa se llena en ~9 días.
+// de producto y comarca que falten o tengan más de 90 días. Con 162 combinaciones, la Despensa se llena en ~9 días.
 export async function GET(request) {
   const secreto = process.env.CRON_SECRET;
   if (!secreto || request.headers.get("authorization") !== `Bearer ${secreto}`) {

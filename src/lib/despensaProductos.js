@@ -4,6 +4,7 @@
 export const PRODUCTOS = [
   { id: "cecina", nombre: "Cecina", emoji: "🥩", busca: "cecina de vacuno: cecineros, charcuterías y tiendas de producto leonés que la venden" },
   { id: "embutidos", nombre: "Chorizo y embutido", emoji: "🌭", busca: "chorizo, salchichón, lomo y embutido artesano: fábricas con tienda, charcuterías y carnicerías que lo elaboran" },
+  { id: "morcilla", nombre: "Morcilla", emoji: "🥘", busca: "morcilla de León (de arroz y cebolla, ahumada): carnicerías, charcuterías y fábricas con tienda que la elaboran" },
   { id: "botillo", nombre: "Botillo", emoji: "🐖", busca: "botillo del Bierzo y botillo artesano: quién lo elabora y lo vende" },
   { id: "quesos", nombre: "Quesos", emoji: "🧀", busca: "quesos artesanos: queserías con venta directa y tiendas especializadas en queso" },
   { id: "pan", nombre: "Pan artesano", emoji: "🥖", busca: "pan artesano, de masa madre o de horno de leña: panaderías y hornos" },

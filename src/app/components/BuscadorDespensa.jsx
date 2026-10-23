@@ -8,7 +8,7 @@ import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
 import { PRODUCTOS, enlaceMaps, productoPorId, topTiendas } from "../../lib/despensaProductos";
 import { ZONAS, zonaPorId } from "../../lib/zonas";
 
-const RADIOS = [5, 15, 30, 60];
+const RADIOS = [5, 10, 15, 30, 60];
 const PRESUPUESTOS = [
   { id: "ajustado", texto: "Ajustado", emoji: "💸" },
   { id: "igual", texto: "Me da igual", emoji: "👌" },
@@ -185,7 +185,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
               </button>
             ))}
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-1.5 p-1.5 bg-white/45 rounded-2xl ring-1 ring-slate-900/5" role="radiogroup" aria-label="Radio">
+          <div className="mt-3 grid grid-cols-5 gap-1.5 p-1.5 bg-white/45 rounded-2xl ring-1 ring-slate-900/5" role="radiogroup" aria-label="Radio">
             {RADIOS.map((r) => (
               <button key={r} type="button" role="radio" aria-checked={radio === r} onClick={() => setRadio(r)} className={`${PRESS} h-10 rounded-xl text-sm font-semibold tabular-nums ${radio === r ? "bg-white text-slate-900 shadow-[0_6px_16px_-8px_rgba(15,23,42,0.45)]" : "text-slate-500 hover:text-slate-800"}`}>{r} km</button>
             ))}

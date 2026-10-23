@@ -35,7 +35,7 @@ describe("fichaValida", () => {
 describe("pendientes", () => {
   it("primero las que nunca se han buscado, en orden", () => {
     const toca = pendientes(COMBINACIONES.map(() => null), Date.parse("2026-10-11"), 3);
-    expect(toca.map((c) => `${c.producto}:${c.zona}`)).toEqual(["cecina:leon", "embutidos:leon", "botillo:leon"]);
+    expect(toca.map((c) => `${c.producto}:${c.zona}`)).toEqual(["cecina:leon", "embutidos:leon", "morcilla:leon"]);
   });
   it("no repite lo buscado hace menos de 90 días", () => {
     const ahora = Date.parse("2026-10-11");

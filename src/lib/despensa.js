@@ -26,7 +26,7 @@ import { comprobarUrl, dominioConsultado } from "./eventos";
 
 const PRODUCTO = Object.fromEntries(PRODUCTOS.map((p) => [p.id, p]));
 
-// Una búsqueda por producto y comarca: 17 × 9 = 153. Primero la capital entera, luego el alfoz, etc.
+// Una búsqueda por producto y comarca: 18 × 9 = 162. Primero la capital entera, luego el alfoz, etc.
 export const COMBINACIONES = ZONAS.flatMap((z) => PRODUCTOS.map((p) => ({ producto: p.id, zona: z.id })));
 const claveCombo = (producto, zona) => `despensa:${producto}:${zona}`;
 
