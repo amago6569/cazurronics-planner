@@ -15,7 +15,7 @@ describe("fichas de las tiendas", () => {
     const ahora = Date.parse("2026-10-23");
     const t = (placeId, zona, nota, resenas) => ({ placeId, zona, nota, resenas });
     const tiendas = [t("a", "bierzo", 4.9, 300), t("b", "leon", 4.6, 200), t("c", "leon", 4.8, 200), t("d", "leon", 4.9, 400)];
-    const fichas = { d: { f: "2026-10-01T00:00:00Z", vacia: false }, c: { f: "2026-07-01T00:00:00Z", vacia: true } };
+    const fichas = { d: { f: "2026-10-01T00:00:00Z", vacia: false, v: 2 }, c: { f: "2026-07-01T00:00:00Z", vacia: true, v: 2 }, a: { f: "2026-10-20T00:00:00Z", vacia: true } };
     expect(tiendasQueTocan(tiendas, fichas, ahora).map((x) => x.placeId)).toEqual(["c", "b", "a"]);
   });
   it("el prompt lleva nombre y dirección de cada tienda", () => {
