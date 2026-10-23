@@ -49,6 +49,7 @@ function Tienda({ t, i }) {
           <h3 className="font-bold text-slate-900 leading-snug">{t.nombre}</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             {[t.localidad, t.km != null && `a ${String(t.km).replace(".", ",")} km`].filter(Boolean).join(" · ")}
+            {t.nota && t.resenas >= 5 && <span className="ml-2 font-semibold text-slate-700" aria-label={`${t.nota} estrellas en Google, ${t.resenas} reseñas`}>★ {String(t.nota).replace(".", ",")} <span className="font-normal text-slate-500">({t.resenas})</span></span>}
             <span className={`ml-2 inline-flex items-center h-5 px-2 rounded-full text-[11px] font-semibold ${t.precio === "capricho" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{t.precio === "capricho" ? "✨ Capricho" : "💸 Calidad-precio"}</span>
           </p>
           {t.motivo && <p className="text-sm font-semibold text-rose-700 mt-2 leading-relaxed">✨ {t.motivo}</p>}

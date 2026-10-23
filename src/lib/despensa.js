@@ -33,7 +33,7 @@ const claveCombo = (producto, zona) => `despensa:${producto}:${zona}`;
 const DIAS_REFRESCO = 90;
 const POR_PASADA = 6; // cada pasada cabe en el minuto que da Vercel (las 6 búsquedas van a la vez)
 export const TOPE_PLACES_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_PLACES) || 900);
-const PRECIO_DETALLE_DOLARES = 0.005;
+const PRECIO_DETALLE_DOLARES = 0.02; // Place Details Enterprise (trae la nota): 1.000 gratis al mes, luego 20 $/1.000
 const LIMITES = { latMin: 41.8, latMax: 43.45, lonMin: -7.35, lonMax: -4.45 };
 
 const normalizar = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9ñ ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -88,8 +88,31 @@ const claveGasto = () => `despensa:places:${mesActual()}`;
 // Tipos que dicen que Google no ha encontrado el negocio, solo el pueblo o la calle
 const NO_ES_NEGOCIO = ["locality", "political", "route", "street_address", "postal_code", "country", "sublocality", "neighborhood", "geocode"];
 
-// La ficha vale si es un negocio (no un pueblo), está en la provincia y en la zona buscada (o en su pueblo)
+// ¿La ficha de Google es el mismo negocio que dijo la IA? Basta con una palabra con sustancia en común
+const VACIAS = new Set(["casa", "hijos", "hermanos", "leon", "tienda", "panaderia", "carniceria", "charcuteria", "embutidos", "obrador", "confiteria", "horno", "bodega", "bodegas", "queseria", "pasteleria"]);
+export function pareceElMismo(nombreIA, nombreFicha) {
+  if (!nombreFicha) return true; // sin nombre en la ficha no se puede comparar: no se descarta por esto
+  const palabras = (t) => normalizar(t).split(" ").filter((w) => w.length >= 4 && !VACIAS.has(w));
+  const a = palabras(nombreIA), b = palabras(nombreFicha);
+  if (!a.length || !b.length) return true;
+  return a.some((w) => b.some((x) => x.startsWith(w.slice(0, 5)) || w.startsWith(x.slice(0, 5))));
+}
+
+// Nota con la que se ordena (1 a 10): 60 % la nota de Google ajustada por el número de reseñas, 40 % lo que dice la prensa (la IA).
+// Ajuste bayesiano: un 5,0 con 3 reseñas no gana a un 4,7 con 300. Con menos de 5 reseñas solo cuenta la prensa.
+export const notaAjustada = (nota, resenas) => (resenas * nota + 30 * 4.4) / (resenas + 30);
+export function puntuacionFinal({ prensa, nota, resenas }) {
+  if (!Number.isFinite(nota) || !(resenas >= 5)) return prensa;
+  return Math.round((0.6 * notaAjustada(nota, resenas) * 2 + 0.4 * prensa) * 10) / 10;
+}
+
+// La ficha vale si es un negocio (no un pueblo), está abierto, en la provincia y en la zona buscada (o en su pueblo),
+// es el mismo negocio que dijo la IA y no tiene mala nota en Google
 export function fichaValida(ficha, tienda, zona) {
+  if (ficha?.businessStatus && ficha.businessStatus !== "OPERATIONAL") return false;
+  if (!pareceElMismo(tienda.nombre, ficha?.displayName?.text)) return false;
+  const nota = Number(ficha?.rating), resenas = Number(ficha?.userRatingCount) || 0;
+  if (Number.isFinite(nota) && resenas >= 5 && notaAjustada(nota, resenas) < 3.8) return false;
   const lat = Number(ficha?.location?.latitude), lon = Number(ficha?.location?.longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
   if (lat < LIMITES.latMin || lat > LIMITES.latMax || lon < LIMITES.lonMin || lon > LIMITES.lonMax) return false;
@@ -113,7 +136,7 @@ async function pedirPlaces(url, opciones) {
 async function comprobarEnPlaces(tienda, zona) {
   const key = claveMaps();
   if (!key) return null;
-  const cache = `despensa:ficha:${normalizar(`${tienda.nombre} ${tienda.localidad}`).replace(/ /g, "-").slice(0, 90)}`;
+  const cache = `despensa:ficha2:${normalizar(`${tienda.nombre} ${tienda.localidad}`).replace(/ /g, "-").slice(0, 90)}`;
   const guardada = await leerJSON(cache).catch(() => null);
   if (guardada) return guardada.placeId ? guardada : null;
 
@@ -132,15 +155,18 @@ async function comprobarEnPlaces(tienda, zona) {
   const id = busqueda?.places?.[0]?.id;
   if (!id) { await guardarJSON(cache, { placeId: null }, DIAS_REFRESCO * 86400); return null; }
 
-  // Paso de pago (10.000 gratis al mes): dónde está y qué es. Con tope mensual.
+  // Paso de pago (nivel Enterprise por la nota: 1.000 gratis al mes): dónde está, qué es y cómo lo valoran. Con tope mensual (900).
   const usadas = Number(await comando(["INCRBY", claveGasto(), 1]));
   if (usadas === 1) await comando(["EXPIRE", claveGasto(), 40 * 86400]);
   if (usadas > TOPE_PLACES_MES) return "sinCupo";
   const ficha = await pedirPlaces(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=es`, {
-    headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": "id,location,formattedAddress,types" },
+    headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": "id,location,formattedAddress,types,displayName,businessStatus,rating,userRatingCount" },
   });
   const ok = fichaValida(ficha, tienda, zona);
-  const r = ok ? { placeId: id, lat: ficha.location.latitude, lon: ficha.location.longitude, direccion: limpiar(ficha.formattedAddress, 140) } : { placeId: null };
+  const nota = Number(ficha.rating);
+  const r = ok
+    ? { placeId: id, lat: ficha.location.latitude, lon: ficha.location.longitude, direccion: limpiar(ficha.formattedAddress, 140), nota: Number.isFinite(nota) ? nota : null, resenas: Number(ficha.userRatingCount) || 0 }
+    : { placeId: null };
   await guardarJSON(cache, r, DIAS_REFRESCO * 86400);
   return ok ? r : null;
 }
@@ -159,15 +185,18 @@ async function buscarYComprobar(busca, zona) {
     if (!(await fuenteValida(t, dominios))) return null;
     return comprobarEnPlaces(t, zona).catch((e) => { console.warn("[despensa] places:", e.message); return { error: e.message }; });
   }));
-  // Si Google Places falla (clave sin la API nueva activada, caída...), no se guarda nada: se repite en otra pasada
-  const fallo = fichas.find((f) => f?.error);
-  if (fallo) throw new Error(`Google Places: ${fallo.error}`);
+  // Si Google Places falla en TODAS (clave sin la API nueva activada, caída...), no se guarda nada: se repite en otra pasada.
+  // Si falla solo alguna, se guarda lo que sí se ha comprobado.
+  const errores = fichas.filter((f) => f?.error);
+  if (errores.length && errores.length === fichas.filter(Boolean).length) throw new Error(`Google Places: ${errores[0].error}`);
   // Sin cupo de Places este mes: no se guarda, se repite el mes que viene
   if (fichas.includes("sinCupo")) return { sinCupo: true, encontradas: tiendas.length };
   const buenas = [];
   tiendas.forEach((t, i) => {
     const f = fichas[i];
-    if (f && !buenas.some((b) => b.placeId === f.placeId)) buenas.push({ ...t, ...f });
+    if (f && !f.error && !buenas.some((b) => b.placeId === f.placeId)) {
+      buenas.push({ ...t, ...f, prensa: t.puntuacion, puntuacion: puntuacionFinal({ prensa: t.puntuacion, nota: f.nota, resenas: f.resenas }) });
+    }
   });
   buenas.sort((a, b) => b.puntuacion - a.puntuacion);
   return { encontradas: tiendas.length, buenas: buenas.slice(0, 5) };
@@ -314,6 +343,6 @@ export async function resumenDespensa() {
 // Lo que necesita la página pública (sin campos internos), ya listo para pasarlo al navegador
 export async function catalogoParaWeb() {
   const { tiendas } = await leerDespensa().catch(() => ({ tiendas: [] }));
-  return tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, producto, zona }) =>
-    ({ nombre, localidad, especialidad, porque, precio, puntuacion, fuente, placeId, lat, lon, producto, zona }));
+  return tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, producto, zona }) =>
+    ({ nombre, localidad, especialidad, porque, precio, puntuacion, nota: nota ?? null, resenas: resenas || 0, fuente, placeId, lat, lon, producto, zona }));
 }

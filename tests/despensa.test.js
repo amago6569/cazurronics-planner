@@ -1,6 +1,6 @@
 // npm test — Despensa de León: lo que se acepta de la IA, la ficha de Google, qué toca buscar y el top 3
 import { describe, expect, it } from "vitest";
-import { COMBINACIONES, fichaValida, pendientes, validarTiendaIA } from "../src/lib/despensa";
+import { COMBINACIONES, fichaValida, pareceElMismo, pendientes, puntuacionFinal, validarTiendaIA } from "../src/lib/despensa";
 import { enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
 
 describe("validarTiendaIA", () => {
@@ -130,5 +130,30 @@ describe("rutaMaps", () => {
   it("como mucho 4 paradas", () => {
     const muchas = Array.from({ length: 6 }, (_, i) => ({ ...cerca, nombre: `T${i}`, placeId: `P${i}`, lat: 42.6 + i / 100 }));
     expect(rutaMaps(muchas, leon).paradas).toHaveLength(4);
+  });
+});
+
+describe("nota de Google", () => {
+  it("un 5,0 con 3 reseñas no gana a un 4,7 con 300", () => {
+    const pocas = puntuacionFinal({ prensa: 7, nota: 5, resenas: 3 });
+    const muchas = puntuacionFinal({ prensa: 7, nota: 4.7, resenas: 300 });
+    expect(pocas).toBe(7); // con menos de 5 reseñas solo cuenta la prensa
+    expect(muchas).toBeGreaterThan(8);
+    expect(puntuacionFinal({ prensa: 7, nota: 4.7, resenas: 300 })).toBeGreaterThan(puntuacionFinal({ prensa: 7, nota: 4.9, resenas: 8 }));
+  });
+  it("sin nota, la de prensa", () => {
+    expect(puntuacionFinal({ prensa: 8, nota: null, resenas: 0 })).toBe(8);
+  });
+  it("la ficha tiene que ser el mismo negocio", () => {
+    expect(pareceElMismo("Cecinas Nieto", "Cecinas Nieto S.L.")).toBe(true);
+    expect(pareceElMismo("Embutidos Entrepeñas", "Entrepeñas")).toBe(true);
+    expect(pareceElMismo("Panadería La Espiga", "Bar El Rincón")).toBe(false);
+  });
+  it("fuera cerradas y con mala nota", () => {
+    const ficha = { location: { latitude: 42.4589, longitude: -6.0563 }, formattedAddress: "Calle Real 1, 24700 Astorga, León", types: ["store", "point_of_interest", "establishment"] };
+    const tienda = { nombre: "Mantecadas Velasco", localidad: "Astorga" };
+    expect(fichaValida({ ...ficha, businessStatus: "CLOSED_PERMANENTLY" }, tienda, "astorga")).toBe(false);
+    expect(fichaValida({ ...ficha, rating: 2.9, userRatingCount: 200 }, tienda, "astorga")).toBe(false);
+    expect(fichaValida({ ...ficha, rating: 4.6, userRatingCount: 200, businessStatus: "OPERATIONAL", displayName: { text: "Mantecadas Velasco" } }, tienda, "astorga")).toBe(true);
   });
 });
