@@ -21,7 +21,8 @@
 // Peor caso si no quedase nada gratis: 900 × 0,02 + 250 × 0,017 ≈ 22 $ al mes. Lo normal: 0 €.
 // Lo que no cabe en los topes se retoma el mes siguiente.
 import { aObjeto, comando, leerJSON, guardarJSON, varios } from "./almacen";
-import { PRODUCTOS } from "./despensaProductos";
+import { PRODUCTOS, categoriasDeProducto, notaAjustada } from "./despensaProductos";
+import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { hoyEnLeon } from "./estadisticas";
 import { ZONAS, zonaDe } from "./zonas";
 import { llamarGemini, extraerJSON } from "./gemini";
@@ -117,7 +118,7 @@ export function pareceElMismo(nombreIA, nombreFicha) {
 
 // Nota con la que se ordena (1 a 10): 60 % la nota de Google ajustada por el número de reseñas, 40 % lo que dice la prensa (la IA).
 // Ajuste bayesiano: un 5,0 con 3 reseñas no gana a un 4,7 con 300. Con menos de 5 reseñas solo cuenta la prensa.
-export const notaAjustada = (nota, resenas) => (resenas * nota + 30 * 4.4) / (resenas + 30);
+export { notaAjustada };
 export function puntuacionFinal({ prensa, nota, resenas }) {
   if (!Number.isFinite(nota) || !(resenas >= 5)) return prensa;
   return Math.round((0.6 * notaAjustada(nota, resenas) * 2 + 0.4 * prensa) * 10) / 10;
@@ -374,9 +375,18 @@ export async function resumenDespensa() {
   };
 }
 
-// Lo que necesita la página pública (sin campos internos), ya listo para pasarlo al navegador
-export async function catalogoParaWeb() {
+// Lo que necesita la página pública (sin campos internos), ya listo para pasarlo al navegador.
+// En la página de un producto, también las tiendas de Google Maps donde se compra (las de la IA van primero y no se repiten).
+export async function catalogoParaWeb({ producto } = {}) {
   const { tiendas } = await leerDespensa().catch(() => ({ tiendas: [] }));
-  return tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, producto, zona }) =>
-    ({ nombre, localidad, especialidad, porque, precio, puntuacion, nota: nota ?? null, resenas: resenas || 0, fuente, placeId, lat, lon, producto, zona }));
+  const lista = tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, producto: p, zona }) =>
+    ({ nombre, localidad, especialidad, porque, precio, puntuacion, nota: nota ?? null, resenas: resenas || 0, fuente, placeId, lat, lon, producto: p, zona }));
+  const cats = producto ? categoriasDeProducto(producto) : [];
+  if (!cats.length) return lista;
+  const ya = new Set(lista.filter((t) => t.producto === producto).map((t) => t.placeId));
+  const deGoogle = (await leerTiendasGoogle().catch(() => []))
+    .filter((t) => !ya.has(t.placeId) && (t.cats || []).some((c) => cats.includes(c)))
+    .map(({ nombre, localidad, nota, resenas, placeId, lat, lon, zona }) =>
+      ({ nombre, localidad, especialidad: null, porque: null, precio: null, puntuacion: puntuacionGoogle({ nota, resenas }), nota, resenas, fuente: null, placeId, lat, lon, producto, zona }));
+  return [...lista, ...deGoogle];
 }

@@ -26,14 +26,14 @@ export async function generateMetadata({ params }) {
 export default async function ProductoDespensa({ params }) {
   const p = productoPorId((await params).producto);
   if (!p) notFound();
-  const tiendas = await catalogoParaWeb();
+  const tiendas = await catalogoParaWeb({ producto: p.id });
   const porZona = ZONAS.map((z) => ({ z, top: topTiendas(tiendas.filter((t) => t.zona === z.id), { producto: p.id }) })).filter((x) => x.top.length);
   return (
     <PaginaContenido
       etiqueta="Despensa de León"
       titulo={`Dónde comprar ${p.nombre.toLowerCase()}`}
       destacado="en León"
-      intro={`Las mejores tiendas de ${p.nombre.toLowerCase()} de la provincia, cerca de donde estés. Las busca nuestra IA en prensa, guías y reseñas, y solo salen las que existen de verdad.`}
+      intro={`Las mejores tiendas de ${p.nombre.toLowerCase()} de la provincia, cerca de donde estés. Salen de Google Maps con su valoración y de lo que cuentan la prensa y las guías.`}
       ctaRef={`despensa-${p.id}`}
       actual={`/despensa/${p.id}`}
       arriba={<SelectorSeccion actual="despensa" className="cz-up" />}

@@ -49,8 +49,8 @@ function Tienda({ t, i }) {
           <h3 className="font-bold text-slate-900 leading-snug">{t.nombre}</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             {[t.localidad, t.km != null && `a ${String(t.km).replace(".", ",")} km`].filter(Boolean).join(" · ")}
-            {t.nota && t.resenas >= 5 && <span className="ml-2 font-semibold text-slate-700" aria-label={`${t.nota} estrellas en Google, ${t.resenas} reseñas`}>★ {String(t.nota).replace(".", ",")} <span className="font-normal text-slate-500">({t.resenas})</span></span>}
-            <span className={`ml-2 inline-flex items-center h-5 px-2 rounded-full text-[11px] font-semibold ${t.precio === "capricho" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{t.precio === "capricho" ? "✨ Capricho" : "💸 Calidad-precio"}</span>
+            {t.nota && t.resenas >= 5 && <span className="ml-2 font-semibold text-slate-700" aria-label={`${t.nota} estrellas en Google Maps, ${t.resenas} reseñas`}>★ {String(t.nota).replace(".", ",")} <span className="font-normal text-slate-500">({t.resenas}) en Google Maps</span></span>}
+            {t.precio && <span className={`ml-2 inline-flex items-center h-5 px-2 rounded-full text-[11px] font-semibold ${t.precio === "capricho" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{t.precio === "capricho" ? "✨ Capricho" : "💸 Calidad-precio"}</span>}
           </p>
           {t.motivo && <p className="text-sm font-semibold text-rose-700 mt-2 leading-relaxed">✨ {t.motivo}</p>}
           {t.especialidad && <p className={`text-sm font-semibold text-slate-800 ${t.motivo ? "mt-1.5" : "mt-2"}`}>{t.especialidad}</p>}
@@ -279,7 +279,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = null }) {
             ) : (
               <div className="bg-white/55 rounded-[1.4rem] p-5 text-center">
                 <p className="font-semibold text-slate-800">Todavía no tenemos {producto.nombre.toLowerCase()} {dondeRadio(radioSeguro, centro.nombre)}.</p>
-                <p className="text-sm text-slate-500 mt-1">{conTiendas.has(producto.id) ? "Prueba con más kilómetros u otra zona." : "Cada noche nuestra IA revisa tiendas nuevas de la provincia. Vuelve en unos días."}</p>
+                <p className="text-sm text-slate-500 mt-1">{conTiendas.has(producto.id) ? "Prueba con más kilómetros u otra zona." : "Cada noche repasamos las tiendas de la provincia. Vuelve en unos días."}</p>
                 {radioSeguro < 200 && <button type="button" onClick={() => { const r = RADIOS.find((x) => x > radioSeguro); if (r >= 200) toda(); else setRadio(r); }} className={`${PRESS} mt-3 h-10 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:text-rose-600`}>{RADIOS.find((r) => r > radioSeguro) >= 200 ? "Buscar en toda la provincia" : `Ampliar a ${RADIOS.find((r) => r > radioSeguro)} km`}</button>}
               </div>
             )}

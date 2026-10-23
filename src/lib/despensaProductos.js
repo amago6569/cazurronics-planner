@@ -22,6 +22,28 @@ export const PRODUCTOS = [
   { id: "fruta", nombre: "Fruta y verdura", emoji: "🍎", busca: "fruterías y fruta local (manzana reineta y pera conferencia del Bierzo, cerezas, tomate de Mansilla): fruterías y productores" },
 ];
 const POR_ID = Object.fromEntries(PRODUCTOS.map((p) => [p.id, p]));
+
+// Tipos de tienda que se barren en Google Maps (lib/despensaTiendas.js), con los productos que se compran en cada una.
+//  · busca: lo que se escribe en el buscador de Google Maps.
+//  · nombres: trozos del nombre que confirman el tipo (normalizados, sin tildes). tipos: tipos de Google que también valen.
+export const CATEGORIAS = [
+  { id: "carniceria", nombre: "Carnicería", busca: "carnicería", nombres: ["carnic", "carnes", "embutid", "chacin", "cecin"], tipos: ["butcher_shop"], productos: ["carne", "morcilla", "embutidos", "cecina", "botillo"] },
+  { id: "charcuteria", nombre: "Charcutería", busca: "charcutería embutidos cecina", nombres: ["charcut", "embutid", "chacin", "cecin", "jamon", "iberic", "matanza"], tipos: ["deli", "butcher_shop"], productos: ["embutidos", "cecina", "morcilla", "botillo", "quesos"] },
+  { id: "panaderia", nombre: "Panadería", busca: "panadería horno de pan", nombres: ["panad", "horno", "pan ", "masa madre", "obrador", "tahona"], tipos: ["bakery"], productos: ["pan", "empanadas"] },
+  { id: "pasteleria", nombre: "Pastelería", busca: "pastelería confitería", nombres: ["pastel", "confit", "dulce", "obrador", "reposter", "mantecad", "hojaldr"], tipos: ["bakery", "confectionery", "pastry_shop", "dessert_shop"], productos: ["pasteles", "dulces", "empanadas", "chocolate"] },
+  { id: "queseria", nombre: "Quesería", busca: "quesería tienda de quesos", nombres: ["queso", "queser", "lacteo"], tipos: ["cheese_shop"], productos: ["quesos"] },
+  { id: "fruteria", nombre: "Frutería", busca: "frutería verdulería", nombres: ["frut", "verdur", "hortal", "huerta"], tipos: [], productos: ["fruta", "pimientos"] },
+  { id: "pescaderia", nombre: "Pescadería", busca: "pescadería", nombres: ["pescad", "marisc", "pescado"], tipos: [], productos: ["pescado"] },
+  { id: "vinos", nombre: "Vinos y bodegas", busca: "vinoteca tienda de vinos bodega", nombres: ["vino", "vinot", "bodeg", "enotec", "licor", "cervec", "cerveza"], tipos: ["liquor_store", "winery"], productos: ["vino", "cerveza"] },
+  { id: "tipicos", nombre: "Productos de León", busca: "tienda de productos típicos leoneses ultramarinos delicatessen", nombres: ["tipic", "ultramar", "delicat", "gourmet", "despensa", "colmado", "producto", "leones", "tierra", "granel", "miel", "legumbr"], tipos: ["deli", "food_store", "grocery_store"], productos: ["cecina", "embutidos", "quesos", "legumbres", "pimientos", "miel", "dulces", "vino"] },
+  { id: "mercado", nombre: "Mercado", busca: "mercado de abastos", nombres: ["mercado", "abastos", "plaza de abastos"], tipos: ["market", "farmers_market"], productos: ["fruta", "pescado", "carne", "quesos", "pan", "embutidos"] },
+];
+// Nota de Google ajustada por el número de reseñas (bayesiana): un 5,0 con 3 reseñas no gana a un 4,7 con 300
+export const notaAjustada = (nota, resenas) => (resenas * nota + 30 * 4.4) / (resenas + 30);
+const CAT_POR_ID = Object.fromEntries(CATEGORIAS.map((c) => [c.id, c]));
+export const categoriaPorId = (id) => CAT_POR_ID[id] || null;
+// Las categorías donde se compra un producto ("morcilla" → carnicería, charcutería, mercado)
+export const categoriasDeProducto = (producto) => CATEGORIAS.filter((c) => c.productos.includes(producto)).map((c) => c.id);
 export const productoPorId = (id) => POR_ID[id] || null;
 
 function km(a1, o1, a2, o2) {
