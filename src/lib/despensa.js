@@ -4,9 +4,9 @@
 // Cómo se llena (de noche, con /api/despensa/barrido):
 //  1. Gemini con Google Search (solo modelos 2.x: búsquedas gratis) busca en webs, prensa, foros y reseñas
 //     los mejores sitios de UN producto en UNA comarca.
-//  2. Cada tienda necesita una fuente real (la misma comprobación que los eventos)...
-//  3. ...y una ficha real en Google Places. Igual que con los bares: sin ficha, fuera.
-//  4. Se guarda y no se vuelve a buscar en 90 días.
+//  2. Si trae una fuente (prensa, guía, su web) se comprueba que abre; si no abre, se quita el enlace, no la tienda.
+//  3. Lo obligatorio es una ficha real en Google Places, abierta y con buena nota. Igual que con los bares: sin ficha, fuera.
+//  4. Se guarda y no se vuelve a buscar en 90 días (si salió vacía, se reintenta a los 7).
 //
 // Lo que paga cada consulta de la gente: NADA si elige productos (la página filtra este catálogo).
 // Si escribe lo que busca, una IA barata elige entre estas tiendas (lib/despensaBuscar.js). Si pide algo que no
@@ -34,6 +34,7 @@ export const COMBINACIONES = ZONAS.flatMap((z) => PRODUCTOS.map((p) => ({ produc
 const claveCombo = (producto, zona) => `despensa:${producto}:${zona}`;
 
 const DIAS_REFRESCO = 90;
+const DIAS_REINTENTO_VACIA = 7; // una combinación sin ninguna tienda se vuelve a buscar a la semana
 const POR_PASADA = 6; // cada pasada cabe en el minuto que da Vercel (las 6 búsquedas van a la vez)
 export const TOPE_PLACES_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_PLACES) || 900);
 export const TOPE_PLACES_PRO_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_PLACES_PRO) || 250);
@@ -51,7 +52,7 @@ export function validarTiendaIA(t) {
   const nombre = limpiar(t.nombre, 80);
   const localidad = limpiar(t.localidad, 60);
   const fuente = typeof t.fuente === "string" && /^https?:\/\//.test(t.fuente) && !/vertexaisearch|grounding-api/.test(t.fuente) ? t.fuente : null;
-  if (!nombre || !localidad || !fuente) return null; // sin fuente verificable no se publica
+  if (!nombre || !localidad) return null; // la fuente es opcional: lo que decide es la ficha de Google Places
   const puntuacion = Math.min(10, Math.max(1, Math.round(Number(t.puntuacion) || 6)));
   return {
     nombre, localidad,
@@ -76,12 +77,12 @@ async function buscarConIA(busca, zona) {
     no estén en la cabecera de comarca. No rellenes con sitios flojos para llegar al número.
     Queremos los MEJORES o los más especiales, no un listado: máximo 5.
     REGLAS: solo negocios que existen y venden al público en esa zona, con local físico; nada de supermercados
-    ni grandes cadenas; no inventes nada; "fuente" es la página exacta donde lo has leído (no la web de Google).
+    ni grandes cadenas; no inventes nada; "fuente" es la página exacta donde lo has leído (no la web de Google) o null si no la tienes; no la inventes.
     Si no encuentras ninguno bueno, devuelve [].
     Devuelve SOLO un array JSON con este formato:
     [{"nombre":"nombre del negocio","localidad":"municipio exacto","direccion":"calle y número o null",
       "especialidad":"lo que hay que comprar ahí, corto","porque":"una frase con el motivo (premio, años, lo que dice la gente)",
-      "precio":"calidad-precio o capricho","puntuacion":"1 a 10 según lo bien que hablan de él","fuente":"https://..."}]
+      "precio":"calidad-precio o capricho","puntuacion":"1 a 10 según lo bien que hablan de él","fuente":"https://... o null"}]
   `;
   const { texto, dominios } = await llamarGemini(prompt, { para: "barrido", temperatura: 0.1, msMax: 38000 });
   const tiendas = (extraerJSON(texto, "[") || []).map(validarTiendaIA).filter(Boolean).slice(0, 6);
@@ -189,6 +190,7 @@ async function comprobarEnPlaces(tienda, zona) {
 
 // ---------- 3. Una combinación (producto + zona) ----------
 async function fuenteValida(tienda, dominios) {
+  if (!tienda.fuente) return false;
   if (dominioConsultado(tienda.fuente, dominios)) return true;
   return (await comprobarUrl(tienda.fuente)) === "ok";
 }
@@ -196,9 +198,10 @@ async function fuenteValida(tienda, dominios) {
 // Busca con IA y comprueba cada tienda. Devuelve { encontradas, buenas } o { sinCupo }. Si Places falla, lanza error.
 async function buscarYComprobar(busca, zona) {
   const { tiendas, dominios } = await buscarConIA(busca, zona);
-  // Cada tienda se comprueba a la vez (fuente + Places) para caber en el minuto de Vercel
+  // Cada tienda se comprueba a la vez (fuente + Places) para caber en el minuto de Vercel.
+  // Una fuente rota solo quita el enlace: la tienda sigue si Google Places la confirma.
   const fichas = await Promise.all(tiendas.map(async (t) => {
-    if (!(await fuenteValida(t, dominios))) return null;
+    if (t.fuente && !(await fuenteValida(t, dominios))) t.fuente = null;
     return comprobarEnPlaces(t, zona).catch((e) => { console.warn("[despensa] places:", e.message); return { error: e.message }; });
   }));
   // Si Google Places falla en TODAS (clave sin la API nueva activada, caída...), no se guarda nada: se repite en otra pasada.
@@ -221,7 +224,7 @@ async function buscarYComprobar(busca, zona) {
 export async function barrerCombinacion(producto, zona) {
   const r = await buscarYComprobar(PRODUCTO[producto].busca, zona);
   if (r.sinCupo) return { producto, zona, sinCupo: true, encontradas: r.encontradas, guardadas: 0 };
-  await guardarJSON(claveCombo(producto, zona), { fecha: new Date().toISOString(), tiendas: r.buenas });
+  await guardarJSON(claveCombo(producto, zona), { fecha: new Date().toISOString(), tiendas: r.buenas, vacia: !r.buenas.length });
   return { producto, zona, encontradas: r.encontradas, guardadas: r.buenas.length };
 }
 
@@ -269,19 +272,29 @@ async function barrerPeticion(p) {
 }
 
 // ---------- 4. La pasada nocturna ----------
-// Elige las combinaciones que faltan (o las que tienen más de 90 días) y las busca a la vez.
+// Elige las combinaciones que faltan (o las que tienen más de 90 días, o 7 si salieron vacías) y las busca a la vez.
+// `fechas` trae por combinación una fecha o { fecha, vacia }.
 export function pendientes(fechas, ahora = Date.now(), cuantas = POR_PASADA) {
-  const vieja = ahora - DIAS_REFRESCO * 86400000;
+  const vieja = ahora - DIAS_REFRESCO * 86400000, vaciaVieja = ahora - DIAS_REINTENTO_VACIA * 86400000;
   return COMBINACIONES
-    .map((c, i) => ({ ...c, fecha: fechas[i] ? Date.parse(fechas[i]) : 0 }))
-    .filter((c) => c.fecha < vieja)
+    .map((c, i) => {
+      const f = fechas[i], vacia = Boolean(f?.vacia), fecha = typeof f === "object" && f ? f.fecha : f;
+      return { ...c, fecha: fecha ? Date.parse(fecha) : 0, vacia };
+    })
+    .filter((c) => c.fecha < (c.vacia ? vaciaVieja : vieja))
     .sort((a, b) => a.fecha - b.fecha) // primero las que nunca se han hecho (en el orden de COMBINACIONES)
     .slice(0, cuantas);
 }
 
 async function fechasGuardadas() {
   const res = await varios(COMBINACIONES.map((c) => ["GET", claveCombo(c.producto, c.zona)]));
-  return res.map((v) => { try { return JSON.parse(v)?.fecha || null; } catch { return null; } });
+  return res.map((v) => {
+    try {
+      const d = JSON.parse(v);
+      if (!d?.fecha) return null;
+      return { fecha: d.fecha, vacia: d.vacia ?? !(d.tiendas || []).length };
+    } catch { return null; }
+  });
 }
 
 export async function barrerDespensa({ cuantas = POR_PASADA } = {}) {

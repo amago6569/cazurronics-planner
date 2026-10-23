@@ -8,9 +8,13 @@ describe("validarTiendaIA", () => {
   it("acepta una tienda con nombre, pueblo y fuente", () => {
     expect(validarTiendaIA(base)).toMatchObject({ nombre: "Embutidos Entrepeñas", localidad: "León", puntuacion: 9, precio: "calidad-precio" });
   });
-  it("sin fuente verificable no se publica", () => {
-    expect(validarTiendaIA({ ...base, fuente: null })).toBeNull();
-    expect(validarTiendaIA({ ...base, fuente: "https://vertexaisearch.cloud.google.com/x" })).toBeNull();
+  it("sin fuente la tienda sigue (decide Google Places), pero sin enlace", () => {
+    expect(validarTiendaIA({ ...base, fuente: null })).toMatchObject({ nombre: "Embutidos Entrepeñas", fuente: null });
+    expect(validarTiendaIA({ ...base, fuente: "https://vertexaisearch.cloud.google.com/x" })).toMatchObject({ fuente: null });
+  });
+  it("sin nombre o pueblo, fuera", () => {
+    expect(validarTiendaIA({ ...base, nombre: "" })).toBeNull();
+    expect(validarTiendaIA({ ...base, localidad: null })).toBeNull();
   });
   it("puntuación y precio raros se arreglan", () => {
     expect(validarTiendaIA({ ...base, puntuacion: 40, precio: "carísimo" })).toMatchObject({ puntuacion: 10, precio: "calidad-precio" });
@@ -41,6 +45,11 @@ describe("pendientes", () => {
     const ahora = Date.parse("2026-10-11");
     const fechas = COMBINACIONES.map((_, i) => (i === 0 ? "2026-06-01T00:00:00Z" : "2026-10-01T00:00:00Z"));
     expect(pendientes(fechas, ahora, 6)).toHaveLength(1);
+  });
+  it("las que salieron vacías se reintentan a los 7 días", () => {
+    const ahora = Date.parse("2026-10-23");
+    const fechas = COMBINACIONES.map((_, i) => ({ fecha: i < 2 ? "2026-10-12T00:00:00Z" : "2026-10-20T00:00:00Z", vacia: i !== 1 }));
+    expect(pendientes(fechas, ahora, 6).map((c) => `${c.producto}:${c.zona}`)).toEqual(["cecina:leon"]);
   });
 });
 
