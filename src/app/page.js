@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import BusinessModal from './components/BusinessModal';
+import SelectorSeccion from './components/SelectorSeccion';
 import Valorar from './components/Valorar';
 import AgendaFranjas from './components/AgendaFranjas';
 import { baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
@@ -584,6 +585,9 @@ export default function Home() {
         /* ───────────────────────── INICIO (Bento) ───────────────────────── */
         <div className="relative z-10 w-full max-w-6xl my-auto grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
 
+          {/* Planes | Despensa: las dos partes de Cazurronics, arriba del todo */}
+          <SelectorSeccion actual="planes" className="order-first lg:col-span-12 w-full lg:max-w-md lg:mx-auto cz-up" />
+
           {/* NUEVO: "¿Fuiste? ¿Qué tal?" si tiene un plan pasado sin valorar */}
           {pendienteValorar && (
             <div className="order-first lg:col-span-12">
@@ -714,6 +718,17 @@ export default function Home() {
               </button>
             </div>
           </form>
+
+          {/* Despensa: tarjeta grande justo debajo del formulario */}
+          <Link href="/despensa" className={`${GLASS} group/despensa order-3 lg:col-span-5 rounded-[2.25rem] p-5 sm:p-6 relative overflow-hidden flex items-center gap-4 transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:bg-white/70 active:scale-[0.98] cz-up`} style={{ animationDelay: "130ms" }}>
+            <span className="shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300 to-rose-400 flex items-center justify-center text-3xl shadow-[0_10px_24px_-10px_rgba(244,63,94,0.6)] transition-transform duration-500 group-hover/despensa:rotate-[-8deg] group-hover/despensa:scale-105" aria-hidden>🧺</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Despensa de León</span>
+              <span className="block text-lg font-bold tracking-tight text-slate-900 leading-snug mt-0.5">¿Una morcilla buena y pan de leña cerca?</span>
+              <span className="block text-sm text-slate-500 mt-0.5">Escríbelo y te decimos dónde comprarlo en toda la provincia.</span>
+            </span>
+            <span className="shrink-0 w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-lg transition-transform duration-300 group-hover/despensa:translate-x-1" aria-hidden>→</span>
+          </Link>
 
           {/* Valores: carrusel con snap en móvil, celdas bento en escritorio */}
           <section className="order-3 lg:col-span-5 cz-up" style={{ animationDelay: "160ms" }} aria-label="Nuestros valores">

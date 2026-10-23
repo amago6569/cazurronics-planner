@@ -1,27 +1,26 @@
 "use client";
-// Buscador de la Despensa de León. Dos formas de buscar:
+// Buscador de la Despensa de León. Sin presupuesto: solo lo que quieres y hasta dónde te mueves. Dos formas de buscar:
 //  · Escribes lo que quieres y la IA elige entre las tiendas comprobadas (/api/despensa/buscar, ~0,0007 $ por búsqueda).
 //    Si pides algo que no tenemos, se apunta y se busca esa noche.
 //  · Eliges productos con los botones: se filtra en el navegador con el catálogo que ya trae la página (0 €).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
-import { PRODUCTOS, enlaceMaps, productoPorId, topTiendas } from "../../lib/despensaProductos";
+import { PRODUCTOS, enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
 import { ZONAS, zonaPorId } from "../../lib/zonas";
 
-const RADIOS = [5, 10, 15, 30, 60];
-const PRESUPUESTOS = [
-  { id: "ajustado", texto: "Ajustado", emoji: "💸" },
-  { id: "igual", texto: "Me da igual", emoji: "👌" },
-  { id: "capricho", texto: "Capricho", emoji: "✨" },
-];
+// 200 km = toda la provincia. Sin presupuesto: la IA lo deduce de lo que escribes.
+const RADIOS = [5, 10, 15, 30, 60, 200];
+const PRESUPUESTO = "igual";
+const nombreRadio = (r) => (r >= 200 ? "Toda" : `${r} km`);
+const dondeRadio = (r, sitio) => (r >= 200 ? "en toda la provincia" : `a ${r} km de ${sitio}`);
 const MAX_PRODUCTOS = 4;
 const MEDALLAS = ["🥇", "🥈", "🥉"];
 const EJEMPLOS = [
+  { emoji: "🥖", texto: "Una morcilla y un buen pan" },
   { emoji: "🎁", texto: "Cecina buena para regalar" },
   { emoji: "🧀", texto: "Queso curado de oveja" },
   { emoji: "🧁", texto: "Mantecadas para llevar a Madrid" },
   { emoji: "🍷", texto: "Un Prieto Picudo para una cena" },
-  { emoji: "🥖", texto: "Pan de horno de leña" },
 ];
 const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 
@@ -64,12 +63,25 @@ function Tienda({ t, i }) {
   );
 }
 
+// Un botón que abre la ruta en Google Maps con la mejor tienda de cada cosa
+function BotonRuta({ ruta, sinMargen }) {
+  return (
+    <a href={ruta.url} target="_blank" rel="noopener noreferrer" className={`${PRESS} ${sinMargen ? "" : "mt-4"} group/ruta flex items-center gap-3 rounded-[1.4rem] bg-slate-900 text-white p-3.5 pr-4 shadow-[0_14px_30px_-14px_rgba(15,23,42,0.7)] hover:-translate-y-0.5 hover:bg-slate-800`}>
+      <span className="shrink-0 w-11 h-11 rounded-2xl bg-white/10 flex items-center justify-center text-xl" aria-hidden>🗺️</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-bold leading-snug">Ruta con la mejor de cada cosa</span>
+        <span className="block text-xs text-white/70 truncate">{ruta.paradas.map((t) => t.nombre).join(" → ")}</span>
+      </span>
+      <span className="shrink-0 text-lg transition-transform duration-300 group-hover/ruta:translate-x-1" aria-hidden>→</span>
+    </a>
+  );
+}
+
 export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }) {
   const [elegidos, setElegidos] = useState([productoInicial]);
   const [zona, setZona] = useState("leon");
   const [centro, setCentro] = useState(() => centroDe("leon"));
   const [radio, setRadio] = useState(15);
-  const [presupuesto, setPresupuesto] = useState("igual");
   const [aviso, setAviso] = useState("");
   const [texto, setTexto] = useState("");
   const [buscando, setBuscando] = useState(false);
@@ -88,8 +100,8 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
 
   const conTiendas = useMemo(() => new Set(tiendas.map((t) => t.producto)), [tiendas]);
   const resultados = useMemo(
-    () => elegidos.map((id) => ({ producto: productoPorId(id), top: topTiendas(tiendas, { producto: id, lat: centro.lat, lon: centro.lon, radio, presupuesto }) })),
-    [elegidos, tiendas, centro, radio, presupuesto],
+    () => elegidos.map((id) => ({ producto: productoPorId(id), top: topTiendas(tiendas, { producto: id, lat: centro.lat, lon: centro.lon, radio, presupuesto: PRESUPUESTO }) })),
+    [elegidos, tiendas, centro, radio],
   );
 
   const alternar = (id) => {
@@ -119,7 +131,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
     try {
       const r = await fetch("/api/despensa/buscar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto, lat: centro.lat, lon: centro.lon, radio, presupuesto }),
+        body: JSON.stringify({ texto, lat: centro.lat, lon: centro.lon, radio, presupuesto: PRESUPUESTO }),
       });
       const d = await r.json().catch(() => null);
       if (!d?.exito) { setAviso(d?.mensaje || "No hemos podido buscar. Prueba otra vez."); setIa(null); return; }
@@ -144,6 +156,10 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
   }, [ia]);
 
   const total = resultados.reduce((n, r) => n + r.top.length, 0);
+  // Ruta con la mejor tienda de cada cosa (solo si buscas 2 o más cosas). Desde tu ubicación si la has dado.
+  const origen = useMemo(() => (zona === "yo" ? centro : null), [zona, centro]);
+  const rutaIA = useMemo(() => (gruposIA.length > 1 ? rutaMaps(gruposIA.map((g) => g.tiendas[0]), origen) : null), [gruposIA, origen]);
+  const rutaProductos = useMemo(() => (resultados.filter((r) => r.top.length).length > 1 ? rutaMaps(resultados.map((r) => r.top[0]).filter(Boolean), origen) : null), [resultados, origen]);
   const conTexto = texto.trim().length >= 3;
 
   return (
@@ -154,7 +170,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
             rows="2" value={texto} maxLength={300} onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); buscar(); } }}
             className={`${INPUT} resize-none leading-relaxed`} aria-label="Qué quieres comprar"
-            placeholder="Ej: cecina buena para regalar y un queso curado"
+            placeholder="Ej: una morcilla buena y un pan de leña"
           />
           <div className="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:flex-wrap">
             {EJEMPLOS.map((s) => (
@@ -185,19 +201,10 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
               </button>
             ))}
           </div>
-          <div className="mt-3 grid grid-cols-5 gap-1.5 p-1.5 bg-white/45 rounded-2xl ring-1 ring-slate-900/5" role="radiogroup" aria-label="Radio">
+          <p className="mt-4 mb-2 px-1 text-[13px] font-semibold text-slate-500">¿Hasta dónde te mueves?</p>
+          <div className="grid grid-cols-6 gap-1 p-1.5 bg-white/45 rounded-2xl ring-1 ring-slate-900/5" role="radiogroup" aria-label="Distancia">
             {RADIOS.map((r) => (
-              <button key={r} type="button" role="radio" aria-checked={radio === r} onClick={() => setRadio(r)} className={`${PRESS} h-10 rounded-xl text-sm font-semibold tabular-nums ${radio === r ? "bg-white text-slate-900 shadow-[0_6px_16px_-8px_rgba(15,23,42,0.45)]" : "text-slate-500 hover:text-slate-800"}`}>{r} km</button>
-            ))}
-          </div>
-        </Paso>
-
-        <Paso n="3" titulo="Presupuesto">
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Presupuesto">
-            {PRESUPUESTOS.map((p) => (
-              <button key={p.id} type="button" role="radio" aria-checked={presupuesto === p.id} onClick={() => setPresupuesto(p.id)} className={`${PRESS} h-14 rounded-2xl text-sm font-semibold ring-1 flex flex-col items-center justify-center leading-tight ${presupuesto === p.id ? "bg-slate-900 text-white ring-slate-900 shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/60 text-slate-700 ring-slate-900/5 hover:bg-white"}`}>
-                <span className="text-lg">{p.emoji}</span>{p.texto}
-              </button>
+              <button key={r} type="button" role="radio" aria-checked={radio === r} aria-label={r >= 200 ? "Toda la provincia" : `${r} km`} onClick={() => setRadio(r)} className={`${PRESS} h-10 rounded-xl text-[13px] sm:text-sm font-semibold tabular-nums whitespace-nowrap ${radio === r ? "bg-white text-slate-900 shadow-[0_6px_16px_-8px_rgba(15,23,42,0.45)]" : "text-slate-500 hover:text-slate-800"}`}>{nombreRadio(r)}</button>
             ))}
           </div>
         </Paso>
@@ -226,11 +233,12 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
               <div className="px-1 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-rose-600">✨ Para «{ia.pregunta}»</p>
-                  <h2 className="text-xl font-bold tracking-tight text-slate-900 mt-0.5">Tu top a {ia.radio} km de {ia.sitio || centro.nombre}</h2>
+                  <h2 className="text-xl font-bold tracking-tight text-slate-900 mt-0.5">Tu top {dondeRadio(ia.radio, ia.sitio || centro.nombre)}</h2>
                   {ia.frase && <p className="text-sm text-slate-600 mt-1 leading-relaxed">{ia.frase}</p>}
                 </div>
                 <button type="button" onClick={() => setIa(null)} className={`${PRESS} shrink-0 h-9 px-3 rounded-full text-[13px] font-semibold text-slate-500 bg-white/60 ring-1 ring-slate-900/5 hover:text-rose-600`}>Cerrar</button>
               </div>
+              {rutaIA && <BotonRuta ruta={rutaIA} />}
               {gruposIA.map((g) => (
                 <div key={g.clave} className="mt-4">
                   {gruposIA.length > 1 && <h3 className="px-1 mb-2 text-[15px] font-bold text-slate-900 first-letter:uppercase">{g.titulo}</h3>}
@@ -239,7 +247,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
               ))}
               {!gruposIA.length && !ia.buscamos && (
                 <div className="bg-white/55 rounded-[1.4rem] p-5 text-center mt-4">
-                  <p className="font-semibold text-slate-800">No hemos encontrado nada que encaje a {ia.radio} km.</p>
+                  <p className="font-semibold text-slate-800">No hemos encontrado nada que encaje {ia.radio >= 200 ? "en la provincia" : `a ${ia.radio} km`}.</p>
                   <p className="text-sm text-slate-500 mt-1">Prueba con otras palabras o con más kilómetros.</p>
                 </div>
               )}
@@ -259,19 +267,22 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
             <p className="font-bold text-slate-900 mt-2">Elige al menos un producto</p>
           </section>
         )}
+        {!buscando && !ia && rutaProductos && (
+          <section className={`${GLASS} rounded-[2rem] p-4 sm:p-5 cz-up`}><BotonRuta ruta={rutaProductos} sinMargen /></section>
+        )}
         {!buscando && !ia && resultados.map(({ producto, top }) => (
           <section key={producto.id} className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up`}>
             <div className="px-1 mb-3">
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{producto.emoji} {producto.nombre}</h2>
-              <p className="text-sm text-slate-500">Top 3 a {radio} km de {centro.nombre}</p>
+              <p className="text-sm text-slate-500">Top 3 {dondeRadio(radio, centro.nombre)}</p>
             </div>
             {top.length ? (
               <ol className="grid gap-2.5 lg:grid-cols-3">{top.map((t, i) => <Tienda key={t.placeId || t.nombre} t={t} i={i} />)}</ol>
             ) : (
               <div className="bg-white/55 rounded-[1.4rem] p-5 text-center">
-                <p className="font-semibold text-slate-800">Todavía no tenemos {producto.nombre.toLowerCase()} a {radio} km de {centro.nombre}.</p>
+                <p className="font-semibold text-slate-800">Todavía no tenemos {producto.nombre.toLowerCase()} {dondeRadio(radio, centro.nombre)}.</p>
                 <p className="text-sm text-slate-500 mt-1">{conTiendas.has(producto.id) ? "Prueba con más kilómetros u otra zona." : "Cada noche nuestra IA revisa tiendas nuevas de la provincia. Vuelve en unos días."}</p>
-                {radio < 60 && <button type="button" onClick={() => setRadio(RADIOS.find((r) => r > radio))} className={`${PRESS} mt-3 h-10 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:text-rose-600`}>Ampliar a {RADIOS.find((r) => r > radio)} km</button>}
+                {radio < 200 && <button type="button" onClick={() => setRadio(RADIOS.find((r) => r > radio))} className={`${PRESS} mt-3 h-10 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:text-rose-600`}>{RADIOS.find((r) => r > radio) >= 200 ? "Buscar en toda la provincia" : `Ampliar a ${RADIOS.find((r) => r > radio)} km`}</button>}
               </div>
             )}
           </section>

@@ -1,7 +1,7 @@
 // npm test — Despensa de León: lo que se acepta de la IA, la ficha de Google, qué toca buscar y el top 3
 import { describe, expect, it } from "vitest";
 import { COMBINACIONES, fichaValida, pendientes, validarTiendaIA } from "../src/lib/despensa";
-import { enlaceMaps, topTiendas } from "../src/lib/despensaProductos";
+import { enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
 
 describe("validarTiendaIA", () => {
   const base = { nombre: "Embutidos Entrepeñas", localidad: "León", fuente: "https://www.diariodeleon.es/x", puntuacion: "9", precio: "calidad-precio" };
@@ -105,5 +105,28 @@ describe("buscar con tus palabras", async () => {
     expect(limpiarPeticion("??")).toBeNull();
     const todas = [{ id: "c", fecha: "3" }, { id: "b", fecha: "2", hecha: true }, { id: "a", fecha: "1" }];
     expect(peticionesPendientes(todas, 2).map((p) => p.id)).toEqual(["a", "c"]);
+  });
+});
+
+describe("rutaMaps", () => {
+  const leon = { lat: 42.5987, lon: -5.5671 };
+  const cerca = { nombre: "Carnicería Cerca", localidad: "León", lat: 42.60, lon: -5.57, placeId: "A" };
+  const lejos = { nombre: "Horno Lejos", localidad: "Boñar", lat: 42.87, lon: -5.32, placeId: "B" };
+  const medio = { nombre: "Panadería Medio", localidad: "Villaquilambre", lat: 42.64, lon: -5.55, placeId: "C" };
+  it("con una sola tienda no hay ruta", () => {
+    expect(rutaMaps([cerca], leon)).toBeNull();
+  });
+  it("va de la más cercana a la más lejana y acaba en la última", () => {
+    const r = rutaMaps([lejos, cerca, medio], leon);
+    expect(r.paradas.map((t) => t.nombre)).toEqual(["Carnicería Cerca", "Panadería Medio", "Horno Lejos"]);
+    const u = new URL(r.url);
+    expect(u.searchParams.get("destination")).toBe("Horno Lejos, Boñar");
+    expect(u.searchParams.get("waypoints")).toBe("Carnicería Cerca, León|Panadería Medio, Villaquilambre");
+    expect(u.searchParams.get("waypoint_place_ids")).toBe("A|C");
+    expect(u.searchParams.get("origin")).toBe("42.5987,-5.5671");
+  });
+  it("como mucho 4 paradas", () => {
+    const muchas = Array.from({ length: 6 }, (_, i) => ({ ...cerca, nombre: `T${i}`, placeId: `P${i}`, lat: 42.6 + i / 100 }));
+    expect(rutaMaps(muchas, leon).paradas).toHaveLength(4);
   });
 });

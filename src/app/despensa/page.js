@@ -2,6 +2,7 @@
 import Link from "next/link";
 import PaginaContenido from "../components/PaginaContenido";
 import BuscadorDespensa from "../components/BuscadorDespensa";
+import SelectorSeccion from "../components/SelectorSeccion";
 import { catalogoParaWeb } from "../../lib/despensa";
 import { PRODUCTOS } from "../../lib/despensaProductos";
 import { GLASS } from "../../lib/estilos";
@@ -9,7 +10,7 @@ import { GLASS } from "../../lib/estilos";
 export const revalidate = 3600;
 export const metadata = {
   title: "Despensa de León: dónde comprar cecina, quesos, pan y vino de León · Cazurronics",
-  description: "Elige qué quieres comprar, la zona y tu presupuesto y te damos las 3 mejores tiendas de la provincia de León. Cecina, embutido, quesos, mantecadas, vino y más.",
+  description: "Escribe qué quieres comprar y hasta dónde te mueves, y te damos las mejores tiendas de la provincia de León. Morcilla, cecina, pan, quesos, mantecadas, vino y más.",
   alternates: { canonical: "/despensa" },
 };
 
@@ -20,9 +21,10 @@ export default async function Despensa() {
       etiqueta="Despensa de León"
       titulo="Lo mejor de León,"
       destacado="para llevar a casa"
-      intro="Escribe qué quieres comprar, o elige productos, y dinos por dónde te mueves. Te damos las 3 mejores tiendas de cada cosa. Las busca nuestra IA en prensa, guías y reseñas, y solo salen las que existen de verdad."
+      intro="Escribe qué quieres comprar y hasta dónde te mueves. Te damos las mejores tiendas de cada cosa en toda la provincia, y la ruta para pasar por todas. Las busca nuestra IA en prensa, guías y reseñas, y solo salen las que existen de verdad."
       ctaRef="despensa"
       actual="/despensa"
+      arriba={<SelectorSeccion actual="despensa" className="cz-up" />}
     >
       <BuscadorDespensa tiendas={tiendas} />
       <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6`}>
