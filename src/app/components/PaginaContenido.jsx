@@ -13,7 +13,7 @@ export const PAGINAS = [
   ["/que-hacer-manana-en-leon", "🗓️ Mañana"],
 ];
 
-export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ctaRef, children, actual }) {
+export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ctaRef, children, actual, arriba }) {
   return (
     <main className="min-h-[100dvh] px-4 pt-4 pb-16 sm:px-6 text-slate-800 antialiased">
       <Fondo />
@@ -22,6 +22,8 @@ export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ct
           <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-slate-900"><span className="text-2xl">🦁</span><span className="hidden sm:inline">Cazurronics</span></Link>
           <Link href={`/?ref=${ctaRef}`} className={`${BOTON_CTA} h-11 px-4 text-sm`}>✨ Créame un plan</Link>
         </header>
+
+        {arriba}
 
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-9 relative overflow-hidden cz-up`}>
           <img src="/roseton.png" alt="" aria-hidden className="pointer-events-none absolute -right-20 -top-20 w-64 h-64 object-cover rounded-full opacity-[0.18]" />

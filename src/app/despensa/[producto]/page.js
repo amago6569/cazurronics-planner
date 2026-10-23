@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import PaginaContenido from "../../components/PaginaContenido";
 import BuscadorDespensa from "../../components/BuscadorDespensa";
+import SelectorSeccion from "../../components/SelectorSeccion";
 import { catalogoParaWeb } from "../../../lib/despensa";
 import { PRODUCTOS, enlaceMaps, productoPorId, topTiendas } from "../../../lib/despensaProductos";
 import { ZONAS } from "../../../lib/zonas";
@@ -35,6 +36,7 @@ export default async function ProductoDespensa({ params }) {
       intro={`Las mejores tiendas de ${p.nombre.toLowerCase()} de la provincia, cerca de donde estés. Las busca nuestra IA en prensa, guías y reseñas, y solo salen las que existen de verdad.`}
       ctaRef={`despensa-${p.id}`}
       actual={`/despensa/${p.id}`}
+      arriba={<SelectorSeccion actual="despensa" className="cz-up" />}
     >
       <BuscadorDespensa tiendas={tiendas} productoInicial={p.id} />
       {porZona.length > 0 && (

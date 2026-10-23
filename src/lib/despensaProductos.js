@@ -4,6 +4,7 @@
 export const PRODUCTOS = [
   { id: "cecina", nombre: "Cecina", emoji: "🥩", busca: "cecina de vacuno: cecineros, charcuterías y tiendas de producto leonés que la venden" },
   { id: "embutidos", nombre: "Chorizo y embutido", emoji: "🌭", busca: "chorizo, salchichón, lomo y embutido artesano: fábricas con tienda, charcuterías y carnicerías que lo elaboran" },
+  { id: "morcilla", nombre: "Morcilla", emoji: "🥘", busca: "morcilla de León (de arroz y cebolla, ahumada): carnicerías, charcuterías y fábricas con tienda que la elaboran" },
   { id: "botillo", nombre: "Botillo", emoji: "🐖", busca: "botillo del Bierzo y botillo artesano: quién lo elabora y lo vende" },
   { id: "quesos", nombre: "Quesos", emoji: "🧀", busca: "quesos artesanos: queserías con venta directa y tiendas especializadas en queso" },
   { id: "pan", nombre: "Pan artesano", emoji: "🥖", busca: "pan artesano, de masa madre o de horno de leña: panaderías y hornos" },
@@ -40,7 +41,8 @@ export function topTiendas(tiendas, { producto, lat, lon, radio, presupuesto, cu
     .filter((t) => !conCentro || !(radio > 0) || (t.km != null && t.km <= radio))
     .sort((a, b) => {
       if (presupuesto === "capricho" && a.precio !== b.precio) return a.precio === "capricho" ? -1 : 1;
-      return b.puntuacion - a.puntuacion || (a.km ?? 0) - (b.km ?? 0);
+      // A igual nota, primero calidad-precio (salvo que pida capricho)
+      return b.puntuacion - a.puntuacion || Number(a.precio === "capricho") - Number(b.precio === "capricho") || (a.km ?? 0) - (b.km ?? 0);
     })
     .filter((t) => { const k = t.placeId || `${t.nombre}|${t.localidad}`; if (vistas.has(k)) return false; vistas.add(k); return true; })
     .slice(0, cuantas);
@@ -50,4 +52,30 @@ export function topTiendas(tiendas, { producto, lat, lon, radio, presupuesto, cu
 export function enlaceMaps(t) {
   const q = encodeURIComponent(`${t.nombre}, ${t.localidad}`);
   return `https://www.google.com/maps/search/?api=1&query=${q}${t.placeId ? `&query_place_id=${encodeURIComponent(t.placeId)}` : ""}`;
+}
+
+// Ruta en Google Maps por varias tiendas (gratis: es un enlace, no llama a ninguna API).
+// Ordena las paradas yendo siempre a la más cercana desde donde estás. Máximo 4 paradas:
+// en el móvil Google Maps solo admite 3 intermedias más el destino.
+export const MAX_PARADAS = 4;
+export function rutaMaps(tiendas, origen) {
+  let quedan = (tiendas || []).filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lon)).slice(0, MAX_PARADAS);
+  if (quedan.length < 2) return null;
+  const orden = [];
+  let aqui = origen && Number.isFinite(origen.lat) ? origen : quedan[0];
+  while (quedan.length) {
+    const sig = quedan.reduce((a, b) => (km(aqui.lat, aqui.lon, b.lat, b.lon) < km(aqui.lat, aqui.lon, a.lat, a.lon) ? b : a));
+    orden.push(sig);
+    quedan = quedan.filter((t) => t !== sig);
+    aqui = sig;
+  }
+  const sitio = (t) => `${t.nombre}, ${t.localidad}`;
+  const destino = orden[orden.length - 1];
+  const intermedias = orden.slice(0, -1);
+  const p = new URLSearchParams({ api: "1", travelmode: "driving", destination: sitio(destino) });
+  if (origen && Number.isFinite(origen.lat)) p.set("origin", `${origen.lat},${origen.lon}`);
+  if (destino.placeId) p.set("destination_place_id", destino.placeId);
+  p.set("waypoints", intermedias.map(sitio).join("|"));
+  if (intermedias.every((t) => t.placeId)) p.set("waypoint_place_ids", intermedias.map((t) => t.placeId).join("|"));
+  return { url: `https://www.google.com/maps/dir/?${p}`, paradas: orden };
 }
