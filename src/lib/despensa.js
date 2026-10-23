@@ -326,6 +326,11 @@ export async function barrerDespensa({ cuantas = POR_PASADA } = {}) {
 }
 
 // ---------- 5. Leer el catálogo (la web y el panel) ----------
+export function zonaDeTiendaIA(t, zonaBuscada) {
+  const z = zonaDe({ localidad: t.localidad, lat: t.lat, lon: t.lon });
+  return ZONAS.some((x) => x.id === z) ? z : zonaBuscada;
+}
+
 // conPedidas: también las tiendas de lo que pidió la gente (las usa la IA del buscador; la página no las necesita)
 export async function leerDespensa({ conPedidas = false } = {}) {
   const res = await varios(COMBINACIONES.map((c) => ["GET", claveCombo(c.producto, c.zona)])).catch(() => []);
@@ -336,7 +341,8 @@ export async function leerDespensa({ conPedidas = false } = {}) {
     try { d = JSON.parse(v); } catch { /* sin datos */ }
     if (!d) return;
     hechas++;
-    for (const t of d.tiendas || []) tiendas.push({ ...t, producto: COMBINACIONES[i].producto, zona: COMBINACIONES[i].zona });
+    // La comarca de la tienda es donde está, no donde se buscó (la IA a veces trae una de la comarca de al lado)
+    for (const t of d.tiendas || []) tiendas.push({ ...t, producto: COMBINACIONES[i].producto, zona: zonaDeTiendaIA(t, COMBINACIONES[i].zona) });
   });
   if (conPedidas) {
     const ids = Object.keys(aObjeto(await comando(["HGETALL", LIBRES]).catch(() => [])));

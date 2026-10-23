@@ -66,7 +66,13 @@ export function topTiendas(tiendas, { producto, lat, lon, radio, presupuesto, cu
       // A igual nota, primero calidad-precio (salvo que pida capricho)
       return b.puntuacion - a.puntuacion || Number(a.precio === "capricho") - Number(b.precio === "capricho") || (a.km ?? 0) - (b.km ?? 0);
     })
-    .filter((t) => { const k = t.placeId || `${t.nombre}|${t.localidad}`; if (vistas.has(k)) return false; vistas.add(k); return true; })
+    // Sin repetir: ni la misma ficha ni dos locales con el mismo nombre en el mismo pueblo (sucursales)
+    .filter((t) => {
+      const ks = [t.placeId, `${t.nombre}|${t.localidad}`.toLowerCase()].filter(Boolean);
+      if (ks.some((k) => vistas.has(k))) return false;
+      ks.forEach((k) => vistas.add(k));
+      return true;
+    })
     .slice(0, cuantas);
 }
 

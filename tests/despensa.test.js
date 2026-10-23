@@ -1,6 +1,6 @@
 // npm test — Despensa de León: lo que se acepta de la IA, la ficha de Google, qué toca buscar y el top 3
 import { describe, expect, it } from "vitest";
-import { COMBINACIONES, fichaValida, pareceElMismo, pendientes, puntuacionFinal, validarTiendaIA } from "../src/lib/despensa";
+import { COMBINACIONES, fichaValida, pareceElMismo, pendientes, puntuacionFinal, validarTiendaIA, zonaDeTiendaIA } from "../src/lib/despensa";
 import { enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
 
 describe("validarTiendaIA", () => {
@@ -166,5 +166,14 @@ describe("nota de Google", () => {
     expect(fichaValida({ ...ficha, businessStatus: "CLOSED_PERMANENTLY" }, tienda, "astorga")).toBe(false);
     expect(fichaValida({ ...ficha, rating: 2.9, userRatingCount: 200 }, tienda, "astorga")).toBe(false);
     expect(fichaValida({ ...ficha, rating: 4.6, userRatingCount: 200, businessStatus: "OPERATIONAL", displayName: { text: "Mantecadas Velasco" } }, tienda, "astorga")).toBe(true);
+  });
+});
+
+describe("zonaDeTiendaIA", () => {
+  it("una tienda de Sabero buscada en el Bierzo va a la Montaña", () => {
+    expect(zonaDeTiendaIA({ localidad: "Sahelices de Sabero", lat: 42.83, lon: -5.18 }, "bierzo")).toBe("oriental");
+  });
+  it("una tienda de León capital buscada en La Bañeza va a León", () => {
+    expect(zonaDeTiendaIA({ localidad: "León", lat: 42.6, lon: -5.57 }, "baneza")).toBe("leon");
   });
 });
