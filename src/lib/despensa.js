@@ -23,6 +23,7 @@
 import { aObjeto, comando, leerJSON, guardarJSON, varios } from "./almacen";
 import { PRODUCTOS, categoriasDeProducto, notaAjustada } from "./despensaProductos";
 import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
+import { leerFichas } from "./despensaFichas";
 import { hoyEnLeon } from "./estadisticas";
 import { ZONAS, zonaDe } from "./zonas";
 import { llamarGemini, extraerJSON } from "./gemini";
@@ -390,9 +391,19 @@ export async function catalogoParaWeb({ producto } = {}) {
   const cats = producto ? categoriasDeProducto(producto) : [];
   if (!cats.length) return lista;
   const ya = new Set(lista.filter((t) => t.producto === producto).map((t) => t.placeId));
-  const deGoogle = (await leerTiendasGoogle().catch(() => []))
+  const [google, fichas] = await Promise.all([leerTiendasGoogle().catch(() => []), leerFichas().catch(() => ({}))]);
+  // Con lo investigado de cada tienda (lib/despensaFichas.js): un premio suma 1 punto y las especialidades, 0,3
+  const deGoogle = google
     .filter((t) => !ya.has(t.placeId) && (t.cats || []).some((c) => cats.includes(c)))
-    .map(({ nombre, localidad, nota, resenas, placeId, lat, lon, zona }) =>
-      ({ nombre, localidad, especialidad: null, porque: null, precio: null, puntuacion: puntuacionGoogle({ nota, resenas }), nota, resenas, fuente: null, placeId, lat, lon, producto, zona }));
+    .map(({ nombre, localidad, nota, resenas, placeId, lat, lon, zona }) => {
+      const f = fichas[placeId];
+      const premios = (f?.premios || []).map((x) => (x.anio ? `${x.que} (${x.anio})` : x.que));
+      const extra = (premios.length ? 1 : 0) + (f?.especialidades?.length ? 0.3 : 0);
+      return {
+        nombre, localidad, especialidad: f?.especialidades?.join(", ") || null, porque: f?.destaca || null, premios, precio: null,
+        puntuacion: Math.min(10, Math.round((puntuacionGoogle({ nota, resenas }) + extra) * 10) / 10),
+        nota, resenas, fuente: f?.premios?.[0]?.fuente || f?.fuente || null, placeId, lat, lon, producto, zona,
+      };
+    });
   return [...lista, ...deGoogle];
 }

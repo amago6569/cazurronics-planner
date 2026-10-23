@@ -48,7 +48,7 @@ export default async function ProductoDespensa({ params }) {
                 <h3 className="font-semibold text-slate-900">{z.emoji} {z.nombre}</h3>
                 <ol className="mt-2 space-y-1.5 text-sm">
                   {top.map((t, i) => (
-                    <li key={t.placeId || t.nombre}><span className="tabular-nums text-slate-400 mr-1">{i + 1}.</span><a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className="font-medium text-slate-800 hover:text-rose-600">{t.nombre}</a> <span className="text-slate-500">· {t.localidad}</span></li>
+                    <li key={t.placeId || t.nombre}><span className="tabular-nums text-slate-400 mr-1">{i + 1}.</span><a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className="font-medium text-slate-800 hover:text-rose-600">{t.nombre}</a> <span className="text-slate-500">· {t.localidad}</span>{t.premios?.length > 0 && <span title={t.premios[0]}> 🏆</span>}</li>
                   ))}
                 </ol>
               </div>

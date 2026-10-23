@@ -30,8 +30,17 @@ function Tienda({ t }) {
             {[t.localidad, t.km != null && `a ${String(t.km).replace(".", ",")} km`].filter(Boolean).join(" · ")}
             {t.nota && t.resenas >= 5 && <span className="ml-2 font-semibold text-slate-700" aria-label={`${t.nota} estrellas en Google Maps, ${t.resenas} reseñas`}>★ {String(t.nota).replace(".", ",")} <span className="font-normal text-slate-500">({t.resenas})</span></span>}
           </p>
-          {(t.motivo || t.especialidad) && <p className="text-sm text-slate-700 mt-2 leading-relaxed">{t.motivo || t.especialidad}</p>}
-          <a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className={`${PRESS} mt-3 inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] hover:bg-slate-800 hover:-translate-y-0.5`}>📍 Cómo llegar</a>
+          {t.premios?.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {t.premios.slice(0, 2).map((p) => <li key={p} className="text-[13px] font-semibold text-amber-800 bg-amber-50 ring-1 ring-amber-200/70 rounded-xl px-2.5 py-1.5 leading-snug">🏆 {p}</li>)}
+            </ul>
+          )}
+          {t.motivo && <p className="text-sm text-slate-700 mt-2 leading-relaxed">{t.motivo}</p>}
+          {t.especialidad && <p className="text-xs text-slate-500 mt-1.5"><span className="font-semibold text-slate-700">Conocida por:</span> {t.especialidad}</p>}
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+          <a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] hover:bg-slate-800 hover:-translate-y-0.5`}>📍 Cómo llegar</a>
+            {t.fuente && <a href={t.fuente} target="_blank" rel="noopener noreferrer nofollow" className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>Fuente ↗</a>}
+          </div>
         </div>
       </div>
     </li>
