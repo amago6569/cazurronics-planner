@@ -91,11 +91,14 @@ export function promptBusqueda(texto, candidatos, { radio, presupuesto, sitio })
     2. Elige las mejores tiendas de la lista para eso: hasta 3 por cada cosa que pide, ${MAX_RESULTADOS} como mucho.
        Prioriza lo que mejor encaja con lo que ha escrito, luego la nota y luego la cercanía.
     3. NUNCA inventes tiendas ni datos: solo refs de la lista. Si ninguna encaja con algo, no lo rellenes con otra cosa.
-    4. Si pide un producto de alimentación (o artesanía leonesa) que no está en la lista, ponlo en "falta" con 1 a 4 palabras
-       ("aceite de oliva", "queso de cabra"). Si pide algo que no se compra en una tienda de producto, "falta" es null.
+    4. Si pide un producto de alimentación (o artesanía leonesa) que no está en la lista, ponlo en "falta" con 1 a 5 palabras
+       ("aceite de oliva", "queso de cabra"). También si pide una variante concreta que ninguna tienda dice tener en su
+       especialidad: pide "cecina de chivo" y solo hay cecina de vacuno → recomienda la de vacuno si encaja, dilo en la frase,
+       y pon "falta": "cecina de chivo". Si pide algo que no se compra en una tienda de producto, "falta" es null.
+    5. "lugar": el pueblo o barrio que nombra la persona ("en Boñar" → "Boñar"), o null si no nombra ninguno.
     Escribe en español de España, cercano y breve, sin exagerar.
     Devuelve SOLO este JSON:
-    {"frase":"una frase para la persona sobre lo que le recomiendas","tiendas":[{"ref":"t1","para":"lo que compra ahí, 1 a 3 palabras","motivo":"por qué encaja con lo que ha pedido, una frase"}],"falta":null}
+    {"frase":"una frase para la persona sobre lo que le recomiendas","tiendas":[{"ref":"t1","para":"lo que compra ahí, 1 a 3 palabras","motivo":"por qué encaja con lo que ha pedido, una frase"}],"falta":null,"lugar":null}
   `;
 }
 
@@ -112,7 +115,8 @@ export function validarRespuesta(r, candidatos) {
     if (tiendas.length >= MAX_RESULTADOS) break;
   }
   const falta = typeof r?.falta === "string" && !/^(null|ninguno|nada)$/i.test(r.falta.trim()) ? limpiar(r.falta, 60) || null : null;
-  return { frase: limpiar(r?.frase, 240) || null, tiendas, falta };
+  const lugar = typeof r?.lugar === "string" && !/^(null|ninguno)$/i.test(r.lugar.trim()) ? limpiar(r.lugar, 40) || null : null;
+  return { frase: limpiar(r?.frase, 240) || null, tiendas, falta, lugar };
 }
 
 // Lo que ve el navegador de cada tienda (sin campos internos)
@@ -143,7 +147,9 @@ export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) 
   let buscamos = null;
   if (elegido.falta) {
     const zona = otraZona || zonaDe(centro) || "leon";
-    if (await pedirBusqueda(elegido.falta, zona).catch(() => false)) buscamos = elegido.falta;
+    // Si nombra un pueblo, se busca allí ("cecina de chivo cerca de Boñar"): así salen los sitios pequeños de ese pueblo
+    const pedido = elegido.lugar ? `${elegido.falta} cerca de ${elegido.lugar}` : elegido.falta;
+    if (await pedirBusqueda(pedido, zona).catch(() => false)) buscamos = elegido.falta;
   }
   return { frase: elegido.frase, tiendas: elegido.tiendas.map(publica), buscamos, radio: radioUsado, sitio: otraZona ? ZONAS.find((x) => x.id === otraZona).corto : null };
 }

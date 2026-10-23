@@ -14,9 +14,12 @@
 //
 // Coste de la comprobación en Google Places (API nueva, tarifa de octubre de 2026):
 //  · Text Search "solo ID" (places.id): GRATIS sin límite. Nos dice qué ficha es.
-//  · Place Details Essentials (ubicación, dirección, tipos): 10.000 gratis al mes, luego 5 $ cada 1.000.
-// TOPE_PLACES_MES corta las comprobaciones de pago al mes: aunque no quedase nada gratis,
-// el peor caso es 900 × 5 $ / 1.000 = 4,5 $ al mes. Lo pendiente se retoma el mes siguiente.
+//  · Place Details Enterprise (ubicación, nombre, si está abierto, nota y reseñas): 1.000 gratis al mes, luego 20 $/1.000.
+//    Tope TOPE_PLACES_MES = 900 al mes.
+//  · Cuando se acaba ese tope, Place Details Pro (lo mismo sin la nota): 5.000 gratis al mes, luego 17 $/1.000.
+//    Tope TOPE_PLACES_PRO_MES = 250 al mes (súbelo con DESPENSA_TOPE_PLACES_PRO cuando la factura confirme 0 €).
+// Peor caso si no quedase nada gratis: 900 × 0,02 + 250 × 0,017 ≈ 22 $ al mes. Lo normal: 0 €.
+// Lo que no cabe en los topes se retoma el mes siguiente.
 import { aObjeto, comando, leerJSON, guardarJSON, varios } from "./almacen";
 import { PRODUCTOS } from "./despensaProductos";
 import { hoyEnLeon } from "./estadisticas";
@@ -33,6 +36,8 @@ const claveCombo = (producto, zona) => `despensa:${producto}:${zona}`;
 const DIAS_REFRESCO = 90;
 const POR_PASADA = 6; // cada pasada cabe en el minuto que da Vercel (las 6 búsquedas van a la vez)
 export const TOPE_PLACES_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_PLACES) || 900);
+export const TOPE_PLACES_PRO_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_PLACES_PRO) || 250);
+const PRECIO_PRO_DOLARES = 0.017;
 const PRECIO_DETALLE_DOLARES = 0.02; // Place Details Enterprise (trae la nota): 1.000 gratis al mes, luego 20 $/1.000
 const LIMITES = { latMin: 41.8, latMax: 43.45, lonMin: -7.35, lonMax: -4.45 };
 
@@ -63,9 +68,12 @@ async function buscarConIA(busca, zona) {
   const z = ZONAS.find((x) => x.id === zona);
   const prompt = `
     Eres el documentalista de Cazurronics, una web de planes en León (España). Busca en Internet dónde comprar
-    ${busca} en ${z.nombre} (provincia de León). Pueblos de la zona: ${z.pueblos.slice(0, 25).join(", ")}.
+    ${busca} en ${z.nombre} (provincia de León). Pueblos de la zona: ${z.pueblos.join(", ")}.
     Mira prensa local (Diario de León, Leonoticias, iLeón, El Bierzo Digital...), guías gastronómicas, foros,
-    reseñas, premios y webs de los propios negocios. Haz varias búsquedas distintas.
+    reseñas, premios y webs de los propios negocios. Haz varias búsquedas distintas, también pueblo a pueblo.
+    Busca también obradores, productores y fábricas pequeñas con venta directa, no solo tiendas.
+    Si en pueblos pequeños hay sitios buenos de verdad (los que conoce la gente de la zona), inclúyelos aunque
+    no estén en la cabecera de comarca. No rellenes con sitios flojos para llegar al número.
     Queremos los MEJORES o los más especiales, no un listado: máximo 5.
     REGLAS: solo negocios que existen y venden al público en esa zona, con local físico; nada de supermercados
     ni grandes cadenas; no inventes nada; "fuente" es la página exacta donde lo has leído (no la web de Google).
@@ -84,6 +92,14 @@ async function buscarConIA(busca, zona) {
 const claveMaps = () => process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY || "";
 const mesActual = () => hoyEnLeon().slice(0, 7);
 const claveGasto = () => `despensa:places:${mesActual()}`;
+const claveGastoPro = () => `despensa:placesPro:${mesActual()}`;
+
+// Gasta una comprobación del tope del mes. true si cabía.
+async function gastar(clave, tope) {
+  const usadas = Number(await comando(["INCRBY", clave, 1]));
+  if (usadas === 1) await comando(["EXPIRE", clave, 40 * 86400]);
+  return usadas <= tope;
+}
 
 // Tipos que dicen que Google no ha encontrado el negocio, solo el pueblo o la calle
 const NO_ES_NEGOCIO = ["locality", "political", "route", "street_address", "postal_code", "country", "sublocality", "neighborhood", "geocode"];
@@ -155,12 +171,12 @@ async function comprobarEnPlaces(tienda, zona) {
   const id = busqueda?.places?.[0]?.id;
   if (!id) { await guardarJSON(cache, { placeId: null }, DIAS_REFRESCO * 86400); return null; }
 
-  // Paso de pago (nivel Enterprise por la nota: 1.000 gratis al mes): dónde está, qué es y cómo lo valoran. Con tope mensual (900).
-  const usadas = Number(await comando(["INCRBY", claveGasto(), 1]));
-  if (usadas === 1) await comando(["EXPIRE", claveGasto(), 40 * 86400]);
-  if (usadas > TOPE_PLACES_MES) return "sinCupo";
+  // Paso de pago: con nota (Enterprise, tope 900) y, si se acaba, sin nota (Pro, tope 250). Si no queda ninguno, "sinCupo".
+  const conNota = await gastar(claveGasto(), TOPE_PLACES_MES);
+  if (!conNota && !(await gastar(claveGastoPro(), TOPE_PLACES_PRO_MES))) return "sinCupo";
+  const campos = `id,location,formattedAddress,types,displayName,businessStatus${conNota ? ",rating,userRatingCount" : ""}`;
   const ficha = await pedirPlaces(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=es`, {
-    headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": "id,location,formattedAddress,types,displayName,businessStatus,rating,userRatingCount" },
+    headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": campos },
   });
   const ok = fichaValida(ficha, tienda, zona);
   const nota = Number(ficha.rating);
@@ -215,7 +231,7 @@ export async function barrerCombinacion(producto, zona) {
 const PETICIONES = "despensa:peticiones"; // campo = clave de la petición · valor = { texto, zona, fecha }
 const LIBRES = "despensa:libres"; // campo = clave de la petición · valor = fecha en que se buscó
 const claveLibre = (id) => `despensa:libre:${id}`;
-const POR_PASADA_PETICIONES = 2;
+const POR_PASADA_PETICIONES = 4; // hasta 12 por noche; si nadie pide nada, los huecos son para el catálogo
 export const idPeticion = (texto, zona) => `${normalizar(texto).replace(/ /g, "-").slice(0, 60)}--${zona}`;
 
 export function limpiarPeticion(texto) {
@@ -271,8 +287,10 @@ async function fechasGuardadas() {
 export async function barrerDespensa({ cuantas = POR_PASADA } = {}) {
   const inicio = Date.now();
   if (!claveMaps()) return { saltado: "Falta GOOGLE_MAPS_API_KEY: sin comprobar en Places no se publica ninguna tienda" };
-  const gastadas = Number(await comando(["GET", claveGasto()])) || 0;
-  if (gastadas >= TOPE_PLACES_MES) return { saltado: `Tope de comprobaciones de Google del mes alcanzado (${TOPE_PLACES_MES})` };
+  const [gastadas, gastadasPro] = await Promise.all([comando(["GET", claveGasto()]), comando(["GET", claveGastoPro()])]);
+  if ((Number(gastadas) || 0) >= TOPE_PLACES_MES && (Number(gastadasPro) || 0) >= TOPE_PLACES_PRO_MES) {
+    return { saltado: `Topes de Google del mes alcanzados (${TOPE_PLACES_MES} con nota + ${TOPE_PLACES_PRO_MES} sin nota)` };
+  }
   // Primero lo que ha pedido la gente; el resto de huecos, para el catálogo normal
   const pedidas = peticionesPendientes((await leerPeticiones().catch(() => ({ todas: [] }))).todas, Math.min(POR_PASADA_PETICIONES, cuantas));
   const toca = [
@@ -322,11 +340,11 @@ export async function resumenDespensa() {
   const [{ tiendas, hechas, total }, ultimo, gastadas, peticiones, busquedas] = await Promise.all([
     leerDespensa({ conPedidas: true }),
     leerJSON("despensa:ultimoBarrido").catch(() => null),
-    comando(["GET", claveGasto()]).catch(() => 0),
+    Promise.all([comando(["GET", claveGasto()]), comando(["GET", claveGastoPro()])]).catch(() => [0, 0]),
     leerPeticiones().catch(() => ({ todas: [] })),
     comando(["HGET", "stats:total", "despensa"]).catch(() => 0),
   ]);
-  const usadas = Number(gastadas) || 0;
+  const usadas = Number(gastadas[0]) || 0, usadasPro = Number(gastadas[1]) || 0;
   return {
     hechas, total, tiendas: tiendas.length,
     // Lo que escribe la gente y no teníamos: pista de qué tiendas interesan
@@ -335,7 +353,10 @@ export async function resumenDespensa() {
       pendientes: peticiones.todas.filter((p) => !p.hecha).length,
       ultimas: peticiones.todas.slice(0, 8).map(({ texto, zona, hecha }) => ({ texto, zona, hecha })),
     },
-    places: { mes: mesActual(), usadas, tope: TOPE_PLACES_MES, peorCasoDolares: Math.round(usadas * PRECIO_DETALLE_DOLARES * 100) / 100 },
+    places: {
+      mes: mesActual(), usadas, tope: TOPE_PLACES_MES, usadasPro, topePro: TOPE_PLACES_PRO_MES,
+      peorCasoDolares: Math.round((usadas * PRECIO_DETALLE_DOLARES + usadasPro * PRECIO_PRO_DOLARES) * 100) / 100,
+    },
     ultimo,
   };
 }

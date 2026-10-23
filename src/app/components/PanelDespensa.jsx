@@ -30,15 +30,15 @@ export default function PanelDespensa({ clave, despensa, alTerminar }) {
         </div>
         <button onClick={barrer} disabled={barriendo} className={`${PRESS} h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold disabled:opacity-60`}>{barriendo ? "Buscando… (1 min)" : "Buscar 6 más ahora"}</button>
       </div>
-      <div className="grid grid-cols-3 gap-2.5">
-        {[["Combinaciones hechas", `${hechas} / ${total}`], ["Tiendas publicadas", tiendas], ["Google Places este mes", `${places.usadas} / ${places.tope}`]].map(([k, v]) => (
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        {[["Combinaciones hechas", `${hechas} / ${total}`], ["Tiendas publicadas", tiendas], ["Google con nota este mes", `${places.usadas} / ${places.tope}`], ["Google sin nota este mes", `${places.usadasPro ?? 0} / ${places.topePro ?? 0}`]].map(([k, v]) => (
           <div key={k} className="bg-white/70 ring-1 ring-slate-900/5 rounded-2xl p-3">
             <p className="text-xl font-bold tabular-nums text-slate-900">{v}</p>
             <p className="text-[11px] text-slate-500 leading-snug">{k}</p>
           </div>
         ))}
       </div>
-      <p className="text-xs text-slate-500 mt-2.5">Google regala 10.000 comprobaciones al mes. Si ya no quedase ninguna gratis, lo de este mes costaría como mucho {places.peorCasoDolares.toFixed(2)} $. Al llegar al tope, se para hasta el mes siguiente.</p>
+      <p className="text-xs text-slate-500 mt-2.5">Google regala 1.000 comprobaciones con nota y 5.000 sin nota al mes. Si ya no quedase ninguna gratis, lo de este mes costaría como mucho {places.peorCasoDolares.toFixed(2)} $. Al llegar a los dos topes, se para hasta el mes siguiente.</p>
       {aviso && <p className="text-sm font-semibold text-amber-700 mt-2">{aviso}</p>}
       {peticiones && (
         <div className="mt-3 bg-white/60 ring-1 ring-slate-900/5 rounded-2xl p-3">

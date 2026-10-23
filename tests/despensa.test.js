@@ -101,6 +101,8 @@ describe("buscar con tus palabras", async () => {
     expect(r).toMatchObject({ frase: "Hola", falta: "aceite de oliva" });
     expect(validarRespuesta({ falta: "null" }, candidatos).falta).toBeNull();
     expect(validarRespuesta(null, candidatos)).toMatchObject({ tiendas: [], falta: null });
+    expect(validarRespuesta({ falta: "cecina de chivo", lugar: "Boñar" }, candidatos)).toMatchObject({ falta: "cecina de chivo", lugar: "Boñar" });
+    expect(validarRespuesta({ falta: "pan", lugar: "null" }, candidatos).lugar).toBeNull();
   });
   it("lo que falta se limpia y la cola va de la más antigua a la más nueva", () => {
     expect(limpiarPeticion("<b>aceite</b> de oliva!!")).toBe("aceite de oliva");
