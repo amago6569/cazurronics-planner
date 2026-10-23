@@ -43,8 +43,10 @@ function MapClickHandler({ setCenter }) {
   return null;
 }
 
-// tiendas (solo Despensa): [{ lat, lon, nombre, localidad, emoji, enlace, destacada }] para marcarlas en el mapa
-export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, itinerario, tiendas }) {
+// tiendas (solo Despensa): [{ lat, lon, nombre, localidad, emoji, enlace, destacada }] para marcarlas en el mapa.
+// soloVer (resultados de la Despensa): solo el mapa con las tiendas, sin buscador, rosetón ni distancia.
+export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, itinerario, tiendas, soloVer = false }) {
+  const elegir = !itinerario && !soloVer;
   const [busqueda, setBusqueda] = useState("");
 
   const buscarUbicacion = async (e) => {
@@ -72,7 +74,7 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
 
   return (
     <div className="w-full flex flex-col gap-3">
-      {!itinerario && (
+      {elegir && (
         <div className="flex gap-2 mb-1 px-1">
           <input 
             type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscarUbicacion(); } }}
@@ -112,16 +114,16 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
           ))}
 
           {coordenadasRuta.length > 1 && <Polyline positions={coordenadasRuta} color="#3b82f6" weight={5} opacity={0.6} dashArray="10, 10" />}
-          {!itinerario && <ImageOverlay url="/roseton.png" bounds={rosetonBounds} opacity={0.4} className="animate-pulse" />}
+          {elegir && <ImageOverlay url="/roseton.png" bounds={rosetonBounds} opacity={0.4} className="animate-pulse" />}
           
           {tiendas
             ? <AjustarVista center={center} radiusKm={radiusKm} tiendas={tiendas} />
             : <MapUpdater center={coordenadasRuta.length > 0 ? coordenadasRuta[0] : center} zoom={itinerario ? 15 : undefined} />}
-          {!itinerario && <MapClickHandler setCenter={setCenter} />}
+          {elegir && <MapClickHandler setCenter={setCenter} />}
         </MapContainer>
       </div>
 
-      {!itinerario && (
+      {elegir && (
         <div className="px-2 mt-1">
           <div className="flex justify-between items-center mb-3">
             <label className="text-sm font-black text-slate-600 ml-1">Distancia máxima</label>

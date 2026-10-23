@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CELDAS, tareasPendientes, tiendaDeGoogle, unirFicha, zonasCerca, esDeLeon, puntuacionGoogle } from "../src/lib/despensaTiendas";
 import { validarMercadillo, textoDias } from "../src/lib/despensaMercados";
-import { candidatosCerca, candidatoDeGoogle, productosEnTexto, unirCandidatos } from "../src/lib/despensaBuscar";
+import { candidatosCerca, candidatoDeGoogle, productosEnTexto, respaldo, unirCandidatos } from "../src/lib/despensaBuscar";
 import { CATEGORIAS, categoriaPorId, categoriasDeProducto } from "../src/lib/despensaProductos";
 
 const panaderia = categoriaPorId("panaderia");
@@ -112,6 +112,15 @@ describe("buscador con tiendas de Google", () => {
     const c = candidatosCerca(unirCandidatos(riano, google), { lat: 42.5987, lon: -5.5671, radio: 10, pedidos: productosEnTexto("un buen pan") });
     expect(c.map((t) => t.placeId)).toEqual(["cerca", "carne"]);
     expect(c[0]).toMatchObject({ ref: "t1", productoNombre: "Panadería" });
+  });
+  it("nicanores en León: pastelerías cercanas, y si la IA no responde salen igual", () => {
+    const g = (id, lat, lon, cats) => ({ placeId: id, nombre: id, localidad: "León", lat, lon, nota: 4.6, resenas: 120, cats, zona: "leon" });
+    const google = [g("confiteria", 42.6, -5.57, ["pasteleria"]), g("carniceria", 42.6, -5.571, ["carniceria"]), g("bonar", 42.87, -5.32, ["pasteleria"])];
+    const pedidos = productosEnTexto("nicanores de Boñar");
+    const c = candidatosCerca(unirCandidatos([], google), { lat: 42.5987, lon: -5.5671, radio: 15, pedidos });
+    expect(c[0].placeId).toBe("confiteria");
+    expect(c.some((t) => t.placeId === "bonar")).toBe(false);
+    expect(respaldo(c, pedidos).map((t) => t.placeId)).toEqual(["confiteria"]);
   });
   it("la nota de Google se ajusta por reseñas", () => {
     expect(puntuacionGoogle({ nota: 5, resenas: 3 })).toBe(6);
