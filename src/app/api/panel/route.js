@@ -4,6 +4,8 @@ import { leerResumen } from "../../../lib/estadisticas";
 import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares } from "../../../lib/lugares";
 import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
 import { barrerDespensa, resumenDespensa } from "../../../lib/despensa";
+import { barrerTiendas, resumenTiendas } from "../../../lib/despensaTiendas";
+import { barrerMercadillos, resumenMercadillos } from "../../../lib/despensaMercados";
 
 export const maxDuration = 60; // el panel lanza el barrido tramo a tramo
 export const dynamic = "force-dynamic";
@@ -36,7 +38,7 @@ async function datosDelPanel(request) {
     const lugares = await buscarLugares(buscar);
     return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa] = await Promise.all([
+  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa, despensaTiendas, mercadillos] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
@@ -44,6 +46,8 @@ async function datosDelPanel(request) {
     eventosProximos(14),
     comando(["LRANGE", "negocios:solicitudes", 0, 99]).catch(() => []),
     resumenDespensa().catch(() => null),
+    resumenTiendas().catch(() => null),
+    resumenMercadillos().catch(() => null),
   ]);
   const conEnlace = (l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) });
   return NextResponse.json({
@@ -54,7 +58,7 @@ async function datosDelPanel(request) {
     favoritos: gusta.map(conEnlace),
     barrido,
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
-    despensa,
+    despensa: despensa ? { ...despensa, google: despensaTiendas, mercadillos } : null,
     solicitudes: (solicitudes || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean),
   }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -81,6 +85,12 @@ export async function POST(request) {
     }
   }
   // Una pasada de la Despensa a mano (6 combinaciones de producto y comarca; solo hace las que faltan)
+  // Una pasada del barrido gordo de tiendas (Google Maps por cuadrículas) y los mercadillos de una comarca
+  if (accion === "despensa-tiendas") {
+    const [tiendas, mercadillos] = await Promise.allSettled([barrerTiendas(), barrerMercadillos()]);
+    const leer = (r) => (r.status === "fulfilled" ? r.value : { error: String(r.reason?.message || r.reason).slice(0, 160) });
+    return NextResponse.json({ exito: tiendas.status === "fulfilled", informe: leer(tiendas), mercadillos: leer(mercadillos) });
+  }
   if (accion === "despensa") {
     try {
       return NextResponse.json({ exito: true, informe: await barrerDespensa() });
