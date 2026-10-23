@@ -82,7 +82,7 @@ export default function PanelDespensa({ clave, despensa, alTerminar }) {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-800">🏆 Premios y especialidades de cada tienda</p>
-              <p className="text-xs text-slate-500">La IA investiga 24 tiendas por pasada, tres pasadas cada noche, siempre con fuente. Unos 0,05 $ al día.</p>
+              <p className="text-xs text-slate-500">La IA investiga 18 tiendas por pasada, tres pasadas cada noche, siempre con fuente. Unos 0,02 $ al día.</p>
             </div>
             <button onClick={investigar} disabled={investigando} className={`${PRESS} h-9 px-3.5 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-800 text-sm font-semibold disabled:opacity-60`}>{investigando ? "Investigando… (1 min)" : "Investigar tiendas ahora"}</button>
           </div>
@@ -96,7 +96,7 @@ export default function PanelDespensa({ clave, despensa, alTerminar }) {
           </div>
           {fichas.ultimo && (
             <p className="text-xs text-slate-500 mt-2">
-              Última pasada · {new Date(fichas.ultimo.fin).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: {fichas.ultimo.nada || `${fichas.ultimo.investigadas} tiendas, ${fichas.ultimo.conPremio} con premio, ${fichas.ultimo.conEspecialidad} con especialidad`}
+              Última pasada · {new Date(fichas.ultimo.fin).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: {fichas.ultimo.nada || `${fichas.ultimo.investigadas} tiendas, ${fichas.ultimo.conPremio} con premio, ${fichas.ultimo.conEspecialidad} con especialidad${fichas.ultimo.sinFuente ? `, ${fichas.ultimo.sinFuente} descartadas por no tener fuente` : ""}`}
               {fichas.ultimo.error && <span className="text-rose-600"> · error: {fichas.ultimo.error}</span>}
             </p>
           )}

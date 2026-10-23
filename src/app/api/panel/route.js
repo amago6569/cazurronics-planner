@@ -93,7 +93,7 @@ export async function POST(request) {
     const leer = (r) => (r.status === "fulfilled" ? r.value : { error: String(r.reason?.message || r.reason).slice(0, 160) });
     return NextResponse.json({ exito: tiendas.status === "fulfilled", informe: leer(tiendas), mercadillos: leer(mercadillos) });
   }
-  // Una pasada de premios y especialidades de las tiendas (24 tiendas, la IA con búsqueda en Google)
+  // Una pasada de premios y especialidades de las tiendas (18 tiendas, la IA con búsqueda en Google)
   if (accion === "despensa-fichas") {
     try {
       return NextResponse.json({ exito: true, informe: await investigarTiendas() });

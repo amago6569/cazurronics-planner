@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { investigarTiendas } from "../../../../lib/despensaFichas";
 
-export const maxDuration = 60; // 4 consultas a la IA a la vez (6 tiendas cada una), ~40 s
+export const maxDuration = 60; // 6 consultas a la IA a la vez (3 tiendas cada una), ~40 s
 export const dynamic = "force-dynamic";
 
-// Lo llaman los crons de Vercel (vercel.json) tres veces cada noche: investiga premios y especialidades de 24 tiendas
+// Lo llaman los crons de Vercel (vercel.json) tres veces cada noche: investiga premios y especialidades de 18 tiendas
 // de la Despensa con la IA y búsqueda en Google (modelos 2.x, búsquedas gratis). lib/despensaFichas.js
 export async function GET(request) {
   const secreto = process.env.CRON_SECRET;

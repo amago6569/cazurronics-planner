@@ -4,12 +4,13 @@
 // Este barrido lo investiga tienda a tienda con la IA y búsqueda en Google (modelos 2.x: búsquedas gratis), como los planes.
 //  · Nunca inventa: cada premio necesita su fuente, y las especialidades, la fuente de la tienda (su web, prensa, guías).
 //    La fuente se comprueba igual que en los eventos: la IA la ha consultado o la página existe.
-//  · 6 tiendas por consulta, 4 consultas a la vez: 24 tiendas por pasada. Primero las de mejor nota y las de León capital.
+//  · 3 tiendas por consulta (con más, la IA busca por encima y no encuentra nada), 6 consultas a la vez: 18 tiendas
+//    por pasada. Primero las de mejor nota y las de León capital.
 //  · Lo investigado vale 90 días; si no se encuentra nada, se vuelve a mirar a los 60.
 //
-// Coste: 12 consultas por pasada, 3 pasadas cada noche (18:00, 19:00 y 20:00 UTC) = 36 al día de las 1.500 gratis.
-// Solo se pagan los tokens del modelo 2.5 flash-lite: ~6.000 de entrada y ~1.500 de salida ≈ 0,0012 $ por consulta,
-// unos 0,05 $ al día y ~1,3 $ al mes. Cuando estén todas al día, la mitad.
+// Coste: 6 consultas por pasada, 3 pasadas cada noche (18:00, 19:00 y 20:00 UTC) = 18 al día de las 1.500 gratis.
+// Solo se pagan los tokens del modelo 2.5 flash-lite: ~5.000 de entrada y ~1.000 de salida ≈ 0,0009 $ por consulta,
+// unos 0,02 $ al día y ~0,6 $ al mes. Llenar ahora las ~790 tiendas a mano: ~265 consultas ≈ 0,25 $.
 import { aObjeto, comando, guardarJSON, leerJSON, varios } from "./almacen";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { comprobarUrl, dominioConsultado } from "./eventos";
@@ -17,10 +18,12 @@ import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { categoriaPorId } from "./despensaProductos";
 
 const CLAVE = "despensa:fichas";
-const POR_CONSULTA = 6;
-const CONSULTAS_A_LA_VEZ = 4;
+const POR_CONSULTA = 3;
+const CONSULTAS_A_LA_VEZ = 6;
 const DIAS_VALE = 90;
 const DIAS_VALE_VACIA = 60;
+// Sube al cambiar cómo se investiga: las fichas de una versión anterior se vuelven a investigar
+const VERSION = 2;
 
 const limpiar = (t, max) => String(t || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 const urlValida = (u) => (typeof u === "string" && /^https?:\/\/[^\s]+$/.test(u) && !/vertexaisearch|grounding-api|google\.[a-z.]+\/(search|maps)/.test(u) ? u : null);
@@ -42,8 +45,9 @@ export function promptFichas(tiendas) {
   const lista = tiendas.map((t, i) => `${i + 1}. ${t.nombre} | ${t.direccion || t.localidad} | ${(t.cats || []).map((c) => categoriaPorId(c)?.nombre).filter(Boolean).join(", ")}`).join("\n");
   return `
     Eres el documentalista de Cazurronics, una web de planes en León (España). Investiga en Internet estas tiendas de
-    alimentación de la provincia de León. Busca cada una por su nombre y su pueblo: su web, sus redes, la prensa
-    (Diario de León, Leonoticias, iLeón, La Nueva Crónica, El Bierzo Digital...), guías y reseñas.
+    alimentación de la provincia de León. Haz al menos dos búsquedas en Google POR CADA tienda: su nombre entre comillas
+    con su pueblo, y su nombre con "premio". Mira su web, sus redes, la prensa (Diario de León, Leonoticias, iLeón,
+    La Nueva Crónica, El Bierzo Digital...), guías, concursos y reseñas.
     ${lista}
 
     Para cada tienda quiero:
@@ -74,6 +78,8 @@ async function investigar(tiendas) {
   return Promise.all(tiendas.map(async (t, i) => {
     const bruta = lista.find((x) => Number(x?.n) === i + 1) || lista[i];
     const f = validarFicha(bruta) || { especialidades: [], premios: [], destaca: null, fuente: null };
+    // Para el informe: lo que la IA dijo saber antes de comprobar fuentes
+    const dijo = (Array.isArray(bruta?.especialidades) && bruta.especialidades.length) || (Array.isArray(bruta?.premios) && bruta.premios.length) ? 1 : 0;
     const [okFuente, okPremios] = await Promise.all([fuenteBuena(f.fuente, dominios), Promise.all(f.premios.map((p) => fuenteBuena(p.fuente, dominios)))]);
     const ficha = {
       especialidades: okFuente ? f.especialidades : [],
@@ -81,9 +87,10 @@ async function investigar(tiendas) {
       fuente: okFuente ? f.fuente : null,
       premios: f.premios.filter((_, k) => okPremios[k]),
       f: hoy,
+      v: VERSION,
     };
     ficha.vacia = !ficha.especialidades.length && !ficha.premios.length && !ficha.destaca;
-    return [t.placeId, ficha];
+    return [t.placeId, ficha, dijo];
   }));
 }
 
@@ -92,7 +99,7 @@ export function tiendasQueTocan(tiendas, fichas, ahora = Date.now(), cuantas = P
   return tiendas
     .filter((t) => {
       const f = fichas[t.placeId];
-      if (!f?.f) return true;
+      if (!f?.f || (f.v || 1) < VERSION) return true;
       return Date.parse(f.f) < ahora - (f.vacia ? DIAS_VALE_VACIA : DIAS_VALE) * 86400000;
     })
     .map((t) => ({ t, prioridad: puntuacionGoogle(t) + (t.zona === "leon" ? 1.5 : 0) + Math.min(t.resenas || 0, 300) / 300 }))
@@ -123,12 +130,14 @@ export async function investigarTiendas() {
   const res = await Promise.allSettled(tandas.map(investigar));
   const nuevas = res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   if (nuevas.length) await varios([["HSET", CLAVE, ...nuevas.flatMap(([id, f]) => [id, JSON.stringify(f)])]]);
+  const dijeron = nuevas.reduce((n, x) => n + x[2], 0);
   const errores = res.filter((r) => r.status === "rejected").map((r) => String(r.reason?.message || r.reason).slice(0, 120));
   const informe = {
     inicio, fin: new Date().toISOString(),
     investigadas: nuevas.length,
     conPremio: nuevas.filter(([, f]) => f.premios.length).length,
     conEspecialidad: nuevas.filter(([, f]) => f.especialidades.length).length,
+    sinFuente: Math.max(0, dijeron - nuevas.filter(([, f]) => !f.vacia).length),
     ...(errores.length ? { error: errores[0], fallidas: errores.length } : {}),
   };
   await guardarJSON("despensa:fichas:ultimo", informe);
