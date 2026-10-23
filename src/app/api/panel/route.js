@@ -6,6 +6,7 @@ import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, 
 import { barrerDespensa, resumenDespensa } from "../../../lib/despensa";
 import { barrerTiendas, resumenTiendas } from "../../../lib/despensaTiendas";
 import { barrerMercadillos, resumenMercadillos } from "../../../lib/despensaMercados";
+import { investigarTiendas, resumenFichas } from "../../../lib/despensaFichas";
 
 export const maxDuration = 60; // el panel lanza el barrido tramo a tramo
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ async function datosDelPanel(request) {
     const lugares = await buscarLugares(buscar);
     return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa, despensaTiendas, mercadillos] = await Promise.all([
+  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa, despensaTiendas, mercadillos, fichas] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
@@ -48,6 +49,7 @@ async function datosDelPanel(request) {
     resumenDespensa().catch(() => null),
     resumenTiendas().catch(() => null),
     resumenMercadillos().catch(() => null),
+    resumenFichas().catch(() => null),
   ]);
   const conEnlace = (l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) });
   return NextResponse.json({
@@ -58,7 +60,7 @@ async function datosDelPanel(request) {
     favoritos: gusta.map(conEnlace),
     barrido,
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
-    despensa: despensa ? { ...despensa, google: despensaTiendas, mercadillos } : null,
+    despensa: despensa ? { ...despensa, google: despensaTiendas, mercadillos, fichas } : null,
     solicitudes: (solicitudes || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean),
   }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -90,6 +92,14 @@ export async function POST(request) {
     const [tiendas, mercadillos] = await Promise.allSettled([barrerTiendas(), barrerMercadillos()]);
     const leer = (r) => (r.status === "fulfilled" ? r.value : { error: String(r.reason?.message || r.reason).slice(0, 160) });
     return NextResponse.json({ exito: tiendas.status === "fulfilled", informe: leer(tiendas), mercadillos: leer(mercadillos) });
+  }
+  // Una pasada de premios y especialidades de las tiendas (24 tiendas, la IA con búsqueda en Google)
+  if (accion === "despensa-fichas") {
+    try {
+      return NextResponse.json({ exito: true, informe: await investigarTiendas() });
+    } catch (e) {
+      return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    }
   }
   if (accion === "despensa") {
     try {
