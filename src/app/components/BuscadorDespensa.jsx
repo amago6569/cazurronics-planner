@@ -2,12 +2,12 @@
 // Buscador de la Despensa de León. Sin presupuesto: solo lo que quieres y hasta dónde te mueves. Dos formas de buscar:
 //  · Escribes lo que quieres y la IA elige entre las tiendas comprobadas (/api/despensa/buscar, ~0,0007 $ por búsqueda).
 //    Si pides algo que no tenemos, se apunta y se busca esa noche.
-//  · Eliges productos con los botones: se filtra en el navegador con el catálogo que ya trae la página (0 €).
+//  · En /despensa/<producto> ya sale el top de ese producto, filtrado en el navegador con el catálogo de la página (0 €).
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
-import { PRODUCTOS, enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
-import { ZONAS, zonaDe, zonaPorId } from "../../lib/zonas";
+import { enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
+import { zonaDe, zonaPorId } from "../../lib/zonas";
 
 // El mismo mapa que los planes: buscas un pueblo o tocas el mapa, eliges el radio y salen las tiendas marcadas
 const Mapa = dynamic(() => import("./MapSelector"), { ssr: false, loading: () => <div className="h-[250px] rounded-[2rem] bg-white/50 animate-pulse" /> });
@@ -16,7 +16,6 @@ const Mapa = dynamic(() => import("./MapSelector"), { ssr: false, loading: () =>
 const RADIOS = [5, 10, 15, 30, 60, 200];
 const PRESUPUESTO = "igual";
 const dondeRadio = (r, sitio) => (r >= 200 ? "en toda la provincia" : `a ${r} km de ${sitio}`);
-const MAX_PRODUCTOS = 4;
 const MEDALLAS = ["🥇", "🥈", "🥉"];
 const EJEMPLOS = [
   { emoji: "🥖", texto: "Una morcilla y un buen pan" },
@@ -28,7 +27,6 @@ const EJEMPLOS = [
 const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 
 const centroDe = (id) => { const z = zonaPorId(id); const [lat, lon] = z.centroReal || [z.lat, z.lon]; return { lat, lon, nombre: z.id === "leon" ? "León" : z.corto }; };
-const chip = (activo) => `${PRESS} shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 rounded-full text-sm font-semibold ring-1 ${activo ? "bg-slate-900 text-white ring-slate-900 shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/60 text-slate-700 ring-slate-900/5 hover:bg-white hover:-translate-y-0.5"}`;
 
 function Paso({ n, titulo, extra, children }) {
   return (
@@ -80,8 +78,9 @@ function BotonRuta({ ruta, sinMargen }) {
   );
 }
 
-export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }) {
-  const [elegidos, setElegidos] = useState([productoInicial]);
+// productoInicial: en /despensa/cecina ya salen las de cecina sin escribir nada. En /despensa se empieza escribiendo.
+export default function BuscadorDespensa({ tiendas, productoInicial = null }) {
+  const elegidos = useMemo(() => (productoInicial ? [productoInicial] : []), [productoInicial]);
   const [zona, setZona] = useState("leon");
   const [centro, setCentro] = useState(() => centroDe("leon"));
   const [radio, setRadio] = useState(15);
@@ -108,14 +107,6 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
     [elegidos, tiendas, centro, radioSeguro],
   );
 
-  const alternar = (id) => {
-    setIa(null);
-    if (elegidos.includes(id)) { setAviso(""); setElegidos(elegidos.filter((x) => x !== id)); return; }
-    if (elegidos.length >= MAX_PRODUCTOS) { setAviso(`Como mucho ${MAX_PRODUCTOS} productos a la vez`); return; }
-    setAviso("");
-    setElegidos([...elegidos, id]);
-  };
-  const elegirZona = (id) => { setZona(id); setCentro(centroDe(id)); if (id !== "leon" && radioSeguro < 30) setRadio(30); };
   const toda = () => { setZona("toda"); setRadio(200); };
   // Tocar el mapa o buscar un pueblo en él
   const ponerCentro = ([lat, lon]) => {
@@ -129,7 +120,7 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
     setAviso("Buscando dónde estás…");
     navigator.geolocation.getCurrentPosition(
       (p) => { setZona("yo"); setCentro({ lat: p.coords.latitude, lon: p.coords.longitude, nombre: "ti" }); setAviso(""); },
-      () => setAviso("No hemos podido saber dónde estás. Elige una zona."),
+      () => setAviso("No hemos podido saber dónde estás. Busca el pueblo en el mapa."),
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 },
     );
   };
@@ -190,10 +181,11 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
     <>
       <section className={`${GLASS} rounded-[2.25rem] p-5 sm:p-7 space-y-6 cz-up`}>
         <Paso n="1" titulo="¿Qué quieres comprar?">
+          <p className="-mt-1 mb-2.5 px-1 text-[13px] text-slate-500">Escríbelo como se lo dirías a un amigo. Puede ser más de una cosa.</p>
           <textarea
-            rows="2" value={texto} maxLength={300} onChange={(e) => setTexto(e.target.value)}
+            rows="3" value={texto} maxLength={300} onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); buscar(); } }}
-            className={`${INPUT} resize-none leading-relaxed`} aria-label="Qué quieres comprar"
+            className={`${INPUT} resize-none leading-relaxed text-base`} aria-label="Qué quieres comprar"
             placeholder="Ej: una morcilla buena y un pan de leña"
           />
           <div className="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:flex-wrap">
@@ -203,30 +195,10 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
               </button>
             ))}
           </div>
-          <div className="flex items-baseline justify-between gap-2 mt-4 mb-2.5 px-1">
-            <p className="text-[13px] font-semibold text-slate-500">O elige productos</p>
-            <span className="text-xs text-slate-500 tabular-nums">{elegidos.length}/{MAX_PRODUCTOS}</span>
-          </div>
-          <div className="grid grid-flow-col grid-rows-3 auto-cols-max justify-items-start gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:flex sm:flex-wrap">
-            {PRODUCTOS.map((p) => (
-              <button key={p.id} type="button" aria-pressed={elegidos.includes(p.id)} onClick={() => alternar(p.id)} className={`${chip(elegidos.includes(p.id))} ${conTiendas.has(p.id) ? "" : "opacity-70"}`}>
-                <span className="text-base">{p.emoji}</span>{p.nombre}
-              </button>
-            ))}
-          </div>
         </Paso>
 
-        <Paso n="2" titulo="¿Por dónde?">
-          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
-            <button type="button" aria-pressed={zona === "yo"} onClick={cercaDeMi} className={chip(zona === "yo")}>📍 Cerca de mí</button>
-            <button type="button" aria-pressed={zona === "toda"} onClick={toda} className={chip(zona === "toda")}>🗺️ Toda la provincia</button>
-            {ZONAS.map((z) => (
-              <button key={z.id} type="button" aria-pressed={zona === z.id} onClick={() => elegirZona(z.id)} className={chip(zona === z.id)}>
-                <span>{z.emoji}</span>{z.corto}
-              </button>
-            ))}
-          </div>
-          <p className="mt-4 mb-2 px-1 text-[13px] font-semibold text-slate-500">Busca un pueblo o toca el mapa</p>
+        <Paso n="2" titulo="¿Dónde?" extra={<button type="button" onClick={cercaDeMi} className={`${PRESS} text-[13px] font-semibold ${zona === "yo" ? "text-rose-600" : "text-slate-500 hover:text-rose-600"}`}>📍 Mi ubicación</button>}>
+          <p className="-mt-1 mb-2.5 px-1 text-[13px] text-slate-500">Busca un pueblo o toca el mapa, y mueve el rosetón para la distancia.</p>
           <Mapa radiusKm={radio} setRadiusKm={(r) => { setRadio(r); if (zona === "toda") setZona("mapa"); }} center={centroMapa} setCenter={ponerCentro} tiendas={enMapa} />
           <p className="mt-2 px-1 text-xs text-slate-500" aria-live="polite">
             {enMapa.length ? `${enMapa.length} ${enMapa.length === 1 ? "tienda marcada" : "tiendas marcadas"} ${dondeRadio(radioSeguro, centro.nombre)}. Toca una para ver cómo llegar.` : `Sin tiendas marcadas ${dondeRadio(radioSeguro, centro.nombre)} todavía.`}
@@ -288,7 +260,8 @@ export default function BuscadorDespensa({ tiendas, productoInicial = "cecina" }
         {!buscando && !ia && resultados.length === 0 && (
           <section className={`${GLASS} rounded-[2rem] p-6 text-center`}>
             <p className="text-3xl">🧺</p>
-            <p className="font-bold text-slate-900 mt-2">Elige al menos un producto</p>
+            <p className="font-bold text-slate-900 mt-2">Escribe arriba qué quieres comprar</p>
+            <p className="text-sm text-slate-500 mt-1">Te marcamos en el mapa las mejores tiendas de la zona.</p>
           </section>
         )}
         {!buscando && !ia && rutaProductos && (
