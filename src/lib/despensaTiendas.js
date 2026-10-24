@@ -235,14 +235,14 @@ export async function ubicarEnMaps(texto) {
     method: "POST",
     cache: "no-store",
     signal: AbortSignal.timeout(8000),
-    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": claveMaps(), "X-Goog-FieldMask": "places.id,places.location,places.formattedAddress,places.addressComponents" },
+    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": claveMaps(), "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.formattedAddress,places.addressComponents" },
     body: JSON.stringify({ textQuery: `${texto}, León, España`, languageCode: "es", regionCode: "es", pageSize: 1, locationRestriction: { rectangle: { low: { latitude: PROVINCIA.sur, longitude: PROVINCIA.oeste }, high: { latitude: PROVINCIA.norte, longitude: PROVINCIA.este } } } }),
   });
   const datos = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Places ${res.status} ${String(datos?.error?.message || "").slice(0, 120)}`);
   const p = datos.places?.[0];
   if (!p || !esDeLeon(p)) return null;
-  return { placeId: p.id, lat: redondea(Number(p.location.latitude)), lon: redondea(Number(p.location.longitude)) };
+  return { placeId: p.id, lat: redondea(Number(p.location.latitude)), lon: redondea(Number(p.location.longitude)), nombre: String(p.displayName?.text || ""), localidad: localidadDe(p) };
 }
 
 // ---------- 4. La pasada ----------
