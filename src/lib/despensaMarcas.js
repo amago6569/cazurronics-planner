@@ -3,7 +3,8 @@
 // tiendas que venden su producto nadie lo dice en las reseñas. Aquí se apuntan a mano: el productor (con su venta en
 // fábrica) y las tiendas de la provincia que tienen lo suyo. Así, quien pide "una buena morcilla" cerca de una de esas
 // tiendas, se entera de que allí hay morcilla de Morvega.
-//  · Entrar es gratis y no compra puesto: el productor y sus tiendas suman como cualquier tienda que nombra lo pedido.
+//  · Si alguien pide lo que hace el productor (morcilla) y uno de sus sitios está en su radio, ese sitio sale el
+//    primero (decisión de Alejandro, 2026-10-24). Si no hay ninguno en el radio, sale otra buena como siempre.
 //  · Solo comercio de León: las cadenas de supermercados no se apuntan (tampoco salen en el resto de la Despensa).
 //  · Cada sitio se ubica una vez en Google Maps (1 búsqueda sin nota, de las 5.000 gratis al mes) y se renueva a los
 //    30 días. Se comprueba que el nombre que devuelve Google es el que buscamos. Hoy: 6 sitios = 6 búsquedas al mes, 0 €.
@@ -67,10 +68,12 @@ export async function leerSitiosMarcas() {
 // Lo que sabe la Despensa gracias a los productores:
 //  · fichas: a las tiendas que ya conoce (de Google Maps) se les añade "morcilla Morvega" a lo que son conocidas
 //  · extra: las que no conoce (y la fábrica, si no la conoce), como tiendas nuevas
+//  · primero: placeId → producto que, si se pide, pone ese sitio el primero
 export function aplicarMarcas(deGoogle, fichas, sitios, marcas = MARCAS) {
   const conocidas = new Set((deGoogle || []).map((t) => t.placeId));
   const nuevasFichas = { ...fichas };
   const extra = [];
+  const primero = new Map();
   for (const m of marcas) {
     const lo = `${m.productos[0]} ${m.nombre.replace(/^Morcillas /, "")} (de ${m.pueblo})`;
     for (const s of sitiosDe(m)) {
@@ -78,6 +81,7 @@ export function aplicarMarcas(deGoogle, fichas, sitios, marcas = MARCAS) {
       if (!u?.placeId) continue;
       const especialidades = s.fabrica ? m.especialidades : [lo];
       const porque = s.fabrica ? `Fábrica con venta directa de ${m.nombre} en ${m.pueblo}` : `Aquí venden ${m.nombre}, de ${m.pueblo}`;
+      primero.set(u.placeId, m.productos[0]);
       if (conocidas.has(u.placeId)) {
         const f = fichas?.[u.placeId] || {};
         nuevasFichas[u.placeId] = { ...f, especialidades: [...new Set([...especialidades, ...(f.especialidades || [])])].slice(0, 6), destaca: f.destaca || porque, premios: f.premios || [] };
@@ -91,5 +95,5 @@ export function aplicarMarcas(deGoogle, fichas, sitios, marcas = MARCAS) {
       });
     }
   }
-  return { fichas: nuevasFichas, extra };
+  return { fichas: nuevasFichas, extra, primero };
 }

@@ -220,6 +220,21 @@ export function respaldo(candidatos, pedidos) {
     .slice(0, MAX_RESULTADOS);
 }
 
+// Si pide lo que hace un productor apuntado (lib/despensaMarcas.js) y uno de sus sitios está en el radio, el más
+// cercano va el primero. Si la IA ya lo había elegido, se sube; si no, se pone delante con su motivo.
+export function primeroLaMarca(elegidas, todas, primero, pedidos, { lat, lon, radio }) {
+  if (!primero?.size) return elegidas;
+  const sitio = (todas || [])
+    .filter((t) => primero.has(t.placeId) && pedidos.includes(primero.get(t.placeId)) && Number.isFinite(t.lat))
+    .map((t) => ({ ...t, km: Math.round(km(lat, lon, t.lat, t.lon) * 10) / 10 }))
+    .filter((t) => t.km <= radio)
+    .sort((a, b) => a.km - b.km)[0];
+  if (!sitio) return elegidas;
+  const ya = elegidas.find((t) => t.placeId === sitio.placeId);
+  const delante = ya || { ...sitio, para: productoPorId(primero.get(sitio.placeId))?.nombre || nombreProducto(sitio), motivo: sitio.porque || null };
+  return [delante, ...elegidas.filter((t) => t.placeId !== sitio.placeId)].slice(0, MAX_RESULTADOS);
+}
+
 // Lo que ve el navegador de cada tienda (sin campos internos)
 const publica = ({ nombre, localidad, producto, especialidad, deResenas, porque, premios, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, km: dist, para, motivo }) =>
   ({ nombre, localidad, producto, especialidad, deResenas: !!deResenas, porque, premios: premios || [], precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, km: dist, para, motivo });
@@ -250,7 +265,8 @@ export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) 
   const pedidos = productosEnTexto(texto);
   // Productores de León y las tiendas que venden lo suyo (lib/despensaMarcas.js)
   const conMarcas = aplicarMarcas(deGoogle, fichas, sitiosMarcas);
-  const candidatos = candidatosCerca([...unirCandidatos(tiendas, deGoogle, mercadillos, conMarcas.fichas), ...conMarcas.extra], { ...centro, radio: radioUsado, presupuesto, pedidos, palabras: palabrasClave(texto) });
+  const todas = [...unirCandidatos(tiendas, deGoogle, mercadillos, conMarcas.fichas), ...conMarcas.extra];
+  const candidatos = candidatosCerca(todas, { ...centro, radio: radioUsado, presupuesto, pedidos, palabras: palabrasClave(texto) });
   let elegido;
   try {
     const { texto: respuesta } = await llamarGemini(promptBusqueda(texto, candidatos, { radio: radioUsado, presupuesto, sitio }), { para: "despensa", google: false, json: true, temperatura: 0.2, msMax: 25000 });
@@ -261,6 +277,9 @@ export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) 
     elegido = { frase: null, tiendas: [], falta: null, lugar: null };
   }
   if (!elegido.tiendas.length) elegido.tiendas = respaldo(candidatos, pedidos);
+  // Solo si lo nombra ("morcilla"), no si sale de rebote ("una charcutería" también trae morcilla)
+  const nombrados = pedidos.filter((p) => normalizar(texto).includes(normalizar(productoPorId(p)?.nombre).slice(0, 6)));
+  elegido.tiendas = primeroLaMarca(elegido.tiendas, todas, conMarcas.primero, nombrados, { ...centro, radio: radioUsado });
 
   // Lo que falta se apunta para la pasada de esta noche, en la zona donde se busca (o León si está fuera de la provincia)
   let buscamos = null;

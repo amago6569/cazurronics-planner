@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aplicarMarcas, esElSitio, MARCAS } from "../src/lib/despensaMarcas";
-import { candidatosCerca, palabrasClave, unirCandidatos } from "../src/lib/despensaBuscar";
+import { candidatosCerca, palabrasClave, primeroLaMarca, unirCandidatos } from "../src/lib/despensaBuscar";
 
 describe("productores y sus tiendas", () => {
   const m = MARCAS.find((x) => x.id === "morvega");
@@ -28,5 +28,19 @@ describe("productores y sus tiendas", () => {
     const c = candidatosCerca([...unirCandidatos([], google, [], fichas), ...extra], { lat: 42.5987, lon: -5.5671, radio: 3, pedidos: ["morcilla"], palabras: palabrasClave("una buena morcilla") });
     expect(c.map((t) => t.placeId)).toEqual(expect.arrayContaining(["conocida", "nueva"]));
     expect(c.find((t) => t.placeId === "fab")).toBeUndefined(); // la fábrica está a más de 3 km
+  });
+
+  it("si pide morcilla y hay un sitio con Morvega en el radio, va el primero; si no, nada cambia", () => {
+    const { fichas, extra, primero } = aplicarMarcas(google, {}, sitios);
+    const todas = [...unirCandidatos([], google, [], fichas), ...extra];
+    const otra = { placeId: "otra", nombre: "Carnicería X", lat: 42.599, lon: -5.567, para: "Morcilla", motivo: "Muy buena" };
+    const leon = { lat: 42.5987, lon: -5.5671, radio: 3 };
+    const r = primeroLaMarca([otra], todas, primero, ["morcilla"], leon);
+    expect(r[0].placeId).toBe("nueva");
+    expect(r[0].motivo).toMatch(/Morvega/);
+    expect(r[1].placeId).toBe("otra");
+    // Sin pedir morcilla, o sin sitio en el radio, queda como estaba
+    expect(primeroLaMarca([otra], todas, primero, ["pan"], leon)).toEqual([otra]);
+    expect(primeroLaMarca([otra], todas, primero, ["morcilla"], { lat: 42.0, lon: -6.5, radio: 5 })).toEqual([otra]);
   });
 });
