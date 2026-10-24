@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aplicarMarcas, esElSitio, MARCAS } from "../src/lib/despensaMarcas";
+import { aplicarMarcas, esElSitio, estadoMarcas, MARCAS } from "../src/lib/despensaMarcas";
 import { candidatosCerca, palabrasClave, primeroLaMarca, unirCandidatos } from "../src/lib/despensaBuscar";
 
 describe("productores y sus tiendas", () => {
@@ -12,6 +12,9 @@ describe("productores y sus tiendas", () => {
   };
   const google = [{ placeId: "conocida", nombre: "Patatas Marcos", localidad: "León", lat: 42.6, lon: -5.57, nota: 4.6, resenas: 80, cats: ["fruteria"], zona: "leon" }];
 
+  it("el panel dice cuántos sitios hay en el mapa y cuáles no encuentra Google", () => {
+    expect(estadoMarcas(sitios)[0]).toEqual({ nombre: "Morcillas Morvega", ubicados: 3, total: 6, sinEncontrar: ["Serranillo"] });
+  });
   it("solo vale el sitio si Google da el nombre que buscamos", () => {
     expect(esElSitio({ clave: "selecta" }, { placeId: "x", nombre: "Rúa Selecta - Tienda Gourmet" })).toBe(true);
     expect(esElSitio({ clave: "serranillo" }, { placeId: "x", nombre: "Bar Pepe" })).toBe(false);
@@ -39,6 +42,9 @@ describe("productores y sus tiendas", () => {
     expect(r[0].placeId).toBe("nueva");
     expect(r[0].motivo).toMatch(/Morvega/);
     expect(r[1].placeId).toBe("otra");
+    // Si la IA ya lo había elegido con otro motivo, se sube y se dice que tienen Morvega
+    const yaElegida = primeroLaMarca([otra, { ...extra.find((t) => t.placeId === "nueva"), motivo: "Quesos y vinos" }], todas, primero, ["morcilla"], leon);
+    expect(yaElegida[0].motivo).toMatch(/Morvega.*Quesos y vinos/);
     // Sin pedir morcilla, o sin sitio en el radio, queda como estaba
     expect(primeroLaMarca([otra], todas, primero, ["pan"], leon)).toEqual([otra]);
     expect(primeroLaMarca([otra], todas, primero, ["morcilla"], { lat: 42.0, lon: -6.5, radio: 5 })).toEqual([otra]);
