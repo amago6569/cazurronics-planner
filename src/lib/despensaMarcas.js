@@ -13,6 +13,7 @@ import { ubicarEnMaps } from "./despensaTiendas";
 
 const CLAVE = "despensa:marcas";
 const DIAS_VALE = 30;
+const DIAS_REINTENTO = 7; // si Google no lo encontró, se vuelve a probar a la semana
 
 // clave: lo que tiene que salir en el nombre que da Google (si no, la búsqueda ha dado con otro sitio)
 export const MARCAS = [
@@ -43,7 +44,10 @@ export const esElSitio = (sitio, encontrado) => Boolean(encontrado?.placeId) && 
 // Ubica en Google Maps los sitios que faltan o tienen más de 30 días. Lo llama la pasada de fichas (lib/despensaFichas.js).
 export async function ubicarMarcas(ahora = Date.now()) {
   const guardados = await leerSitiosMarcas();
-  const tocan = MARCAS.flatMap(sitiosDe).filter((s) => !guardados[s.busca] || Date.parse(guardados[s.busca].f) < ahora - DIAS_VALE * 86400000);
+  const tocan = MARCAS.flatMap(sitiosDe).filter((s) => {
+    const g = guardados[s.busca];
+    return !g || Date.parse(g.f) < ahora - (g.placeId ? DIAS_VALE : DIAS_REINTENTO) * 86400000;
+  });
   if (!tocan.length) return { ubicados: 0, fallidos: 0 };
   const hoy = new Date(ahora).toISOString();
   const res = await Promise.allSettled(tocan.map((s) => ubicarEnMaps(s.busca)));
@@ -55,7 +59,16 @@ export async function ubicarMarcas(ahora = Date.now()) {
     nuevos.push([s.busca, JSON.stringify(bueno ? { placeId: bueno.placeId, lat: bueno.lat, lon: bueno.lon, localidad: bueno.localidad || "", f: hoy } : { f: hoy })]);
   });
   await varios([["HSET", CLAVE, ...nuevos.flat()]]);
-  return { ubicados: nuevos.filter(([, v]) => v.includes("placeId")).length, fallidos: nuevos.filter(([, v]) => !v.includes("placeId")).length };
+  const fuera = tocan.filter((s, i) => !nuevos[i][1].includes("placeId")).map((s) => s.nombre);
+  return { ubicados: nuevos.length - fuera.length, fallidos: fuera.length, ...(fuera.length ? { sinEncontrar: fuera } : {}) };
+}
+
+// Para el panel: cuántos sitios de cada productor están ubicados y cuáles no encuentra Google
+export function estadoMarcas(sitios, marcas = MARCAS) {
+  return marcas.map((m) => {
+    const todos = sitiosDe(m);
+    return { nombre: m.nombre, ubicados: todos.filter((s) => sitios?.[s.busca]?.placeId).length, total: todos.length, sinEncontrar: todos.filter((s) => sitios?.[s.busca] && !sitios[s.busca].placeId).map((s) => s.nombre) };
+  });
 }
 
 export async function leerSitiosMarcas() {
@@ -68,7 +81,7 @@ export async function leerSitiosMarcas() {
 // Lo que sabe la Despensa gracias a los productores:
 //  · fichas: a las tiendas que ya conoce (de Google Maps) se les añade "morcilla Morvega" a lo que son conocidas
 //  · extra: las que no conoce (y la fábrica, si no la conoce), como tiendas nuevas
-//  · primero: placeId → producto que, si se pide, pone ese sitio el primero
+//  · primero: placeId → { producto que, si se pide, pone ese sitio el primero; marca; texto para el motivo }
 export function aplicarMarcas(deGoogle, fichas, sitios, marcas = MARCAS) {
   const conocidas = new Set((deGoogle || []).map((t) => t.placeId));
   const nuevasFichas = { ...fichas };
@@ -81,7 +94,7 @@ export function aplicarMarcas(deGoogle, fichas, sitios, marcas = MARCAS) {
       if (!u?.placeId) continue;
       const especialidades = s.fabrica ? m.especialidades : [lo];
       const porque = s.fabrica ? `Fábrica con venta directa de ${m.nombre} en ${m.pueblo}` : `Aquí venden ${m.nombre}, de ${m.pueblo}`;
-      primero.set(u.placeId, m.productos[0]);
+      primero.set(u.placeId, { producto: m.productos[0], marca: m.nombre, texto: porque });
       if (conocidas.has(u.placeId)) {
         const f = fichas?.[u.placeId] || {};
         nuevasFichas[u.placeId] = { ...f, especialidades: [...new Set([...especialidades, ...(f.especialidades || [])])].slice(0, 6), destaca: f.destaca || porque, premios: f.premios || [] };

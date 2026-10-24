@@ -95,12 +95,17 @@ export default function PanelDespensa({ clave, despensa, alTerminar }) {
             ))}
           </div>
           {fichas.google && <p className="text-xs text-slate-500 mt-2">Google regala 1.000 lecturas de reseñas al mes (tarifa aparte de las búsquedas). Si no regalase ninguna, lo de este mes costaría como mucho {fichas.google.peorCasoDolares.toFixed(2)} $. Al llegar al tope, se para hasta el mes siguiente.</p>}
+          {fichas.marcas?.map((m) => (
+            <p key={m.nombre} className="text-xs text-slate-500 mt-2">
+              🥘 {m.nombre}: {m.ubicados} de {m.total} sitios en el mapa{m.sinEncontrar.length > 0 && <span className="text-amber-700"> · Google no encuentra: {m.sinEncontrar.join(", ")}</span>}
+            </p>
+          ))}
           {fichas.ultimo && (
             <p className="text-xs text-slate-500 mt-2">
               Última pasada · {new Date(fichas.ultimo.fin).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: {fichas.ultimo.nada || `${fichas.ultimo.investigadas} tiendas, ${fichas.ultimo.conPremio} con premio, ${fichas.ultimo.conEspecialidad} con especialidad`}
               {fichas.ultimo.sinCupo && <span className="text-amber-700"> · parada por el tope del mes</span>}
               {fichas.ultimo.marcas?.ubicados > 0 && <span> · {fichas.ultimo.marcas.ubicados} sitios de productores ubicados</span>}
-              {fichas.ultimo.marcas?.fallidos > 0 && <span className="text-amber-700"> · {fichas.ultimo.marcas.fallidos} sitios de productores sin encontrar en Google</span>}
+              {fichas.ultimo.marcas?.fallidos > 0 && <span className="text-amber-700"> · {fichas.ultimo.marcas.fallidos} sitios de productores sin encontrar en Google{fichas.ultimo.marcas.sinEncontrar ? ` (${fichas.ultimo.marcas.sinEncontrar.join(", ")})` : ""}</span>}
               {fichas.ultimo.error && <span className="text-rose-600"> · error: {fichas.ultimo.error}</span>}
             </p>
           )}

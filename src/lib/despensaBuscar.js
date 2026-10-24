@@ -221,17 +221,20 @@ export function respaldo(candidatos, pedidos) {
 }
 
 // Si pide lo que hace un productor apuntado (lib/despensaMarcas.js) y uno de sus sitios está en el radio, el más
-// cercano va el primero. Si la IA ya lo había elegido, se sube; si no, se pone delante con su motivo.
+// cercano va el primero, diciendo que allí tienen esa marca. Si la IA ya lo había elegido, se sube.
 export function primeroLaMarca(elegidas, todas, primero, pedidos, { lat, lon, radio }) {
   if (!primero?.size) return elegidas;
   const sitio = (todas || [])
-    .filter((t) => primero.has(t.placeId) && pedidos.includes(primero.get(t.placeId)) && Number.isFinite(t.lat))
+    .filter((t) => primero.has(t.placeId) && pedidos.includes(primero.get(t.placeId).producto) && Number.isFinite(t.lat))
     .map((t) => ({ ...t, km: Math.round(km(lat, lon, t.lat, t.lon) * 10) / 10 }))
     .filter((t) => t.km <= radio)
     .sort((a, b) => a.km - b.km)[0];
   if (!sitio) return elegidas;
+  const { producto, marca, texto } = primero.get(sitio.placeId);
   const ya = elegidas.find((t) => t.placeId === sitio.placeId);
-  const delante = ya || { ...sitio, para: productoPorId(primero.get(sitio.placeId))?.nombre || nombreProducto(sitio), motivo: sitio.porque || null };
+  // El motivo tiene que decir por qué va el primero: que allí tienen esa marca
+  const motivo = ya?.motivo && normalizar(ya.motivo).includes(normalizar(marca).split(" ").pop()) ? ya.motivo : `${texto}.${ya?.motivo ? ` ${ya.motivo}` : ""}`;
+  const delante = { ...(ya || sitio), para: productoPorId(producto)?.nombre || nombreProducto(sitio), motivo };
   return [delante, ...elegidas.filter((t) => t.placeId !== sitio.placeId)].slice(0, MAX_RESULTADOS);
 }
 

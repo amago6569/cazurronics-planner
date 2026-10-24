@@ -19,7 +19,7 @@ import { llamarGemini, extraerJSON } from "./gemini";
 import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { categoriaPorId } from "./despensaProductos";
 import { hoyEnLeon } from "./estadisticas";
-import { ubicarMarcas } from "./despensaMarcas";
+import { estadoMarcas, leerSitiosMarcas, ubicarMarcas } from "./despensaMarcas";
 
 const CLAVE = "despensa:fichas";
 export const TOPE_RESENAS_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_RESENAS ?? 900));
@@ -186,11 +186,12 @@ export async function investigarTiendas() {
 }
 
 export async function resumenFichas() {
-  const [fichas, ultimo, tiendas, usadas] = await Promise.all([
+  const [fichas, ultimo, tiendas, usadas, sitiosMarcas] = await Promise.all([
     leerFichas(),
     leerJSON("despensa:fichas:ultimo").catch(() => null),
     leerTiendasGoogle().catch(() => []),
     comando(["GET", claveGasto()]).catch(() => 0),
+    leerSitiosMarcas().catch(() => ({})),
   ]);
   const ids = new Set(tiendas.map((t) => t.placeId));
   const suyas = Object.entries(fichas).filter(([id]) => ids.has(id)).map(([, f]) => f);
@@ -201,6 +202,7 @@ export async function resumenFichas() {
     conPremio: suyas.filter((f) => f.premios?.length).length,
     conEspecialidad: suyas.filter((f) => f.especialidades?.length).length,
     pendientes: tiendasQueTocan(tiendas, fichas, Date.now(), 1e6).length,
+    marcas: estadoMarcas(sitiosMarcas),
     google: { usadas: n, tope: TOPE_RESENAS_MES, peorCasoDolares: Math.round(Math.min(n, TOPE_RESENAS_MES) * PRECIO_RESENAS * 100) / 100 },
     ultimo,
   };
