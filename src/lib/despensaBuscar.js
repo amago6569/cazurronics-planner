@@ -10,6 +10,7 @@ import { leerDespensa, pedirBusqueda } from "./despensa";
 import { leerTiendasGoogle, puntuacionGoogle, zonasCerca } from "./despensaTiendas";
 import { leerMercadillos, textoDias } from "./despensaMercados";
 import { leerFichas } from "./despensaFichas";
+import { aplicarMarcas, leerSitiosMarcas } from "./despensaMarcas";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { CATEGORIAS, PRODUCTOS, categoriaPorId, productoPorId } from "./despensaProductos";
 import { ZONAS, zonaDe } from "./zonas";
@@ -239,14 +240,17 @@ export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) 
   }
 
   const zonas = zonasCerca(centro.lat, centro.lon, radioUsado);
-  const [{ tiendas }, deGoogle, mercadillos, fichas] = await Promise.all([
+  const [{ tiendas }, deGoogle, mercadillos, fichas, sitiosMarcas] = await Promise.all([
     leerDespensa({ conPedidas: true }),
     leerTiendasGoogle(zonas).catch(() => []),
     leerMercadillos(zonas).catch(() => []),
     leerFichas().catch(() => ({})),
+    leerSitiosMarcas().catch(() => ({})),
   ]);
   const pedidos = productosEnTexto(texto);
-  const candidatos = candidatosCerca(unirCandidatos(tiendas, deGoogle, mercadillos, fichas), { ...centro, radio: radioUsado, presupuesto, pedidos, palabras: palabrasClave(texto) });
+  // Productores de León y las tiendas que venden lo suyo (lib/despensaMarcas.js)
+  const conMarcas = aplicarMarcas(deGoogle, fichas, sitiosMarcas);
+  const candidatos = candidatosCerca([...unirCandidatos(tiendas, deGoogle, mercadillos, conMarcas.fichas), ...conMarcas.extra], { ...centro, radio: radioUsado, presupuesto, pedidos, palabras: palabrasClave(texto) });
   let elegido;
   try {
     const { texto: respuesta } = await llamarGemini(promptBusqueda(texto, candidatos, { radio: radioUsado, presupuesto, sitio }), { para: "despensa", google: false, json: true, temperatura: 0.2, msMax: 25000 });

@@ -19,6 +19,7 @@ import { llamarGemini, extraerJSON } from "./gemini";
 import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { categoriaPorId } from "./despensaProductos";
 import { hoyEnLeon } from "./estadisticas";
+import { ubicarMarcas } from "./despensaMarcas";
 
 const CLAVE = "despensa:fichas";
 export const TOPE_RESENAS_MES = Math.max(0, Number(process.env.DESPENSA_TOPE_RESENAS ?? 900));
@@ -138,9 +139,11 @@ export async function investigarTiendas() {
   const inicio = new Date().toISOString();
   const fin = async (datos) => { const informe = { inicio, fin: new Date().toISOString(), ...datos }; await guardarJSON("despensa:fichas:ultimo", informe); return informe; };
   if (!claveMaps()) return fin({ nada: "Falta GOOGLE_MAPS_API_KEY" });
+  // De paso, se ubican los productores y sus tiendas que falten (unas pocas búsquedas al mes)
+  const marcas = await ubicarMarcas().catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
   const [tiendas, fichas] = await Promise.all([leerTiendasGoogle(), leerFichas()]);
   const tocan = tiendasQueTocan(tiendas, fichas);
-  if (!tocan.length) return fin({ nada: "Todas las tiendas están al día" });
+  if (!tocan.length) return fin({ nada: "Todas las tiendas están al día", marcas });
 
   const leidas = [];
   const errores = [];
@@ -176,6 +179,7 @@ export async function investigarTiendas() {
     investigadas: nuevas.length,
     conPremio: nuevas.filter(([, f]) => f.premios.length).length,
     conEspecialidad: nuevas.filter(([, f]) => f.especialidades.length).length,
+    marcas,
     ...(sinCupo ? { sinCupo: true } : {}),
     ...(errores.length ? { error: errores[0], fallidas: errores.length } : {}),
   });
