@@ -53,3 +53,5 @@ export const SEO_ZONAS = {
 
 export const zonaPorSlug = (slug) => ZONAS.find((z) => SEO_ZONAS[z.id]?.slug === slug) || null;
 export const rutaZona = (id) => `/agenda-leon/${SEO_ZONAS[id].slug}`;
+// Despensa por producto y comarca: /despensa/morcilla/astorga, /despensa/cecina/leon-capital...
+export const rutaDespensaZona = (producto, id) => `/despensa/${producto}/${SEO_ZONAS[id].slug}`;

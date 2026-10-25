@@ -3,6 +3,8 @@ import PaginaContenido from "../components/PaginaContenido";
 import TarjetaLugar from "../components/TarjetaLugar";
 import { topLugares } from "../../lib/lugares";
 import { GLASS } from "../../lib/estilos";
+import { jsonLdSeguro, listaRestaurantesJsonLd } from "../../lib/seo";
+import { URL_SITIO } from "../../lib/sitio";
 
 export const revalidate = 3600;
 export const metadata = {
@@ -30,6 +32,7 @@ export default async function DondeComer() {
       ctaRef="donde-comer"
       actual="/donde-comer-en-leon"
     >
+      {lugares.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSeguro(listaRestaurantesJsonLd({ nombre: "Dónde comer en León: los bares y restaurantes que más recomienda Cazurronics", url: `${URL_SITIO}/donde-comer-en-leon`, lugares })) }} />}
       {lugares.length > 0 && (
         <section>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">Los que más recomendamos</h2>

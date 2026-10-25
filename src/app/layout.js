@@ -1,6 +1,7 @@
 import { Fredoka } from "next/font/google";
 import "./globals.css";
 import { URL_SITIO } from "../lib/sitio";
+import { jsonLdSeguro, sitioJsonLd } from "../lib/seo";
 
 // Cargamos la tipografía Fredoka con distintos grosores
 const fredoka = Fredoka({ 
@@ -22,6 +23,8 @@ export default function RootLayout({ children }) {
     <html lang="es" suppressHydrationWarning>
       {/* Aplicamos la fuente "Fredoka" a todo el cuerpo de tu web */}
       <body className={fredoka.className}>
+        {/* Quién está detrás de la web, para Google (no se ve) */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSeguro(sitioJsonLd(URL_SITIO)) }} />
         {children}
       </body>
     </html>
