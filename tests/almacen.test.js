@@ -54,3 +54,14 @@ describe("freno anti-abuso", () => {
     expect(await dentroDelLimite(peticionDesde("5.6.7.8"), "prueba", 3, 60)).toBe(true);
   });
 });
+
+describe("freno a las cifras de los negocios", () => {
+  it("una misma conexión suma como mucho 3 llamadas al día a un local", async () => {
+    const { POST } = await import("../src/app/api/evento/route");
+    const { comando } = await import("../src/lib/almacen");
+    const aviso = (ip) => new Request("http://localhost/api/evento", { method: "POST", headers: { "x-forwarded-for": ip }, body: JSON.stringify({ tipo: "llamar", lugarId: "p_ChIJfreno01" }) });
+    for (let i = 0; i < 5; i++) expect((await POST(aviso("10.9.9.1"))).status).toBe(204);
+    await POST(aviso("10.9.9.2"));
+    expect(Number(await comando(["HGET", "lugarstats:p_ChIJfreno01", "llamar"]))).toBe(4);
+  });
+});
