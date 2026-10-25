@@ -1,0 +1,19 @@
+# Cazurronics Planner
+
+> Web gratuita de planes de ocio y gastronomía en León (España) y su provincia. Recomienda bares, restaurantes, eventos y tiendas de producto local comprobados en Google Maps y en la prensa local.
+
+## Páginas principales
+
+- [Agenda de León](https://cazurronics.es/agenda-leon): conciertos, teatro, ferias y fiestas de León capital y de cada comarca, con su fuente.
+- [Qué hacer hoy en León](https://cazurronics.es/que-hacer-hoy-en-leon) y [mañana](https://cazurronics.es/que-hacer-manana-en-leon).
+- [Lo mejor del finde](https://cazurronics.es/finde): selección semanal de planes.
+- [Dónde comer en León](https://cazurronics.es/donde-comer-en-leon): bares y restaurantes que más recomienda Cazurronics y que mejor valora la gente que ha ido.
+- [Despensa de León](https://cazurronics.es/despensa): dónde comprar cecina, morcilla, botillo, quesos, pan, mantecadas, vino y otros productos leoneses, por comarca. Ejemplo: https://cazurronics.es/despensa/morcilla y https://cazurronics.es/despensa/cecina/astorga
+- [Crear un plan](https://cazurronics.es/): escribe qué te apetece, tu presupuesto y la zona, y la IA monta la ruta.
+
+## Cómo se eligen los sitios
+
+- Solo se publican eventos con fuente comprobada.
+- Bares, restaurantes y tiendas deben tener ficha real en Google Maps.
+- Las tiendas se ordenan por su nota en Google Maps (ponderada por número de reseñas) y por lo que cuenta la prensa.
+- Nadie paga por salir en los rankings.
