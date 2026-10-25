@@ -86,7 +86,7 @@ async function buscarConIA(busca, zona) {
       "especialidad":"lo que hay que comprar ahí, corto","porque":"una frase con el motivo (premio, años, lo que dice la gente)",
       "precio":"calidad-precio o capricho","puntuacion":"1 a 10 según lo bien que hablan de él","fuente":"https://... o null"}]
   `;
-  const { texto, dominios } = await llamarGemini(prompt, { para: "barrido", temperatura: 0.1, msMax: 38000 });
+  const { texto, dominios } = await llamarGemini(prompt, { para: "barrido", tarea: "despensa-tiendas", temperatura: 0.1, msMax: 38000 });
   const tiendas = (extraerJSON(texto, "[") || []).map(validarTiendaIA).filter(Boolean).slice(0, 6);
   return { tiendas, dominios };
 }

@@ -54,3 +54,18 @@ describe("freno anti-abuso", () => {
     expect(await dentroDelLimite(peticionDesde("5.6.7.8"), "prueba", 3, 60)).toBe(true);
   });
 });
+
+describe("gasto de la IA por tarea", () => {
+  it("suma llamadas, tokens y coste por tarea, la más cara primero", async () => {
+    const { registrarGastoIA, leerGastoIA } = await import("../src/lib/estadisticas");
+    await registrarGastoIA("barrido-eventos", { entrada: 1000, salida: 20000, consultas: 3, dolares: 0.043 });
+    await registrarGastoIA("barrido-eventos", { entrada: 500, salida: 4000, consultas: 1, dolares: 0.037 });
+    await registrarGastoIA("planes", { entrada: 2000, salida: 800, consultas: 0, dolares: 0.004 });
+    const [esteMes, mesPasado] = await leerGastoIA();
+    expect(esteMes.mes).toMatch(/^\d{4}-\d{2}$/);
+    expect(mesPasado.mes < esteMes.mes).toBe(true);
+    expect(esteMes.tareas[0]).toMatchObject({ tarea: "barrido-eventos", llamadas: 2, entrada: 1500, salida: 24000, busquedas: 4 });
+    expect(esteMes.tareas[0].dolares).toBeCloseTo(0.08, 6);
+    expect(esteMes.tareas[1]).toMatchObject({ tarea: "planes", llamadas: 1 });
+  });
+});

@@ -272,7 +272,7 @@ export async function buscarEnDespensa({ texto, lat, lon, radio, presupuesto }) 
   const candidatos = candidatosCerca(todas, { ...centro, radio: radioUsado, presupuesto, pedidos, palabras: palabrasClave(texto) });
   let elegido;
   try {
-    const { texto: respuesta } = await llamarGemini(promptBusqueda(texto, candidatos, { radio: radioUsado, presupuesto, sitio }), { para: "despensa", google: false, json: true, temperatura: 0.2, msMax: 25000 });
+    const { texto: respuesta } = await llamarGemini(promptBusqueda(texto, candidatos, { radio: radioUsado, presupuesto, sitio }), { para: "despensa", tarea: "despensa-buscador", google: false, json: true, temperatura: 0.2, msMax: 25000 });
     elegido = validarRespuesta(extraerJSON(respuesta, "{"), candidatos);
   } catch (e) {
     // Si la IA falla, no te quedas sin nada: salen las mejores tiendas cercanas de lo que pides

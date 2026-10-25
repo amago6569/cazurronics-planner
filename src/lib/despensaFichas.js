@@ -102,7 +102,7 @@ export function validarFicha(f, texto) {
 }
 
 async function leerLote(lote) {
-  const { texto } = await llamarGemini(promptFichas(lote), { para: "despensa", google: false, json: true, temperatura: 0.1, msMax: 30000 });
+  const { texto } = await llamarGemini(promptFichas(lote), { para: "despensa", tarea: "despensa-fichas", google: false, json: true, temperatura: 0.1, msMax: 30000 });
   const lista = extraerJSON(texto, "[") || [];
   return lote.map((t, i) => [t, validarFicha(lista.find((x) => Number(x?.n) === i + 1) || lista[i], t.texto)]);
 }
