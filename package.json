@@ -12,7 +12,7 @@
   "dependencies": {
     "@google/genai": "^2.24.0",
     "leaflet": "^1.9.4",
-    "next": "16.3.6",
+    "next": "16.4.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-leaflet": "^5.0.0"
@@ -21,7 +21,7 @@
     "@tailwindcss/postcss": "^4",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "vitest": "^3.2.7"
   }
