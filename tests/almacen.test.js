@@ -26,17 +26,18 @@ describe("votos", () => {
 });
 
 describe("lugares", () => {
-  const bar = { titulo: "Bar La Tapa", tipo: "bar", placeId: "ChIJtest123" };
+  // Desde que solo se guardan negocios con ficha real de Google, el bar necesita su nombre en Google; el museo no se guarda
+  const bar = { titulo: "Bar La Tapa", tipo: "bar", placeId: "ChIJtest123", nombreGoogle: "Bar La Tapa" };
   const museo = { titulo: "Museo de León", tipo: "museo" };
 
-  it("lee varios sitios de una vez, en el mismo orden y con null donde no hay", async () => {
+  it("lee varios sitios de una vez, en el mismo orden y con null donde no hay (ni donde no es un negocio)", async () => {
     const paradas = [bar, museo].map((p) => ({ ...p, lugarId: claveLugar(p) }));
     await registrarApariciones(paradas);
     await registrarApariciones(paradas.slice(0, 1));
     const [a, nada, b] = await leerLugares([paradas[0].lugarId, "s_no-existe", paradas[1].lugarId]);
     expect(a).toMatchObject({ nombre: "Bar La Tapa", clave: "p_ChIJtest123", stats: { apariciones: 2 } });
     expect(nada).toBeNull();
-    expect(b).toMatchObject({ nombre: "Museo de León", stats: { apariciones: 1 } });
+    expect(b).toBeNull();
     expect(await leerLugar("clave mala")).toBeNull();
   });
 
@@ -63,5 +64,20 @@ describe("freno a las cifras de los negocios", () => {
     for (let i = 0; i < 5; i++) expect((await POST(aviso("10.9.9.1"))).status).toBe(204);
     await POST(aviso("10.9.9.2"));
     expect(Number(await comando(["HGET", "lugarstats:p_ChIJfreno01", "llamar"]))).toBe(4);
+  });
+});
+
+describe("gasto de la IA por tarea", () => {
+  it("suma llamadas, tokens y coste por tarea, la más cara primero", async () => {
+    const { registrarGastoIA, leerGastoIA } = await import("../src/lib/estadisticas");
+    await registrarGastoIA("barrido-eventos", { entrada: 1000, salida: 20000, consultas: 3, dolares: 0.043 });
+    await registrarGastoIA("barrido-eventos", { entrada: 500, salida: 4000, consultas: 1, dolares: 0.037 });
+    await registrarGastoIA("planes", { entrada: 2000, salida: 800, consultas: 0, dolares: 0.004 });
+    const [esteMes, mesPasado] = await leerGastoIA();
+    expect(esteMes.mes).toMatch(/^\d{4}-\d{2}$/);
+    expect(mesPasado.mes < esteMes.mes).toBe(true);
+    expect(esteMes.tareas[0]).toMatchObject({ tarea: "barrido-eventos", llamadas: 2, entrada: 1500, salida: 24000, busquedas: 4 });
+    expect(esteMes.tareas[0].dolares).toBeCloseTo(0.08, 6);
+    expect(esteMes.tareas[1]).toMatchObject({ tarea: "planes", llamadas: 1 });
   });
 });

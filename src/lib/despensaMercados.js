@@ -60,7 +60,7 @@ async function buscarMercadillos(zona) {
     [{"pueblo":"municipio exacto","dias":["miércoles","sábado"],"horario":"9:00-14:00 o null","lugar":"plaza o calle o null",
       "que":"lo que se vende, corto","tipo":"semanal o productores","fuente":"https://..."}]
   `;
-  const { texto, dominios } = await llamarGemini(prompt, { para: "barrido", temperatura: 0.1, msMax: 38000 });
+  const { texto, dominios } = await llamarGemini(prompt, { para: "barrido", tarea: "despensa-mercadillos", temperatura: 0.1, msMax: 38000 });
   const lista = (extraerJSON(texto, "[") || []).map(validarMercadillo).filter(Boolean).slice(0, 15);
   // Fuente de verdad (como los eventos) y sitio en el mapa
   const buenos = await Promise.all(lista.map(async (m) => {

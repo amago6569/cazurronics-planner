@@ -284,6 +284,9 @@ export default function Panel() {
           </section>
         </div>
 
+        {/* Gasto de la IA por tarea: qué parte de la web se lleva la factura de Gemini */}
+        <GastoIA gasto={datos.gastoIA} />
+
         {/* Resumen del finde: texto listo para WhatsApp e Instagram + imágenes del carrusel */}
         {finde && (
           <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
@@ -404,5 +407,45 @@ export default function Panel() {
         </section>
       </div>
     </main>
+  );
+}
+
+// Tabla con lo que gasta cada tarea en Gemini este mes (y el anterior, para comparar). Solo lectura.
+const NOMBRES_TAREA = {
+  "barrido-eventos": "Barrido de eventos", "eventos-a-peticion": "Eventos a petición", planes: "Planes", retoques: "Retoques",
+  "despensa-tiendas": "Despensa: tiendas", "despensa-mercadillos": "Despensa: mercadillos", "despensa-fichas": "Despensa: fichas", "despensa-buscador": "Despensa: buscador",
+};
+const dolaresES = (n) => `~${n.toFixed(2).replace(".", ",")} $`;
+const miles = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M` : n >= 1e3 ? `${Math.round(n / 1e3)} mil` : String(n));
+function GastoIA({ gasto }) {
+  const [mes, setMes] = useState(0);
+  if (!gasto?.length) return null;
+  const { tareas } = gasto[mes] || { tareas: [] };
+  const total = tareas.reduce((s, t) => s + t.dolares, 0);
+  return (
+    <section className={`${GLASS} rounded-[2rem] p-5 sm:p-6 cz-up`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+        <h2 className="font-bold text-slate-900">Gasto de la IA por tarea <span className="text-slate-400 font-medium">· {dolaresES(total)}</span></h2>
+        <div className="flex gap-1.5">
+          {gasto.map((g, i) => (
+            <button key={g.mes} onClick={() => setMes(i)} className={`${PRESS} h-8 px-3 rounded-full text-xs font-semibold ${mes === i ? "bg-slate-900 text-white" : "bg-white/80 ring-1 ring-slate-900/10 text-slate-700"}`}>{i === 0 ? "Este mes" : "Mes pasado"}</button>
+          ))}
+        </div>
+      </div>
+      {tareas.length ? (
+        <ul className="space-y-1.5">
+          {tareas.map((t) => (
+            <li key={t.tarea} className="bg-white/60 rounded-xl px-3 py-2 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-800 truncate">{NOMBRES_TAREA[t.tarea] || t.tarea}</span>
+                <span className="shrink-0 font-bold tabular-nums">{dolaresES(t.dolares)}</span>
+              </div>
+              <p className="text-xs text-slate-500 tabular-nums">{t.llamadas} llamadas · {t.busquedas} búsquedas · tokens: {miles(t.entrada)} leídos, {miles(t.salida)} escritos{t.llamadas ? ` (${miles(Math.round(t.salida / t.llamadas))} por llamada)` : ""}</p>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-sm text-slate-500">Aún no hay datos de este mes. Se apuntan solos en cada llamada a la IA.</p>}
+      <p className="text-xs text-slate-400 mt-3">Coste aproximado con la tarifa de Google. La factura real puede ser menor por las búsquedas gratis del día.</p>
+    </section>
   );
 }

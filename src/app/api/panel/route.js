@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { comando, leerJSON, usaRedis, varios } from "../../../lib/almacen";
-import { leerResumen } from "../../../lib/estadisticas";
+import { leerGastoIA, leerResumen } from "../../../lib/estadisticas";
 import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares } from "../../../lib/lugares";
 import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
 import { barrerDespensa, resumenDespensa } from "../../../lib/despensa";
@@ -39,7 +39,7 @@ async function datosDelPanel(request) {
     const lugares = await buscarLugares(buscar);
     return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa, despensaTiendas, mercadillos, fichas] = await Promise.all([
+  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa, despensaTiendas, mercadillos, fichas, gastoIA] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
@@ -50,6 +50,7 @@ async function datosDelPanel(request) {
     resumenTiendas().catch(() => null),
     resumenMercadillos().catch(() => null),
     resumenFichas().catch(() => null),
+    leerGastoIA().catch(() => null),
   ]);
   const conEnlace = (l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) });
   return NextResponse.json({
@@ -60,6 +61,7 @@ async function datosDelPanel(request) {
     favoritos: gusta.map(conEnlace),
     barrido,
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
+    gastoIA,
     despensa: despensa ? { ...despensa, google: despensaTiendas, mercadillos, fichas } : null,
     solicitudes: (solicitudes || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean),
   }, { headers: { "Cache-Control": "no-store" } });

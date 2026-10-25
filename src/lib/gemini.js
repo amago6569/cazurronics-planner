@@ -3,6 +3,9 @@
 // Cada modelo tiene su propia cuota, así que el barrido automático usa modelos distintos que los planes
 // de la gente: aunque el barrido gaste mucho, los planes de los usuarios siguen funcionando.
 
+import { enSegundoPlano } from "./almacen";
+import { registrarGastoIA } from "./estadisticas";
+
 const MODELOS = {
   usuario: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
   // Solo modelos 2.x: en ellos las búsquedas en Google entran en las 1.500 peticiones gratis al día. Los 3.x (como
@@ -44,7 +47,8 @@ export function medirUso(modelo, datos) {
 }
 
 // json: true pide la respuesta directamente en JSON (solo sin Google Search: Gemini no admite las dos cosas a la vez)
-export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2, google = true, json = false, msMax = 50000 } = {}) {
+// tarea: nombre con el que se apunta el gasto en el panel (por defecto, el de "para")
+export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000 } = {}) {
   const fallos = [];
   const fin = Date.now() + msMax;
   for (const modelo of MODELOS[para] || MODELOS.usuario) {
@@ -80,7 +84,8 @@ export async function llamarGemini(prompt, { para = "usuario", temperatura = 0.2
         .filter((t) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)));
       if (fallos.length) console.warn("[gemini] plan B:", fallos.join(" | "), "→ usando", modelo);
       const uso = medirUso(modelo, datos);
-      console.log(`[gemini-uso] ${para} ${modelo} entrada=${uso.entrada} salida=${uso.salida} busquedas=${uso.consultas} ~${uso.dolares}$`);
+      enSegundoPlano(() => registrarGastoIA(tarea, uso), "gasto-ia"); // solo apunta; si falla, la respuesta sigue igual
+      console.log(`[gemini-uso] ${tarea} ${modelo} entrada=${uso.entrada} salida=${uso.salida} busquedas=${uso.consultas} ~${uso.dolares}$`);
       // Las páginas que ha consultado y qué trozo de la respuesta sale de cada una (para saber la fuente de cada dato)
       const grounding = { chunks: (candidato?.groundingMetadata?.groundingChunks || []).map((c) => ({ uri: c?.web?.uri || null, title: c?.web?.title || null })), supports: candidato?.groundingMetadata?.groundingSupports || [] };
       return { texto, dominios, modelo, uso, grounding };
