@@ -5,7 +5,7 @@ import { dentroDelLimite, dentroDelTopeDiario } from "../../../lib/freno";
 
 // POST /api/evento — analítica propia. Lo manda el navegador con navigator.sendBeacon (texto plano).
 // { tipo: "visita" | "vuelve" | "compartir" | "detalle" | "llamar" | "web" | ..., fuente?, lugarId? }
-const DESDE_NAVEGADOR = ["visita", "vuelve", "compartir", "abre_compartido", "detalle", "llamar", "web"];
+const DESDE_NAVEGADOR = ["visita", "vuelve", "compartir", "abre_compartido", "historia", "detalle", "llamar", "web"];
 
 export async function POST(request) {
   let datos = {};

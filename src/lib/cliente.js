@@ -92,3 +92,24 @@ export async function compartirPlan(planId, texto = "Mira el plan que me ha mont
   }
   try { await navigator.clipboard.writeText(url); return "copiado"; } catch { return "error"; }
 }
+
+// La imagen vertical del plan para subirla a la historia de Instagram (con @cazurronics).
+// En el móvil abre el menú de compartir con la imagen; si no se puede, la descarga.
+export async function compartirHistoria(planId) {
+  baliza("historia");
+  try {
+    const r = await fetch(`/plan/${planId}/historia`);
+    if (!r.ok) return "error";
+    const archivo = new File([await r.blob()], "mi-plan-cazurronics.png", { type: "image/png" });
+    if (navigator.canShare?.({ files: [archivo] })) {
+      try { await navigator.share({ files: [archivo], text: "Mi plan en León by @cazurronics 🦁" }); return "compartido"; }
+      catch (e) { if (e?.name === "AbortError") return "cancelado"; }
+    }
+    const enlace = document.createElement("a");
+    enlace.href = URL.createObjectURL(archivo);
+    enlace.download = archivo.name;
+    enlace.click();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 5000);
+    return "descargado";
+  } catch { return "error"; }
+}

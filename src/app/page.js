@@ -6,7 +6,7 @@ import BusinessModal from './components/BusinessModal';
 import SelectorSeccion from './components/SelectorSeccion';
 import Valorar from './components/Valorar';
 import AgendaFranjas from './components/AgendaFranjas';
-import { baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
+import { baliza, compartirPlan, compartirHistoria, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
 
 const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false });
 
@@ -122,6 +122,15 @@ export default function Home() {
     if (!planId) return;
     const r = await compartirPlan(planId);
     if (r === "copiado") { setAviso("Enlace copiado. ¡Pásalo al grupo!"); setTimeout(() => setAviso(""), 2500); }
+  };
+  const [creandoHistoria, setCreandoHistoria] = useState(false);
+  const subirHistoria = async () => {
+    if (!planId || creandoHistoria) return;
+    setCreandoHistoria(true);
+    const r = await compartirHistoria(planId);
+    setCreandoHistoria(false);
+    const textos = { descargado: "Imagen guardada. Súbela a tu historia y etiqueta a @cazurronics", error: "No se pudo crear la imagen. Prueba otra vez" };
+    if (textos[r]) { setAviso(textos[r]); setTimeout(() => setAviso(""), 3500); }
   };
   const abrirParada = (parada, index) => {
     setParadaSeleccionada(parada); setIndiceSeleccionado(index);
@@ -408,6 +417,21 @@ export default function Home() {
                     <div className="min-w-0">
                       <p className="text-[15px] font-semibold text-slate-900">Decidid en grupo</p>
                       <p className="text-sm text-slate-600 leading-snug">Manda el enlace y votad cada parada. <span className="font-semibold text-rose-500 group-hover:underline">Compartir →</span></p>
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {planId && (
+                <button onClick={subirHistoria} disabled={creandoHistoria} className={`${GLASS} group text-left rounded-[2rem] p-5 relative overflow-hidden cz-up transition-all duration-500 hover:-translate-y-1 hover:bg-white/70 active:scale-[0.98] disabled:opacity-70`} style={{ animationDelay: "185ms" }}>
+                  <div aria-hidden className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-gradient-to-br from-fuchsia-200/60 to-amber-200/50 blur-2xl" />
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-amber-400 via-rose-500 to-fuchsia-600 flex items-center justify-center text-white shadow-[0_8px_20px_-6px_rgba(225,29,72,0.55)]" aria-hidden>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" /></svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-slate-900">{creandoHistoria ? "Creando tu imagen…" : "Súbelo a tu historia"}</p>
+                      <p className="text-sm text-slate-600 leading-snug">Tu plan en una imagen lista para Instagram. <span className="font-semibold text-rose-500 group-hover:underline">Crear →</span></p>
                     </div>
                   </div>
                 </button>

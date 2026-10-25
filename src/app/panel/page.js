@@ -137,7 +137,7 @@ export default function Panel() {
   const maxDia = Math.max(1, ...dias.map((d) => Math.max(d.visita || 0, d.plan || 0)));
   const fuentes = Object.entries(resumen.fuentes).sort((a, b) => b[1] - a[1]);
   const embudo = [
-    ["Visitas", t.visita || 0], ["Planes generados", t.plan || 0], ["Planes compartidos", t.compartir || 0], ["Aperturas de enlaces", t.abre_compartido || 0],
+    ["Visitas", t.visita || 0], ["Planes generados", t.plan || 0], ["Planes compartidos", t.compartir || 0], ["Historias creadas", t.historia || 0], ["Aperturas de enlaces", t.abre_compartido || 0],
   ];
 
   return (
