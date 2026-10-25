@@ -26,17 +26,18 @@ describe("votos", () => {
 });
 
 describe("lugares", () => {
-  const bar = { titulo: "Bar La Tapa", tipo: "bar", placeId: "ChIJtest123" };
+  // Desde que solo se guardan negocios con ficha real de Google, el bar necesita su nombre en Google; el museo no se guarda
+  const bar = { titulo: "Bar La Tapa", tipo: "bar", placeId: "ChIJtest123", nombreGoogle: "Bar La Tapa" };
   const museo = { titulo: "Museo de León", tipo: "museo" };
 
-  it("lee varios sitios de una vez, en el mismo orden y con null donde no hay", async () => {
+  it("lee varios sitios de una vez, en el mismo orden y con null donde no hay (ni donde no es un negocio)", async () => {
     const paradas = [bar, museo].map((p) => ({ ...p, lugarId: claveLugar(p) }));
     await registrarApariciones(paradas);
     await registrarApariciones(paradas.slice(0, 1));
     const [a, nada, b] = await leerLugares([paradas[0].lugarId, "s_no-existe", paradas[1].lugarId]);
     expect(a).toMatchObject({ nombre: "Bar La Tapa", clave: "p_ChIJtest123", stats: { apariciones: 2 } });
     expect(nada).toBeNull();
-    expect(b).toMatchObject({ nombre: "Museo de León", stats: { apariciones: 1 } });
+    expect(b).toBeNull();
     expect(await leerLugar("clave mala")).toBeNull();
   });
 
