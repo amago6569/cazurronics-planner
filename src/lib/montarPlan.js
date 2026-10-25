@@ -67,7 +67,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
     `;
 
   // Gemini con plan B: si un modelo está saturado, prueba otro (ver lib/gemini.js)
-  const { texto: textoIA, uso } = await llamarGemini(prompt, { para: 'usuario', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + msIA - Date.now()) });
+  const { texto: textoIA, uso } = await llamarGemini(prompt, { para: 'usuario', tarea: 'planes', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + msIA - Date.now()) });
   const rutaBruta = extraerJSON(textoIA, '[');
   if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
 

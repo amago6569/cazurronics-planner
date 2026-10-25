@@ -124,8 +124,8 @@ const diaDeLaSemana = (fecha) => new Date(`${fecha}T12:00:00Z`).getUTCDay();
 
 // Las búsquedas del barrido usan modelos "lite" con su propia cuota (ver lib/gemini.js),
 // para no quitarle cuota a los planes de la gente
-async function llamarGemini(prompt, msMax = 50000) {
-  return llamarGeminiConPlanB(prompt, { para: "barrido", temperatura: 0.1, msMax });
+async function llamarGemini(prompt, msMax = 50000, tarea = "barrido-eventos") {
+  return llamarGeminiConPlanB(prompt, { para: "barrido", tarea, temperatura: 0.1, msMax });
 }
 
 // La lista de eventos de la respuesta (aunque venga con ```json, frases o citas "[1]" alrededor)
@@ -603,7 +603,7 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
   `;
   // Solo la búsqueda de lo que pide la persona: cada una es una búsqueda de pago, y lo genérico (mercadillos,
   // ferias, pueblos) ya lo traen los barridos automáticos de la agenda
-  const resultados = await Promise.allSettled(temas.slice(0, 1).map((t) => llamarGemini(prompt(t), 22000)));
+  const resultados = await Promise.allSettled(temas.slice(0, 1).map((t) => llamarGemini(prompt(t), 22000, "eventos-a-peticion")));
   // Solo lo que tiene fuente comprobada (web consultada de verdad por Google, o URL que existe)
   const limite = Date.now() + 5000;
   const comprobados = await Promise.all(resultados.filter((r) => r.status === "fulfilled").map(async (r) => {

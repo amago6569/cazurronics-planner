@@ -55,3 +55,44 @@ export async function totalPlanes() {
   const t = aObjeto(await comando(["HGETALL", "stats:total"]));
   return Number(t.plan) || 0;
 }
+
+// ============ GASTO DE LA IA POR TAREA ============
+// Cada llamada a Gemini suma aquí sus tokens, búsquedas y coste aproximado, por mes y por tarea
+// (barrido de eventos, planes, Despensa...). Así el panel enseña qué tarea se lleva la factura.
+// Solo mide: no cambia nada de lo que hace la IA.
+const MESES_GASTO = 400 * 24 * 3600;
+const mesEnLeon = (desplazamientoMeses = 0) => {
+  const [a, m] = hoyEnLeon().split("-").map(Number);
+  const d = new Date(Date.UTC(a, m - 1 + desplazamientoMeses, 1));
+  return d.toISOString().slice(0, 7);
+};
+
+export async function registrarGastoIA(tarea, uso) {
+  const t = limpiarFuente(tarea) || "otra";
+  const clave = `ia:${mesEnLeon()}`;
+  await varios([
+    ["HINCRBY", clave, `${t}:llamadas`, 1],
+    ["HINCRBY", clave, `${t}:entrada`, Math.round(Number(uso?.entrada) || 0)],
+    ["HINCRBY", clave, `${t}:salida`, Math.round(Number(uso?.salida) || 0)],
+    ["HINCRBY", clave, `${t}:busquedas`, Math.round(Number(uso?.consultas) || 0)],
+    ["HINCRBY", clave, `${t}:microdolares`, Math.round((Number(uso?.dolares) || 0) * 1e6)],
+    ["EXPIRE", clave, MESES_GASTO],
+  ]);
+}
+
+// { mes, tareas: [{ tarea, llamadas, entrada, salida, busquedas, dolares }] } de este mes y el anterior, la más cara primero
+export async function leerGastoIA() {
+  const meses = [mesEnLeon(), mesEnLeon(-1)];
+  const res = await varios(meses.map((m) => ["HGETALL", `ia:${m}`]));
+  return meses.map((mes, i) => {
+    const porTarea = {};
+    for (const [campo, valor] of Object.entries(aObjeto(res[i]))) {
+      const corte = campo.lastIndexOf(":");
+      const tarea = campo.slice(0, corte), dato = campo.slice(corte + 1);
+      (porTarea[tarea] ||= { tarea })[dato] = Number(valor) || 0;
+    }
+    const tareas = Object.values(porTarea).map(({ microdolares = 0, ...r }) => ({ llamadas: 0, entrada: 0, salida: 0, busquedas: 0, ...r, dolares: microdolares / 1e6 }))
+      .sort((a, b) => b.dolares - a.dolares);
+    return { mes, tareas };
+  });
+}
