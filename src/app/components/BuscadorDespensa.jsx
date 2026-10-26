@@ -6,7 +6,7 @@
 import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
-import { enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
+import { enlaceEsTuTienda, enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
 import { zonaDe, zonaPorId } from "../../lib/zonas";
 
 // El mismo mapa que los planes: buscas un pueblo o tocas el mapa y mueves el rosetón para la distancia
@@ -21,6 +21,7 @@ const LEON = { lat: 42.5987, lon: -5.5671, nombre: "León" };
 
 // Cada tienda lleva el mismo número que su chincheta en el mapa (como las paradas de los planes)
 function Tienda({ t }) {
+  const esTuya = enlaceEsTuTienda(t);
   return (
     <li className="bg-white/70 ring-1 ring-slate-900/5 rounded-[1.4rem] p-4 transition-all duration-300 hover:bg-white hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-14px_rgba(15,23,42,0.35)]">
       <div className="flex items-start gap-3">
@@ -41,6 +42,7 @@ function Tienda({ t }) {
           <div className="flex flex-wrap items-center gap-2 mt-3">
           <a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] hover:bg-slate-800 hover:-translate-y-0.5`}>📍 Cómo llegar</a>
             {t.fuente && <a href={t.fuente} target="_blank" rel="noopener noreferrer nofollow" className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>Fuente ↗</a>}
+            {esTuya && <a href={esTuya} className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>¿Es tu tienda? Escríbenos</a>}
           </div>
         </div>
       </div>

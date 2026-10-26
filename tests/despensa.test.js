@@ -1,7 +1,7 @@
 // npm test — Despensa de León: lo que se acepta de la IA, la ficha de Google, qué toca buscar y el top 3
 import { describe, expect, it } from "vitest";
 import { COMBINACIONES, fichaValida, pareceElMismo, pendientes, puntuacionFinal, validarTiendaIA, zonaDeTiendaIA } from "../src/lib/despensa";
-import { enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
+import { enlaceEsTuTienda, enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
 
 describe("validarTiendaIA", () => {
   const base = { nombre: "Embutidos Entrepeñas", localidad: "León", fuente: "https://www.diariodeleon.es/x", puntuacion: "9", precio: "calidad-precio" };
@@ -183,5 +183,19 @@ describe("zonaDeTiendaIA", () => {
   });
   it("una tienda de León capital buscada en La Bañeza va a León", () => {
     expect(zonaDeTiendaIA({ localidad: "León", lat: 42.6, lon: -5.57 }, "baneza")).toBe("leon");
+  });
+});
+
+describe("enlaceEsTuTienda", () => {
+  const t = { nombre: "Embutidos Entrepeñas", localidad: "León" };
+  it("abre un correo a CZX con la tienda en el asunto y en el texto", () => {
+    const url = enlaceEsTuTienda(t);
+    expect(url.startsWith("mailto:amago6569@cazurronics.es?subject=")).toBe(true);
+    expect(decodeURIComponent(url)).toContain("Despensa de León: Embutidos Entrepeñas");
+    expect(decodeURIComponent(url)).toContain("soy de Embutidos Entrepeñas (León)");
+  });
+  it("sin nombre de tienda o sin correo, no hay enlace", () => {
+    expect(enlaceEsTuTienda({})).toBeNull();
+    expect(enlaceEsTuTienda(t, "")).toBeNull();
   });
 });
