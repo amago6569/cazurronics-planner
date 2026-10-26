@@ -1,7 +1,7 @@
 // npm test — Despensa de León: lo que se acepta de la IA, la ficha de Google, qué toca buscar y el top 3
 import { describe, expect, it } from "vitest";
 import { COMBINACIONES, fichaValida, pareceElMismo, pendientes, puntuacionFinal, validarTiendaIA, zonaDeTiendaIA } from "../src/lib/despensa";
-import { enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
+import { enlaceEsTuTienda, enlaceMaps, rutaMaps, topTiendas } from "../src/lib/despensaProductos";
 
 describe("validarTiendaIA", () => {
   const base = { nombre: "Embutidos Entrepeñas", localidad: "León", fuente: "https://www.diariodeleon.es/x", puntuacion: "9", precio: "calidad-precio" };
@@ -183,5 +183,20 @@ describe("zonaDeTiendaIA", () => {
   });
   it("una tienda de León capital buscada en La Bañeza va a León", () => {
     expect(zonaDeTiendaIA({ localidad: "León", lat: 42.6, lon: -5.57 }, "baneza")).toBe("leon");
+  });
+});
+
+describe("enlaceEsTuTienda", () => {
+  const t = { nombre: "Embutidos Entrepeñas", localidad: "León" };
+  it("sin número configurado, no hay enlace", () => {
+    expect(enlaceEsTuTienda(t, "")).toBeNull();
+  });
+  it("móvil sin prefijo: añade el 34 y escribe el mensaje con la tienda", () => {
+    const url = enlaceEsTuTienda(t, "612 345 678");
+    expect(url.startsWith("https://wa.me/34612345678?text=")).toBe(true);
+    expect(decodeURIComponent(url.split("text=")[1])).toContain("soy de Embutidos Entrepeñas (León)");
+  });
+  it("con prefijo +34 lo deja igual", () => {
+    expect(enlaceEsTuTienda(t, "+34 612345678")).toMatch(/^https:\/\/wa\.me\/34612345678\?/);
   });
 });
