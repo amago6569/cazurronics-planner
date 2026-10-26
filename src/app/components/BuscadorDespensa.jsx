@@ -42,7 +42,7 @@ function Tienda({ t }) {
           <div className="flex flex-wrap items-center gap-2 mt-3">
           <a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] hover:bg-slate-800 hover:-translate-y-0.5`}>📍 Cómo llegar</a>
             {t.fuente && <a href={t.fuente} target="_blank" rel="noopener noreferrer nofollow" className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>Fuente ↗</a>}
-            {esTuya && <a href={esTuya} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>¿Es tu tienda? Escríbenos</a>}
+            {esTuya && <a href={esTuya} className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>¿Es tu tienda? Escríbenos</a>}
           </div>
         </div>
       </div>

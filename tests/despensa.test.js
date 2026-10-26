@@ -188,15 +188,14 @@ describe("zonaDeTiendaIA", () => {
 
 describe("enlaceEsTuTienda", () => {
   const t = { nombre: "Embutidos Entrepeñas", localidad: "León" };
-  it("sin número configurado, no hay enlace", () => {
+  it("abre un correo a CZX con la tienda en el asunto y en el texto", () => {
+    const url = enlaceEsTuTienda(t);
+    expect(url.startsWith("mailto:amago6569@cazurronics.es?subject=")).toBe(true);
+    expect(decodeURIComponent(url)).toContain("Despensa de León: Embutidos Entrepeñas");
+    expect(decodeURIComponent(url)).toContain("soy de Embutidos Entrepeñas (León)");
+  });
+  it("sin nombre de tienda o sin correo, no hay enlace", () => {
+    expect(enlaceEsTuTienda({})).toBeNull();
     expect(enlaceEsTuTienda(t, "")).toBeNull();
-  });
-  it("móvil sin prefijo: añade el 34 y escribe el mensaje con la tienda", () => {
-    const url = enlaceEsTuTienda(t, "612 345 678");
-    expect(url.startsWith("https://wa.me/34612345678?text=")).toBe(true);
-    expect(decodeURIComponent(url.split("text=")[1])).toContain("soy de Embutidos Entrepeñas (León)");
-  });
-  it("con prefijo +34 lo deja igual", () => {
-    expect(enlaceEsTuTienda(t, "+34 612345678")).toMatch(/^https:\/\/wa\.me\/34612345678\?/);
   });
 });

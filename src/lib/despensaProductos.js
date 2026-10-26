@@ -82,13 +82,15 @@ export function enlaceMaps(t) {
   return `https://www.google.com/maps/search/?api=1&query=${q}${t.placeId ? `&query_place_id=${encodeURIComponent(t.placeId)}` : ""}`;
 }
 
-// «¿Es tu tienda? Escríbenos»: abre WhatsApp de CZX Soluciones con un mensaje ya escrito.
-// Escribe el dueño de la tienda, no nosotros (sin envíos en frío). Sin NEXT_PUBLIC_CZX_WHATSAPP no sale.
-export function enlaceEsTuTienda(t, numero = process.env.NEXT_PUBLIC_CZX_WHATSAPP) {
-  const n = String(numero || "").replace(/\D/g, "").replace(/^(?=[67]\d{8}$)/, "34");
-  if (n.length < 11 || !t?.nombre) return null;
-  const texto = `Hola, soy de ${t.nombre}${t.localidad ? ` (${t.localidad})` : ""}. He visto mi tienda en la Despensa de León y quiero información.`;
-  return `https://wa.me/${n}?text=${encodeURIComponent(texto)}`;
+// «¿Es tu tienda? Escríbenos»: abre un correo a CZX Soluciones con el asunto y el texto ya escritos.
+// Escribe el dueño de la tienda, no nosotros (sin envíos en frío).
+export const CORREO_CZX = "amago6569@cazurronics.es";
+export function enlaceEsTuTienda(t, correo = CORREO_CZX) {
+  if (!correo || !t?.nombre) return null;
+  const donde = t.localidad ? ` (${t.localidad})` : "";
+  const asunto = `Mi tienda en la Despensa de León: ${t.nombre}`;
+  const texto = `Hola, soy de ${t.nombre}${donde}. He visto mi tienda en la Despensa de León y quiero información.`;
+  return `mailto:${correo}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`;
 }
 
 // Ruta en Google Maps por varias tiendas (gratis: es un enlace, no llama a ninguna API).
