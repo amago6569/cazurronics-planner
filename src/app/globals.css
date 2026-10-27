@@ -39,6 +39,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .cz-up, .cz-sheet { animation: cz-fade .5s ease both !important; }
   .cz-pop { animation: none; }
+  .cz-spin, .cz-colorea { animation: none !important; }
 }
 
 /* Deslizador con el rosetón (mapa de planes y de la Despensa) */

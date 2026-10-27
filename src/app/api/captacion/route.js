@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { claveDePanelValida } from "../../../lib/lugares";
 import { guardarAjustes, guardarSeguimiento, listarCaptacion } from "../../../lib/captacion";
 
@@ -14,14 +15,15 @@ const autorizado = (request) => claveDePanelValida(request.headers.get("x-clave"
 const SIN_CACHE = { "Cache-Control": "no-store" };
 const COOKIE_PRUEBA = { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", secure: process.env.NODE_ENV === "production" };
 
-function rechazar(request) {
+async function rechazar(request) {
   if (!process.env.PANEL_CLAVE) return NextResponse.json({ exito: false, mensaje: "Falta la variable PANEL_CLAVE en el servidor." }, { status: 503 });
-  if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
+  const acceso = await claveConFreno(request, autorizado(request));
+  if (acceso !== "ok") return respuestaClave(acceso);
   return null;
 }
 
 export async function GET(request) {
-  const no = rechazar(request);
+  const no = await rechazar(request);
   if (no) return no;
   try {
     const res = NextResponse.json({ exito: true, ...(await listarCaptacion()) }, { headers: SIN_CACHE });
@@ -35,7 +37,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const no = rechazar(request);
+  const no = await rechazar(request);
   if (no) return no;
   const cuerpo = await request.json().catch(() => ({}));
   try {

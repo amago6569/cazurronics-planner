@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { claveConFreno, respuestaClave } from "../../../../lib/freno";
 import { claveDePanelValida } from "../../../../lib/lugares";
 import { leerPeticionPlan } from "../../../../lib/planUtils";
 import { montarPlan } from "../../../../lib/montarPlan";
@@ -11,9 +12,8 @@ export const dynamic = "force-dynamic";
 // Monta UN plan en el modo pedido y devuelve el plan, lo que ha costado la llamada a la IA y lo que ha tardado.
 // No guarda el plan ni suma estadísticas: es solo para comparar desde /panel/comparar.
 export async function POST(request) {
-  if (!claveDePanelValida(request.headers.get("x-clave") || "")) {
-    return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
-  }
+  const acceso = await claveConFreno(request, claveDePanelValida(request.headers.get("x-clave") || ""));
+  if (acceso !== "ok") return respuestaClave(acceso);
   const inicio = Date.now();
   const body = await request.json().catch(() => null);
   const peticion = leerPeticionPlan(body);

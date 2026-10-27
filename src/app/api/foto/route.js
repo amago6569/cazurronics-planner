@@ -1,8 +1,12 @@
 // Proxy de fotos de Google Places: el navegador pide /api/foto?ref=..., y aquí añadimos la clave.
 // Así la clave de Google Maps nunca aparece en el HTML ni en las peticiones del navegador.
+import { dentroDelLimite } from "../../../lib/freno";
+
 export async function GET(request) {
   const ref = new URL(request.url).searchParams.get("ref") || "";
   if (!/^[\w-]{20,1200}$/.test(ref)) return new Response("Foto no válida", { status: 400 });
+  // Un plan carga como mucho unas pocas decenas de fotos: más de 120 por minuto es alguien inventando refs para gastar cuota
+  if (!(await dentroDelLimite(request, "foto", 120, 60))) return new Response("Demasiadas fotos", { status: 429 });
 
   const clave = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
   const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${ref}&key=${clave}`;
@@ -13,7 +17,7 @@ export async function GET(request) {
     // Google responde con una redirección a la imagen final (googleusercontent.com, sin clave).
     const res = await fetch(url, { redirect: "manual" });
     const destino = res.headers.get("location");
-    if (destino && res.status >= 300 && res.status < 400) {
+    if (destino && /^https:\/\/[\w.-]+\.googleusercontent\.com\//.test(destino) && res.status >= 300 && res.status < 400) {
       return new Response(null, { status: 302, headers: { Location: destino, "Cache-Control": cache } });
     }
     if (res.ok && (res.headers.get("content-type") || "").startsWith("image/")) {

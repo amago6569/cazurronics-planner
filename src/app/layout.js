@@ -14,6 +14,8 @@ export const metadata = {
   title: 'Cazurronics Planner | Tu planazo en León',
   description: 'Organiza tu escapada perfecta por la provincia de León. Descubre rincones ocultos sin pensar y sin estrés.',
   openGraph: { siteName: 'Cazurronics Planner', locale: 'es_ES', type: 'website' },
+  // Al compartir en X/WhatsApp sale la imagen grande (la de opengraph-image.js) en vez de una miniatura
+  twitter: { card: 'summary_large_image' },
   verification: { google: '95sdW_hUNT20HILlfi8C5gDdRjUkOPfVnULlE8AYuAI' },
 }
 
