@@ -13,6 +13,7 @@ import { hoyEnLeon } from "./estadisticas";
 import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
+import { fuentesPara } from "./intencion";
 
 const DIAS_VENTANA = 14;
 // Mismos límites de la provincia que usa el mapa
@@ -586,6 +587,8 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
 
   const nombreDia = DIAS[diaDeLaSemana(fecha)];
   const donde = `${zona || "León"} (provincia de León, España), en un radio de ${radio} km`;
+  // Webs donde suele publicarse ESE tipo de cosa (charlas, deporte, comida...). Va en la misma búsqueda: no cuesta más
+  const fuentesTema = fuentesPara(apetece);
   const peticion = String(apetece || "").slice(0, 300) || "un plan de ocio";
   const temas = [
     `eventos, actividades y planes del ${fecha} (${nombreDia}) en ${donde} relacionados con lo que pide el usuario: "${peticion}"`,
@@ -596,7 +599,8 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
   const prompt = (tema) => `
     Eres el documentalista de Cazurronics Planner. Busca en Internet, en todas las fuentes que puedas
     (webs de ayuntamientos y de la Diputación de León, Junta de Castilla y León, prensa local como Diario de León, Leonoticias o iLeón,
-    redes y webs de los organizadores, venta de entradas, turismo), ${tema}.
+    redes y webs de los organizadores, venta de entradas, turismo, foros y grupos locales${fuentesTema ? `; y sobre todo ${fuentesTema}` : ""}), ${tema}.
+    Si el usuario pide algo concreto (una charla, un partido...), busca SOLO eso y no devuelvas otras cosas; si lo que pide es abierto, devuelve variedad.
     REGLAS: solo cosas confirmadas en una fuente real; no inventes nada; incluye la URL exacta donde lo has visto.
     Devuelve SOLO un array JSON (máximo 15 elementos) con este formato:
     ${FORMATO_EVENTO}
