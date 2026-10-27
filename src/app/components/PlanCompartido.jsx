@@ -233,17 +233,17 @@ export default function PlanCompartido({ inicial }) {
               {[["💶", "Precio", parada.precio], ["🕒", "Horario", parada.horario], ["🚶", "Cómo llegar", parada.transporte], ["⭐", "Reseñas", parada.resenas]].filter(([, , v]) => v).map(([ic, et, val]) => (
                 <div key={et} className="flex items-center gap-3 bg-white/70 ring-1 ring-slate-900/5 rounded-2xl p-3">
                   <span className="w-9 h-9 shrink-0 rounded-xl bg-slate-100 flex items-center justify-center">{ic}</span>
-                  <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{et}</p><p className="text-sm font-medium text-slate-800">{val}</p></div>
+                  <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{et}</p><p className="text-sm font-medium text-slate-800">{val}</p></div>
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-2 gap-2">
               {parada.telefono && parada.telefono !== "No disponible" ? (
                 <a href={telSeguro(parada.telefono)} onClick={() => baliza("llamar", { lugarId: parada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl`}>📞 Llamar</a>
-              ) : <span className="h-12 flex items-center justify-center bg-slate-900/5 text-slate-400 font-semibold rounded-2xl">📞 Sin teléfono</span>}
+              ) : <span className="h-12 flex items-center justify-center bg-slate-900/5 text-slate-500 font-semibold rounded-2xl">📞 Sin teléfono</span>}
               {parada.web && parada.web !== "No disponible" ? (
                 <a href={webSegura(parada.web)} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: parada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200`}>🌐 Web</a>
-              ) : <span className="h-12 flex items-center justify-center bg-slate-900/5 text-slate-400 font-semibold rounded-2xl">🌐 Sin web</span>}
+              ) : <span className="h-12 flex items-center justify-center bg-slate-900/5 text-slate-500 font-semibold rounded-2xl">🌐 Sin web</span>}
             </div>
           </div>
         </div>

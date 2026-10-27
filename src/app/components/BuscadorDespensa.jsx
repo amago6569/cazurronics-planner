@@ -17,7 +17,7 @@ const PRESUPUESTO = "igual"; // sin presupuesto: la IA lo deduce de lo que escri
 const distancia = (r) => (r < 1 ? `${Math.round(r * 1000)} m` : `${String(r).replace(".", ",")} km`);
 const dondeRadio = (r, sitio) => (r >= 150 ? "en toda la provincia" : `a ${distancia(r)} de ${sitio}`);
 const LABEL = "flex items-center gap-2 text-[13px] font-semibold text-slate-700 mb-2 px-1";
-const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
+const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-500 font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 const LEON = { lat: 42.5987, lon: -5.5671, nombre: "León" };
 
 // Cada tienda lleva el mismo número que su chincheta en el mapa (como las paradas de los planes)
@@ -39,7 +39,7 @@ function Tienda({ t }) {
             </ul>
           )}
           {t.motivo && <p className="text-sm text-slate-700 mt-2 leading-relaxed">{t.motivo}</p>}
-          {t.especialidad && <p className="text-xs text-slate-500 mt-1.5"><span className="font-semibold text-slate-700">Conocida por:</span> {t.especialidad}{t.deResenas && <span className="text-slate-400"> · según sus reseñas de Google</span>}</p>}
+          {t.especialidad && <p className="text-xs text-slate-500 mt-1.5"><span className="font-semibold text-slate-700">Conocida por:</span> {t.especialidad}{t.deResenas && <span className="text-slate-500"> · según sus reseñas de Google</span>}</p>}
           <div className="flex flex-wrap items-center gap-2 mt-3">
           <a href={enlaceMaps(t)} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-slate-900 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] hover:bg-slate-800 hover:-translate-y-0.5`}>📍 Cómo llegar</a>
             {t.fuente && <a href={t.fuente} target="_blank" rel="noopener noreferrer nofollow" className={`${PRESS} inline-flex items-center h-10 px-3 rounded-full text-sm font-semibold text-slate-500 hover:text-rose-600`}>Fuente ↗</a>}
@@ -139,7 +139,7 @@ export default function BuscadorDespensa({ tiendas = [], productoInicial = null 
         </div>
 
         <div className="rounded-[1.75rem] p-2.5 sm:p-4 [&_input[type=text]]:min-w-0 [&_button]:whitespace-nowrap [&_button]:shrink-0 bg-gradient-to-br from-white/60 to-sky-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-          <label className={`${LABEL} mt-1 mb-3`}><span>📍</span> Hasta dónde te mueves <span className="font-normal text-slate-400">· toca el mapa</span></label>
+          <label className={`${LABEL} mt-1 mb-3`}><span>📍</span> Hasta dónde te mueves <span className="font-normal text-slate-500">· toca el mapa</span></label>
           <Mapa fino radiusKm={radio} setRadiusKm={setRadio} center={centroMapa} setCenter={ponerCentro} tiendas={[]} />
         </div>
 

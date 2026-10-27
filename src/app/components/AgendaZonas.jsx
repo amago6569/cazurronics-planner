@@ -67,7 +67,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
         type="button"
         onClick={() => elegirZona(id)}
         aria-pressed={activa}
-        className={`${PRESS} shrink-0 snap-start h-10 pl-3 pr-2.5 inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap ${activa ? "bg-slate-900 text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/70 text-slate-700 ring-1 ring-white hover:bg-white"} ${!total && !activa ? "opacity-60" : ""}`}
+        className={`${PRESS} shrink-0 snap-start h-11 pl-3 pr-2.5 inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap ${activa ? "bg-slate-900 text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/70 text-slate-700 ring-1 ring-white hover:bg-white"} ${!total && !activa ? "opacity-60" : ""}`}
       >
         <span aria-hidden>{emoji}</span>{texto}
         <span className={`min-w-[1.4rem] h-[1.4rem] px-1 rounded-full text-[11px] leading-[1.4rem] tabular-nums ${activa ? "bg-white/20" : "bg-slate-900/5 text-slate-500"}`}>{total}</span>
@@ -100,7 +100,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
         <div className="px-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Agenda de</p>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 first-letter:uppercase">
-            {nombreZona} <span className="text-base font-medium text-slate-400">· {totalZona} {totalZona === 1 ? "plan" : "planes"}</span>
+            {nombreZona} <span className="text-base font-medium text-slate-500">· {totalZona} {totalZona === 1 ? "plan" : "planes"}</span>
           </h2>
         </div>
 
@@ -114,7 +114,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
               return (
                 <button key={d.fecha} type="button" disabled={!d.eventos.length} onClick={() => setDia(d.fecha)} aria-pressed={activo} aria-label={`${fechaLarga(d.fecha)}: ${d.eventos.length} planes`}
                   className={`${PRESS} shrink-0 snap-start w-14 h-14 rounded-2xl flex flex-col items-center justify-center leading-none disabled:opacity-35 ${activo ? "bg-gradient-to-br from-rose-500 to-orange-500 text-white shadow-[0_10px_24px_-10px_rgba(244,63,94,0.8)]" : "bg-white/70 text-slate-700 ring-1 ring-white"}`}>
-                  <span className={`text-[10px] font-semibold uppercase ${activo ? "text-white/80" : "text-slate-400"}`}>{semana}</span>
+                  <span className={`text-[10px] font-semibold uppercase ${activo ? "text-white/80" : "text-slate-500"}`}>{semana}</span>
                   <span className="text-lg font-bold tabular-nums mt-0.5">{num}</span>
                   <span className={`text-[9px] font-semibold mt-0.5 ${activo ? "text-white/80" : "text-rose-500"}`}>{d.eventos.length ? `${d.eventos.length}` : "–"}</span>
                 </button>
@@ -137,7 +137,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
           <section key={d.fecha} aria-labelledby={`dia-${d.fecha}`}>
             <h3 id={`dia-${d.fecha}`} className="flex items-baseline gap-2 text-lg font-bold tracking-tight text-slate-900 px-1 mb-3">
               <span className="first-letter:uppercase">{fechaLarga(d.fecha)}</span>
-              <span className="text-sm font-medium text-slate-400">{d.eventos.length} {d.eventos.length === 1 ? "plan" : "planes"}</span>
+              <span className="text-sm font-medium text-slate-500">{d.eventos.length} {d.eventos.length === 1 ? "plan" : "planes"}</span>
             </h3>
             <AgendaFranjas eventos={d.eventos} />
           </section>

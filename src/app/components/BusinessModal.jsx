@@ -122,7 +122,7 @@ export default function BusinessModal() {
   }, [abierto]);
 
   const enviando = estado === ESTADO.ENVIANDO;
-  const CAMPO = "w-full bg-white/80 border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 py-3 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)] disabled:opacity-50";
+  const CAMPO = "w-full bg-white/80 border border-white text-slate-800 placeholder:text-slate-500 text-[15px] font-medium rounded-2xl px-4 py-3 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)] disabled:opacity-50";
 
   return (
     <>
@@ -242,7 +242,7 @@ export default function BusinessModal() {
             {/* ALTERNATIVA INSTAGRAM */}
             <div className="relative flex items-center gap-3 my-5" aria-hidden>
               <span className="h-px flex-1 bg-slate-900/10" />
-              <span className="text-xs font-medium text-slate-400">o, más directo</span>
+              <span className="text-xs font-medium text-slate-500">o, más directo</span>
               <span className="h-px flex-1 bg-slate-900/10" />
             </div>
             <a
