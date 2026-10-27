@@ -70,8 +70,11 @@ const RELLENO = new Set(["con", "del", "las", "los", "una", "uno", "unos", "unas
 const CORTAS = new Set(["pan", "ajo"]);
 // Nombres de sitio de una palabra ("bierzo", "astorga"...): dicen DÓNDE, no QUÉ. Antes "vino del Bierzo" traía también
 // botillo, pimientos y fruta porque esos productos llevan "del Bierzo" en su descripción.
+// "Cabrito" es también un pueblo, pero aquí casi siempre es la carne
+const NO_SON_LUGAR = new Set(["cabri"]);
 let lugares = null;
 const esLugar = (w) => {
+  if (NO_SON_LUGAR.has(w)) return false;
   if (!lugares) lugares = new Set(ZONAS.flatMap((z) => [...z.pueblos, normalizar(z.corto)]).filter((n) => n && !n.includes(" ")).map((n) => n.slice(0, 5)));
   return lugares.has(w);
 };

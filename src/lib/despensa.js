@@ -387,7 +387,10 @@ const sinTildes = (t) => String(t || "").toLowerCase().normalize("NFD").replace(
 function nombraProducto(texto, producto) {
   const p = productoPorId(producto);
   if (!p || !texto) return false;
-  const raices = sinTildes(p.nombre).split(/[^a-zñ]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+  // Con el id también ("carne" además de "carnicerías") y "quese" para quesería; sin adjetivos que no dicen el producto
+  const GENERICAS = new Set(["artes", "conse"]);
+  const raices = [...sinTildes(`${p.nombre} ${p.id}`).split(/[^a-zñ]+/), ...(p.id === "quesos" ? ["quese"] : [])]
+    .filter((w) => w.length >= 4).map((w) => w.slice(0, 5)).filter((r) => !GENERICAS.has(r));
   const palabras = sinTildes(texto).split(/[^a-zñ]+/);
   return raices.some((r) => palabras.some((w) => w.startsWith(r)));
 }

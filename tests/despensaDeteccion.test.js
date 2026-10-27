@@ -14,6 +14,10 @@ describe("productos en el texto", async () => {
     expect(productosEnTexto("frutería en Ponferrada")).toEqual(["fruta"]);
   });
 
+  it("cabrito es carne, no el pueblo", () => {
+    expect(productosEnTexto("cabrito")).toContain("carne");
+  });
+
   it("una cosa sola da esa cosa", () => {
     expect(productosEnTexto("morcilla")).toEqual(["morcilla"]);
     expect(productosEnTexto("botillo")).toEqual(["botillo"]);
