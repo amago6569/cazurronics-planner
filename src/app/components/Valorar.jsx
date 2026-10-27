@@ -39,7 +39,7 @@ export default function Valorar({ plan, onCerrar, className = "" }) {
           <h2 id="cz-valorar-titulo" className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 leading-snug">¿Qué tal el plan del {fechaBonita(plan.fecha)}?</h2>
           <p className="text-[13px] text-slate-500 mt-0.5">Con tu respuesta, los próximos planes salen mejores para todos.</p>
         </div>
-        <button onClick={cerrar} aria-label="Ahora no" className={`${PRESS} shrink-0 w-9 h-9 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10`}>
+        <button onClick={cerrar} aria-label="Ahora no" className={`${PRESS} shrink-0 w-11 h-11 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10`}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>
         </button>
       </div>
@@ -70,7 +70,7 @@ export default function Valorar({ plan, onCerrar, className = "" }) {
                       onClick={() => !respuestas[i] && responder(i, o.valor)}
                       disabled={Boolean(respuestas[i])}
                       aria-pressed={elegida}
-                      className={`${PRESS} h-10 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 ring-1 ${elegida ? "bg-slate-900 text-white ring-slate-900" : respuestas[i] ? "bg-white/40 text-slate-400 ring-slate-900/5" : "bg-white text-slate-700 ring-slate-900/10 hover:ring-rose-200 hover:-translate-y-0.5"}`}
+                      className={`${PRESS} h-11 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 ring-1 ${elegida ? "bg-slate-900 text-white ring-slate-900" : respuestas[i] ? "bg-white/40 text-slate-500 ring-slate-900/5" : "bg-white text-slate-700 ring-slate-900/10 hover:ring-rose-200 hover:-translate-y-0.5"}`}
                     >
                       <span className={elegida ? "cz-pop" : ""}>{o.emoji}</span>{o.texto}
                     </button>

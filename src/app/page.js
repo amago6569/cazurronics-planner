@@ -16,7 +16,7 @@ const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { s
    ───────────────────────────────────────────────────────────── */
 const GLASS = "bg-white/55 backdrop-blur-2xl backdrop-saturate-150 border border-white/70 shadow-[0_10px_40px_-12px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.9)]";
 const GLASS_SOFT = "bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_6px_24px_-10px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.8)]";
-const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
+const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-500 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 const LABEL = "flex items-center gap-2 text-[13px] font-semibold text-slate-700 mb-2 px-1";
 const PRESS = "transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70";
 
@@ -192,6 +192,13 @@ export default function Home() {
   };
 
   const cerrarModal = () => { setParadaSeleccionada(null); setIndiceSeleccionado(null); setInstruccionRetoque(""); };
+  // Escape cierra la ficha de la parada (como en el formulario de negocios)
+  useEffect(() => {
+    if (!paradaSeleccionada) return;
+    const alPulsar = (e) => { if (e.key === "Escape") cerrarModal(); };
+    window.addEventListener("keydown", alPulsar);
+    return () => window.removeEventListener("keydown", alPulsar);
+  }, [paradaSeleccionada]);
 
   const anadirSugerencia = (texto) => {
     setApetece((prev) => {
@@ -223,7 +230,7 @@ export default function Home() {
         .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } input[type="number"] { -moz-appearance: textfield; }
 
-        @keyframes cz-up { from { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+        @keyframes cz-up { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
         @keyframes cz-fade { from { opacity: 0; } to { opacity: 1; } }
         @keyframes cz-sheet { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
         @keyframes cz-shimmer { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(220%) skewX(-20deg); } }
@@ -488,6 +495,7 @@ export default function Home() {
               <div
                 className="cz-sheet bg-white/90 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_-10px_60px_-10px_rgba(15,23,42,0.35)] sm:shadow-[0_40px_80px_-20px_rgba(15,23,42,0.45)] w-full sm:max-w-lg max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto no-scrollbar rounded-t-[2rem] sm:rounded-[2rem] px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-7"
                 onClick={e => e.stopPropagation()}
+                role="dialog" aria-modal="true" aria-labelledby="cz-parada-titulo"
               >
                 <div aria-hidden className="sm:hidden mx-auto mb-4 h-1.5 w-10 rounded-full bg-slate-300" />
 
@@ -496,10 +504,10 @@ export default function Home() {
                     <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-100 to-orange-100 text-rose-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-3">
                       {indiceSeleccionado !== null && <span className="font-bold">Parada {indiceSeleccionado + 1} ·</span>} {paradaSeleccionada.hora}
                     </span>
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 leading-tight">{paradaSeleccionada.titulo}</h2>
+                    <h2 id="cz-parada-titulo" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 leading-tight">{paradaSeleccionada.titulo}</h2>
                     {paradaSeleccionada.lugar && <p className="text-sm font-semibold text-rose-500 mt-1">📍 {paradaSeleccionada.lugar}</p>}
                   </div>
-                  <button onClick={cerrarModal} aria-label="Cerrar" className={`${PRESS} shrink-0 w-11 h-11 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10 hover:text-slate-900 hover:rotate-90`}>
+                  <button type="button" autoFocus onClick={cerrarModal} aria-label="Cerrar" className={`${PRESS} shrink-0 w-11 h-11 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10 hover:text-slate-900 hover:rotate-90`}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -531,7 +539,7 @@ export default function Home() {
                     <div key={dato.etiqueta} className="flex items-center gap-3 bg-white/70 ring-1 ring-slate-900/5 rounded-2xl p-3">
                       <span className={`w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br ${dato.color} flex items-center justify-center text-lg shadow-sm`}>{dato.icono}</span>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{dato.etiqueta}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{dato.etiqueta}</p>
                         <p className="text-[15px] font-medium text-slate-800 leading-snug">{dato.valor}</p>
                       </div>
                     </div>
@@ -542,12 +550,12 @@ export default function Home() {
                   {paradaSeleccionada.telefono !== "No disponible" ? (
                     <a href={telSeguro(paradaSeleccionada.telefono)} onClick={() => baliza("llamar", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl shadow-[0_10px_24px_-8px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5`}>📞 Llamar</a>
                   ) : (
-                    <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-400 font-semibold rounded-2xl cursor-not-allowed">📞 Sin teléfono</span>
+                    <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-500 font-semibold rounded-2xl cursor-not-allowed">📞 Sin teléfono</span>
                   )}
                   {paradaSeleccionada.web !== "No disponible" ? (
                     <a href={webSegura(paradaSeleccionada.web)} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200 hover:bg-rose-50 hover:-translate-y-0.5`}>🌐 Web</a>
                   ) : (
-                    <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-400 font-semibold rounded-2xl cursor-not-allowed">🌐 Sin web</span>
+                    <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-500 font-semibold rounded-2xl cursor-not-allowed">🌐 Sin web</span>
                   )}
                 </div>
 
@@ -556,7 +564,7 @@ export default function Home() {
                     <span className="text-base">🔄</span> ¿No te convence? Te lo cambio
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input id="cz-retoque" type="text" value={instruccionRetoque} onChange={(e) => setInstruccionRetoque(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); retocarParada(); } }} placeholder="Ej: algo más barato, vegetariano…" disabled={retocando} className="flex-1 min-w-0 bg-white border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 h-12 outline-none ring-1 ring-indigo-100 disabled:opacity-50 focus:ring-2 focus:ring-indigo-300 focus:shadow-[0_0_0_6px_rgba(99,102,241,0.12)] transition-all duration-300" />
+                    <input id="cz-retoque" type="text" value={instruccionRetoque} onChange={(e) => setInstruccionRetoque(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); retocarParada(); } }} placeholder="Ej: algo más barato, vegetariano…" disabled={retocando} className="flex-1 min-w-0 bg-white border border-white text-slate-800 placeholder:text-slate-500 text-[15px] font-medium rounded-2xl px-4 h-12 outline-none ring-1 ring-indigo-100 disabled:opacity-50 focus:ring-2 focus:ring-indigo-300 focus:shadow-[0_0_0_6px_rgba(99,102,241,0.12)] transition-all duration-300" />
                     <button onClick={retocarParada} disabled={retocando || !instruccionRetoque.trim()} className={`${PRESS} cz-sheen relative overflow-hidden shrink-0 h-12 px-6 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-semibold shadow-[0_10px_24px_-8px_rgba(99,102,241,0.7)] hover:shadow-[0_14px_30px_-8px_rgba(99,102,241,0.8)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
                       {retocando && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" aria-hidden />}
                       {retocando ? "Pensando..." : "Cambiar"}
@@ -674,24 +682,24 @@ export default function Home() {
                 {/* Presupuesto */}
                 <div className="rounded-[1.75rem] p-4 sm:p-5 bg-gradient-to-br from-white/60 to-rose-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
                   <div className="flex items-center justify-between mb-4 px-1">
-                    <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-700 whitespace-nowrap"><span>💶</span> Presupuesto <span className="hidden sm:inline font-normal text-slate-400">· por persona</span></label>
+                    <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-700 whitespace-nowrap"><span>💶</span> Presupuesto <span className="hidden sm:inline font-normal text-slate-500">· por persona</span></label>
                     <span className="text-xs font-semibold text-rose-500 bg-white/80 ring-1 ring-rose-100 rounded-full px-2.5 py-1 tabular-nums">
                       {presupuestoMin === '' ? 0 : presupuestoMin}€ – {presupuestoMax === '' ? 0 : (presupuestoMax >= 300 ? "+300" : presupuestoMax)}€
                     </span>
                   </div>
                   <div className="flex items-center gap-4 mb-4">
                     <div className="relative flex items-center shrink-0 rounded-xl overflow-hidden ring-1 ring-slate-900/5 bg-white shadow-sm">
-                      <span className="absolute left-3 text-[11px] font-semibold text-slate-400 pointer-events-none">Mín</span>
+                      <span className="absolute left-3 text-[11px] font-semibold text-slate-500 pointer-events-none">Mín</span>
                       <input type="number" inputMode="numeric" aria-label="Presupuesto mínimo en euros" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
-                      <span className="absolute right-3 text-[11px] font-semibold text-slate-400 pointer-events-none">€</span>
+                      <span className="absolute right-3 text-[11px] font-semibold text-slate-500 pointer-events-none">€</span>
                     </div>
                     <input type="range" min="0" max="300" step="5" value={presupuestoMin === '' ? 0 : presupuestoMin} onChange={(e) => setPresupuestoMin(Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} aria-label="Presupuesto mínimo" className="w-full cursor-pointer roseton-slider" />
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="relative flex items-center shrink-0 rounded-xl overflow-hidden ring-1 ring-slate-900/5 bg-white shadow-sm">
-                      <span className="absolute left-3 text-[11px] font-semibold text-slate-400 pointer-events-none">Máx</span>
+                      <span className="absolute left-3 text-[11px] font-semibold text-slate-500 pointer-events-none">Máx</span>
                       <input type="text" inputMode="numeric" aria-label="Presupuesto máximo en euros" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
-                      <span className="absolute right-3 text-[11px] font-semibold text-slate-400 pointer-events-none">€</span>
+                      <span className="absolute right-3 text-[11px] font-semibold text-slate-500 pointer-events-none">€</span>
                     </div>
                     <input type="range" min="0" max="300" step="5" value={presupuestoMax === '' ? 0 : presupuestoMax} onChange={(e) => setPresupuestoMax(Math.max(Number(e.target.value), presupuestoMin === '' ? 0 : presupuestoMin))} aria-label="Presupuesto máximo" className="w-full cursor-pointer roseton-slider" />
                   </div>
@@ -699,7 +707,7 @@ export default function Home() {
 
                 {/* Zona */}
                 <div className="rounded-[1.75rem] p-2.5 sm:p-4 [&_input[type=text]]:min-w-0 [&_button]:whitespace-nowrap [&_button]:shrink-0 bg-gradient-to-br from-white/60 to-sky-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-                  <label className={`${LABEL} mt-1 mb-3`}><span>📍</span> Zona de búsqueda <span className="font-normal text-slate-400">· toca el mapa</span></label>
+                  <label className={`${LABEL} mt-1 mb-3`}><span>📍</span> Zona de búsqueda <span className="font-normal text-slate-500">· toca el mapa</span></label>
                   <MapSelectorDynamic radiusKm={distancia} setRadiusKm={setDistancia} center={centroMapa} setCenter={setCentroMapa} />
                 </div>
               </div>

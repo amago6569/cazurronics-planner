@@ -15,6 +15,7 @@ import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtener
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
 import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from './agenda';
+import { filtrarMasEseDia } from './intencion';
 
 export const planesConGoogle = () => /^(1|si|sí|true)$/i.test(String(process.env.PLANES_CON_GOOGLE || '').trim());
 
@@ -57,6 +58,12 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
       ${bloqueAgenda}
       ${conGoogle ? '' : sitiosParaPrompt(sitios)}
       ${bloqueComunidad}
+      ALCANCE (lo más importante): dale a la persona EXACTAMENTE lo que pide, ni más ni menos.
+      - Si pide algo CONCRETO (por ejemplo "una charla", "un concierto", "dónde ver el partido", "un sitio para comer cocido"), devuelve SOLO eso: normalmente 1 parada, y como mucho 2 o 3 si son opciones del mismo tipo a distintas horas. NO añadas comidas, copas, paseos ni visitas que no ha pedido.
+      - Si pide varias cosas (por ejemplo "comer y luego salir de fiesta"), una parada por cada cosa pedida, en ese orden.
+      - Solo si pide un plan abierto SIN tema concreto ("un plan", "qué hacer", "sorpréndeme", "pasar el día") monta un plan completo de varias paradas. Si menciona un tema concreto, manda el tema aunque diga "plan" (por ejemplo "un plan con charla" = solo la charla).
+      - La alternativa por si cambia el tiempo va dentro de la descripción, nunca como parada extra.
+      - Si no hay nada real que cumpla lo pedido ese día, devuelve [] en vez de rellenar con otras cosas.
       INSTRUCCIONES:
       ${instruccionBusqueda}
       2. No inventes nada. No te salgas del radio. No repitas el mismo sitio o evento con otro nombre. Ordena las paradas por hora.
@@ -70,6 +77,8 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
   const { texto: textoIA, uso } = await llamarGemini(prompt, { para: 'usuario', tarea: 'planes', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + msIA - Date.now()) });
   const rutaBruta = extraerJSON(textoIA, '[');
   if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
+  // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas
+  if (rutaBruta.length === 0) return { exito: false, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
 
   // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
@@ -102,8 +111,9 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
 
   // El resto de la agenda de ese día que no ha entrado en el plan ("Más cosas ese día")
   // (sin lo que ya está en la ruta, aunque tenga otro nombre, y ordenado por hora)
+  // Si el plan es algo concreto (1-2 paradas), solo cosas parecidas a lo pedido, no toda la agenda
   const masEseDia = ordenarPorHora(
-    agendaDelDia.filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })))
+    filtrarMasEseDia(agendaDelDia, rutaFinal, apetece).filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })))
   ).slice(0, 12);
 
   return { exito: true, plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, uso };

@@ -26,7 +26,7 @@ body {
 }
 
 /* ── Cazurronics: animaciones compartidas por las páginas nuevas ── */
-@keyframes cz-up { from { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes cz-up { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
 @keyframes cz-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes cz-sheet { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
 @keyframes cz-pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }

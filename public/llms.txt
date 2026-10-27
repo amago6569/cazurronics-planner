@@ -5,6 +5,8 @@
 ## Páginas principales
 
 - [Agenda de León](https://cazurronics.es/agenda-leon): conciertos, teatro, ferias y fiestas de León capital y de cada comarca, con su fuente.
+- [Agenda por comarca](https://cazurronics.es/agenda-leon/bierzo): también leon, alfoz, astorga, baneza, esla, sahagun, oriental y occidental.
+- [Qué hacer en León](https://cazurronics.es/que-hacer-en-leon): guía general de planes.
 - [Qué hacer hoy en León](https://cazurronics.es/que-hacer-hoy-en-leon) y [mañana](https://cazurronics.es/que-hacer-manana-en-leon).
 - [Lo mejor del finde](https://cazurronics.es/finde): selección semanal de planes.
 - [Dónde comer en León](https://cazurronics.es/donde-comer-en-leon): bares y restaurantes que más recomienda Cazurronics y que mejor valora la gente que ha ido.

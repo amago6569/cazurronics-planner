@@ -62,13 +62,34 @@ export function lugarEnTexto(texto) {
 
 // Productos del catálogo que parecen pedidos en el texto (para ponerlos primero en la lista que ve la IA).
 // También cuentan los tipos de tienda ("una carnicería", "el mercado"): dan sus productos.
+// Palabras de relleno ("con", "del", "más", "tienda"...) no cuentan: antes "cecina con algo más" traía también
+// dulces (por "confiterías"), pimientos (por "conservas") y pan (por "masa").
+const RELLENO = new Set(["con", "del", "las", "los", "una", "uno", "unos", "unas", "mas", "que", "por", "sin", "muy", "hay",
+  "algo", "alguna", "alguno", "tienda", "tiendas", "producto", "productos", "cosas", "tipico", "tipicos", "tipica", "tipicas"]);
+// Productos de 3 letras que sí se buscan tal cual
+const CORTAS = new Set(["pan", "ajo"]);
+// Nombres de sitio de una palabra ("bierzo", "astorga"...): dicen DÓNDE, no QUÉ. Antes "vino del Bierzo" traía también
+// botillo, pimientos y fruta porque esos productos llevan "del Bierzo" en su descripción.
+// "Cabrito" es también un pueblo, pero aquí casi siempre es la carne
+const NO_SON_LUGAR = new Set(["cabri"]);
+let lugares = null;
+const esLugar = (w) => {
+  if (NO_SON_LUGAR.has(w)) return false;
+  if (!lugares) lugares = new Set(ZONAS.flatMap((z) => [...z.pueblos, normalizar(z.corto)]).filter((n) => n && !n.includes(" ")).map((n) => n.slice(0, 5)));
+  return lugares.has(w);
+};
 export function productosEnTexto(texto) {
-  const palabras = normalizar(texto).split(" ").filter((p) => p.length >= 3).map((p) => p.slice(0, 5));
-  const directos = PRODUCTOS.filter((p) => {
-    const donde = normalizar(`${p.nombre} ${p.busca}`);
-    return palabras.some((w) => (w.length >= 4 ? donde.includes(w) : donde.split(" ").some((x) => x === w || x.startsWith(w))));
-  }).map((p) => p.id);
-  const porTienda = CATEGORIAS.filter((c) => palabras.some((w) => w.length >= 4 && normalizar(`${c.nombre} ${c.busca}`).split(" ").some((x) => x.startsWith(w))))
+  const palabras = normalizar(texto).split(" ")
+    .filter((p) => !RELLENO.has(p) && !VACIAS.has(p) && (p.length >= 4 || CORTAS.has(p)))
+    .map((p) => p.slice(0, 5))
+    .filter((w) => !esLugar(w));
+  // Casa por principio de palabra ("queso" con "quesería"), nunca por un trozo de en medio
+  const empieza = (texto, w) => normalizar(texto).split(" ").some((x) => x.startsWith(w));
+  const directos = PRODUCTOS.filter((p) => palabras.some((w) => empieza(`${p.nombre} ${p.busca}`, w))).map((p) => p.id);
+  // Los tipos de tienda ("una carnicería") solo cuentan con las palabras que no eran ya un producto:
+  // "cecina" es cecina, no todo lo que vende la tienda de productos de León
+  const sueltas = palabras.filter((w) => w.length >= 4 && !PRODUCTOS.some((p) => empieza(`${p.nombre} ${p.busca}`, w)));
+  const porTienda = CATEGORIAS.filter((c) => sueltas.some((w) => empieza(`${c.nombre} ${c.busca}`, w)))
     .flatMap((c) => c.productos);
   return [...new Set([...directos, ...porTienda])];
 }

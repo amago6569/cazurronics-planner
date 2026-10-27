@@ -14,10 +14,10 @@ export async function POST(request) {
     const peticion = leerPeticionDespensa(await request.json().catch(() => null));
     if (peticion.error) return NextResponse.json({ exito: false, mensaje: peticion.error }, { status: 400 });
     if (!(await dentroDelLimite(request, "despensa", 15, 600)) || !(await dentroDelTopeDiario("despensa", 60, request))) {
-      return NextResponse.json({ exito: false, mensaje: "Has buscado mucho seguido 🦁 Espera un poco o elige los productos aquí abajo." }, { status: 429 });
+      return NextResponse.json({ exito: false, mensaje: "Has buscado mucho seguido 🦁 Espera un poco o toca un producto de los de arriba." }, { status: 429 });
     }
     if (!(await dentroDelTopeDiario("despensa", Number(process.env.DESPENSA_MAX_DIA ?? 200)))) {
-      return NextResponse.json({ exito: false, mensaje: "Hoy se han agotado las búsquedas con IA 🦁 Elige los productos aquí abajo, que eso sigue funcionando." }, { status: 429 });
+      return NextResponse.json({ exito: false, mensaje: "Hoy se han agotado las búsquedas con IA 🦁 Toca un producto de los de arriba, que eso sigue funcionando." }, { status: 429 });
     }
     const resultado = await buscarEnDespensa(peticion);
     enSegundoPlano(() => registrar("despensa"), "estadísticas");
