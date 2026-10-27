@@ -6,9 +6,9 @@ import BusinessModal from './components/BusinessModal';
 import SelectorSeccion from './components/SelectorSeccion';
 import Valorar from './components/Valorar';
 import AgendaFranjas from './components/AgendaFranjas';
-import { baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
+import { webSegura, telSeguro, baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
 
-const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false });
+const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false, loading: () => <div className="h-[300px] rounded-[2rem] bg-white/50 animate-pulse" /> });
 
 /* ─────────────────────────────────────────────────────────────
    Sistema visual "Vidriera": cristal sobre León desenfocado.
@@ -18,7 +18,7 @@ const GLASS = "bg-white/55 backdrop-blur-2xl backdrop-saturate-150 border border
 const GLASS_SOFT = "bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_6px_24px_-10px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.8)]";
 const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
 const LABEL = "flex items-center gap-2 text-[13px] font-semibold text-slate-700 mb-2 px-1";
-const PRESS = "transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.97]";
+const PRESS = "transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70";
 
 // Pasos que se van completando mientras /api/plan trabaja (solo visual)
 const PASOS_CARGA = [
@@ -444,7 +444,7 @@ export default function Home() {
                 style={{ animationDelay: `${260 + index * 70}ms` }}
               >
                 <div className="h-48 sm:h-52 w-full rounded-[1.6rem] bg-slate-100 relative overflow-hidden">
-                  <img src={parada.fotoOficial} alt={parada.titulo} className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] group-hover:scale-[1.06]" />
+                  <img src={parada.fotoOficial} alt={parada.titulo} loading={index === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] group-hover:scale-[1.06]" />
                   <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-900/45 via-transparent to-transparent" />
                   <div className="absolute top-3 left-3 w-9 h-9 rounded-full bg-gradient-to-br from-rose-400 to-orange-500 text-white text-sm font-bold flex items-center justify-center ring-[3px] ring-white shadow-[0_6px_16px_-4px_rgba(244,63,94,0.6)]">
                     {index + 1}
@@ -510,16 +510,16 @@ export default function Home() {
                       {paradaSeleccionada.streetView.includes("embed") ? "📍 Vista 360º · Arrastra" : "📍 Vista exterior"}
                     </div>
                     {paradaSeleccionada.streetView.includes("embed") ? (
-                      <iframe src={paradaSeleccionada.streetView} allowFullScreen loading="lazy" className="w-full h-52 sm:h-60 block"></iframe>
+                      <iframe src={paradaSeleccionada.streetView} title={`Vista 360º de ${paradaSeleccionada.titulo}`} allowFullScreen loading="lazy" className="w-full h-52 sm:h-60 block"></iframe>
                     ) : (
-                      <img src={paradaSeleccionada.streetView} alt="Street View" className="w-full h-52 sm:h-60 object-cover block" />
+                      <img src={paradaSeleccionada.streetView} alt={`Vista exterior de ${paradaSeleccionada.titulo}`} loading="lazy" decoding="async" className="w-full h-52 sm:h-60 object-cover block" />
                     )}
                   </div>
                 )}
 
                 <p className="text-slate-600 text-[15px] leading-relaxed mb-5">{paradaSeleccionada.descripcion}</p>
                 {paradaSeleccionada.fuente && /^https?:\/\//.test(paradaSeleccionada.fuente) && (
-                  <a href={paradaSeleccionada.fuente} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-rose-500 hover:underline">🎟️ Ver la fuente del evento</a>
+                  <a href={webSegura(paradaSeleccionada.fuente)} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-rose-500 hover:underline">🎟️ Ver la fuente del evento</a>
                 )}
 
                 <div className="grid grid-cols-1 gap-2 mb-5">
@@ -540,23 +540,23 @@ export default function Home() {
 
                 <div className="grid grid-cols-2 gap-2 mb-5">
                   {paradaSeleccionada.telefono !== "No disponible" ? (
-                    <a href={`tel:${paradaSeleccionada.telefono}`} onClick={() => baliza("llamar", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl shadow-[0_10px_24px_-8px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5`}>📞 Llamar</a>
+                    <a href={telSeguro(paradaSeleccionada.telefono)} onClick={() => baliza("llamar", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl shadow-[0_10px_24px_-8px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5`}>📞 Llamar</a>
                   ) : (
                     <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-400 font-semibold rounded-2xl cursor-not-allowed">📞 Sin teléfono</span>
                   )}
                   {paradaSeleccionada.web !== "No disponible" ? (
-                    <a href={paradaSeleccionada.web} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200 hover:bg-rose-50 hover:-translate-y-0.5`}>🌐 Web</a>
+                    <a href={webSegura(paradaSeleccionada.web)} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200 hover:bg-rose-50 hover:-translate-y-0.5`}>🌐 Web</a>
                   ) : (
                     <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-400 font-semibold rounded-2xl cursor-not-allowed">🌐 Sin web</span>
                   )}
                 </div>
 
                 <div className="relative overflow-hidden rounded-[1.5rem] p-4 sm:p-5 bg-gradient-to-br from-indigo-50 via-violet-50 to-sky-50 ring-1 ring-indigo-100">
-                  <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-indigo-500 mb-3">
+                  <label htmlFor="cz-retoque" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-indigo-500 mb-3">
                     <span className="text-base">🔄</span> ¿No te convence? Te lo cambio
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input type="text" value={instruccionRetoque} onChange={(e) => setInstruccionRetoque(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); retocarParada(); } }} placeholder="Ej: algo más barato, vegetariano…" disabled={retocando} className="flex-1 min-w-0 bg-white border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 h-12 outline-none ring-1 ring-indigo-100 disabled:opacity-50 focus:ring-2 focus:ring-indigo-300 focus:shadow-[0_0_0_6px_rgba(99,102,241,0.12)] transition-all duration-300" />
+                    <input id="cz-retoque" type="text" value={instruccionRetoque} onChange={(e) => setInstruccionRetoque(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); retocarParada(); } }} placeholder="Ej: algo más barato, vegetariano…" disabled={retocando} className="flex-1 min-w-0 bg-white border border-white text-slate-800 placeholder:text-slate-400 text-[15px] font-medium rounded-2xl px-4 h-12 outline-none ring-1 ring-indigo-100 disabled:opacity-50 focus:ring-2 focus:ring-indigo-300 focus:shadow-[0_0_0_6px_rgba(99,102,241,0.12)] transition-all duration-300" />
                     <button onClick={retocarParada} disabled={retocando || !instruccionRetoque.trim()} className={`${PRESS} cz-sheen relative overflow-hidden shrink-0 h-12 px-6 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-semibold shadow-[0_10px_24px_-8px_rgba(99,102,241,0.7)] hover:shadow-[0_14px_30px_-8px_rgba(99,102,241,0.8)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
                       {retocando && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" aria-hidden />}
                       {retocando ? "Pensando..." : "Cambiar"}
@@ -605,7 +605,7 @@ export default function Home() {
                   Cazurronics<span className="hidden sm:inline">{" "}Planner</span>
                 </span>
                 {/* Para negocios: visible nada más entrar, sin tener que bajar */}
-                <button type="button" onClick={abrirNegocios} className="shrink-0 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)]">
+                <button type="button" onClick={abrirNegocios} className="shrink-0 inline-flex items-center gap-1.5 h-11 pl-3 pr-3.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70">
                   <span aria-hidden>🏪</span><span className="whitespace-nowrap">¿Tienes un negocio?</span>
                 </button>
               </div>
@@ -663,7 +663,7 @@ export default function Home() {
                         key={s.texto}
                         type="button"
                         onClick={() => anadirSugerencia(s.texto)}
-                        className={`${PRESS} snap-start shrink-0 flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-white/60 ring-1 ring-slate-900/5 text-[13px] font-medium text-slate-700 hover:bg-white hover:ring-rose-200 hover:text-rose-600 hover:-translate-y-0.5`}
+                        className={`${PRESS} snap-start shrink-0 flex items-center gap-1.5 h-11 px-4 rounded-full bg-white/60 ring-1 ring-slate-900/5 text-[13px] font-medium text-slate-700 hover:bg-white hover:ring-rose-200 hover:text-rose-600 hover:-translate-y-0.5`}
                       >
                         <span>{s.emoji}</span>{s.texto}
                       </button>
@@ -682,7 +682,7 @@ export default function Home() {
                   <div className="flex items-center gap-4 mb-4">
                     <div className="relative flex items-center shrink-0 rounded-xl overflow-hidden ring-1 ring-slate-900/5 bg-white shadow-sm">
                       <span className="absolute left-3 text-[11px] font-semibold text-slate-400 pointer-events-none">Mín</span>
-                      <input type="number" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
+                      <input type="number" inputMode="numeric" aria-label="Presupuesto mínimo en euros" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
                       <span className="absolute right-3 text-[11px] font-semibold text-slate-400 pointer-events-none">€</span>
                     </div>
                     <input type="range" min="0" max="300" step="5" value={presupuestoMin === '' ? 0 : presupuestoMin} onChange={(e) => setPresupuestoMin(Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} aria-label="Presupuesto mínimo" className="w-full cursor-pointer roseton-slider" />
@@ -690,7 +690,7 @@ export default function Home() {
                   <div className="flex items-center gap-4">
                     <div className="relative flex items-center shrink-0 rounded-xl overflow-hidden ring-1 ring-slate-900/5 bg-white shadow-sm">
                       <span className="absolute left-3 text-[11px] font-semibold text-slate-400 pointer-events-none">Máx</span>
-                      <input type="text" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
+                      <input type="text" inputMode="numeric" aria-label="Presupuesto máximo en euros" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
                       <span className="absolute right-3 text-[11px] font-semibold text-slate-400 pointer-events-none">€</span>
                     </div>
                     <input type="range" min="0" max="300" step="5" value={presupuestoMax === '' ? 0 : presupuestoMax} onChange={(e) => setPresupuestoMax(Math.max(Number(e.target.value), presupuestoMin === '' ? 0 : presupuestoMin))} aria-label="Presupuesto máximo" className="w-full cursor-pointer roseton-slider" />
@@ -766,7 +766,7 @@ export default function Home() {
                     {...(!local ? { type: "button", onClick: abrirNegocios, "aria-label": "Tu local aquí: pide información para salir en Cazurronics Choices" } : {})}
                     className={`${CAZURRONICS_CHOICES.length >= 3 ? "shrink-0 snap-start w-[calc((100%-1.25rem)/3)] sm:w-[calc((100%-1.5rem)/3)]" : "w-full"} group/arco relative block aspect-[3/4.2] cursor-pointer rounded-t-[999px] rounded-b-[1.25rem] overflow-hidden bg-white/50 ring-1 ring-white shadow-[0_10px_24px_-12px_rgba(15,23,42,0.35),inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-14px_rgba(244,63,94,0.45)]`}
                   >
-                    {local?.foto && <img src={local.foto} alt={local.nombre} className="absolute inset-0 w-full h-full object-cover" />}
+                    {local?.foto && <img src={local.foto} alt={local.nombre} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />}
                     {/* El cristal: apagado si el hueco está libre, translúcido sobre la foto si hay local */}
                     <div
                       aria-hidden
@@ -811,7 +811,7 @@ export default function Home() {
           {/* NUEVO: enlaces a las páginas de contenido (ayudan a que Google encuentre la web) */}
           <nav aria-label="Más de León" className="order-6 lg:col-span-12 flex flex-wrap items-center justify-center gap-2 pt-1 cz-up" style={{ animationDelay: "320ms" }}>
             {[["/agenda-leon", "📅 Agenda de León"], ["/que-hacer-en-leon", "✨ Qué hacer en León"], ["/donde-comer-en-leon", "🍷 Dónde comer en León"], ["/despensa", "🧺 Despensa de León"]].map(([href, texto]) => (
-              <Link key={href} href={href} className={`${PRESS} h-9 px-3.5 inline-flex items-center rounded-full bg-white/50 ring-1 ring-white text-[13px] font-medium text-slate-600 hover:bg-white hover:text-rose-600`}>{texto}</Link>
+              <Link key={href} href={href} className={`${PRESS} h-11 px-4 inline-flex items-center rounded-full bg-white/50 ring-1 ring-white text-[13px] font-medium text-slate-600 hover:bg-white hover:text-rose-600`}>{texto}</Link>
             ))}
           </nav>
         </div>

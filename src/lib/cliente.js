@@ -92,3 +92,8 @@ export async function compartirPlan(planId, texto = "Mira el plan que me ha mont
   }
   try { await navigator.clipboard.writeText(url); return "copiado"; } catch { return "error"; }
 }
+
+// Los enlaces de las paradas los escribe la IA: solo se aceptan webs http(s) y teléfonos con cifras.
+// Así un texto raro nunca acaba siendo un enlace que ejecuta código.
+export const webSegura = (u) => (/^https?:\/\//i.test(String(u || "").trim()) ? String(u).trim() : undefined);
+export const telSeguro = (t) => `tel:${String(t || "").replace(/[^\d+]/g, "")}`;

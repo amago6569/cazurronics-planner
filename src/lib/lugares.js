@@ -172,7 +172,7 @@ export function tokenNegocio(k) {
 
 export function claveDesdeToken(token) {
   if (!SECRETO || typeof token !== "string") return null;
-  const [parte, f] = decodeURIComponent(token).split(".");
+  const [parte, f] = (() => { try { return decodeURIComponent(token); } catch { return ""; } })().split(".");
   if (!parte || !f) return null;
   let k;
   try { k = Buffer.from(parte, "base64url").toString(); } catch { return null; }

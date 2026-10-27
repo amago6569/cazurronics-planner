@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { comando, leerJSON, usaRedis, varios } from "../../../lib/almacen";
 import { leerGastoIA, leerResumen } from "../../../lib/estadisticas";
 import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares } from "../../../lib/lugares";
@@ -23,7 +24,8 @@ function faltaConfiguracion() {
 export async function GET(request) {
   const falta = faltaConfiguracion();
   if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
-  if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
+  const acceso = await claveConFreno(request, autorizado(request));
+  if (acceso !== "ok") return respuestaClave(acceso);
   try {
     return await datosDelPanel(request);
   } catch (e) {
@@ -71,7 +73,8 @@ async function datosDelPanel(request) {
 export async function POST(request) {
   const falta = faltaConfiguracion();
   if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
-  if (!autorizado(request)) return NextResponse.json({ exito: false, mensaje: "Clave incorrecta" }, { status: 401 });
+  const acceso = await claveConFreno(request, autorizado(request));
+  if (acceso !== "ok") return respuestaClave(acceso);
   const { accion, tramo } = await request.json().catch(() => ({}));
   // Empezar de cero las estadísticas de locales (apariciones, fichas, llamadas, valoraciones). No toca captación ni la agenda.
   if (accion === "reiniciar-locales") {

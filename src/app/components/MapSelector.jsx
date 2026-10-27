@@ -97,17 +97,17 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
         <div className="flex gap-2 mb-1 px-1">
           <input 
             type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscarUbicacion(); } }}
-            placeholder="Ej: Ponferrada, Astorga..." 
-            className="flex-1 bg-white/90 border-0 text-slate-700 text-sm font-bold rounded-full px-5 py-2 outline-none shadow-inner focus:ring-2 focus:ring-indigo-200 transition-all"
+            placeholder="Ej: Ponferrada, Astorga..." aria-label="Buscar un pueblo o lugar"
+            className="flex-1 bg-white/90 border-0 text-slate-700 text-sm font-bold rounded-full px-5 h-11 outline-none shadow-inner focus:ring-2 focus:ring-indigo-200 transition-all"
           />
-          <button type="button" onClick={buscarUbicacion} className="bg-white text-indigo-500 font-black px-5 py-2 rounded-full shadow-[0_5px_15px_rgba(99,102,241,0.2)] hover:shadow-[0_8px_20px_rgba(99,102,241,0.3)] hover:-translate-y-0.5 transition-all">
+          <button type="button" onClick={buscarUbicacion} className="bg-white text-indigo-500 font-black px-5 h-11 rounded-full focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70 active:scale-[0.97] shadow-[0_5px_15px_rgba(99,102,241,0.2)] hover:shadow-[0_8px_20px_rgba(99,102,241,0.3)] hover:-translate-y-0.5 transition-all">
             🔍 Buscar
           </button>
         </div>
       )}
       {elegir && (
         <div className="px-1 -mt-1">
-          <button type="button" onClick={usarMiUbicacion} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white/90 text-sm font-bold text-rose-600 shadow-[0_5px_15px_rgba(244,63,94,0.15)] hover:-translate-y-0.5 transition-all">
+          <button type="button" onClick={usarMiUbicacion} className="inline-flex items-center gap-1.5 h-11 px-4 rounded-full bg-white/90 text-sm font-bold text-rose-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70 active:scale-[0.97] shadow-[0_5px_15px_rgba(244,63,94,0.15)] hover:-translate-y-0.5 transition-all">
             📍 Usar mi ubicación
           </button>
           {ubicando && <p className="mt-1.5 text-xs font-semibold text-slate-500" role="status">{ubicando}</p>}
@@ -153,10 +153,11 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
       {elegir && (
         <div className="px-2 mt-1">
           <div className="flex justify-between items-center mb-3">
-            <label className="text-sm font-black text-slate-600 ml-1">Distancia máxima</label>
+            <label htmlFor="mapa-km" className="text-sm font-black text-slate-600 ml-1">Distancia máxima</label>
             <div className="relative flex items-center shrink-0 shadow-sm rounded-full overflow-hidden">
               {/* CAJA DE DISTANCIA AHORA PERMITE VACIARLA TOTALMENTE */}
               <input 
+                id="mapa-km"
                 type="number" 
                 min={minKm} 
                 max={MAX_KM} 
