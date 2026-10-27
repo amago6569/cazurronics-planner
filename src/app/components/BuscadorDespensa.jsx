@@ -5,8 +5,9 @@
 //  · En /despensa/<producto> ya sale el top de ese producto, filtrado en el navegador con el catálogo de la página (0 €).
 import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { GLASS, PRESS, BOTON_CTA } from "../../lib/estilos";
-import { enlaceEsTuTienda, enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
+import { PRODUCTOS, enlaceEsTuTienda, enlaceMaps, productoPorId, rutaMaps, topTiendas } from "../../lib/despensaProductos";
 import { zonaDe, zonaPorId } from "../../lib/zonas";
 
 // El mismo mapa que los planes: buscas un pueblo o tocas el mapa y mueves el rosetón para la distancia
@@ -125,6 +126,16 @@ export default function BuscadorDespensa({ tiendas = [], productoInicial = null 
             className={`${INPUT} resize-none leading-relaxed text-base`}
             placeholder="Una cosa o tu lista: morcilla, pan de leña, nicanores…"
           />
+          {/* Atajos: un toque y salen las mejores tiendas de ese producto al momento (página ya calculada, sin IA) */}
+          {!productoInicial && (
+            <nav aria-label="Buscar por producto" className="-mx-1 mt-3 flex gap-2 overflow-x-auto snap-x px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {PRODUCTOS.map((x) => (
+                <Link key={x.id} href={`/despensa/${x.id}`} className={`${PRESS} snap-start shrink-0 h-11 px-4 inline-flex items-center gap-1.5 rounded-full bg-white/70 ring-1 ring-slate-900/5 text-[13px] font-semibold text-slate-700 hover:bg-white hover:ring-rose-200 hover:text-rose-600`}>
+                  <span aria-hidden>{x.emoji}</span>{x.nombre}
+                </Link>
+              ))}
+            </nav>
+          )}
         </div>
 
         <div className="rounded-[1.75rem] p-2.5 sm:p-4 [&_input[type=text]]:min-w-0 [&_button]:whitespace-nowrap [&_button]:shrink-0 bg-gradient-to-br from-white/60 to-sky-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">

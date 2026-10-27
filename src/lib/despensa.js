@@ -21,7 +21,7 @@
 // Peor caso si no quedase nada gratis: 900 × 0,02 + 250 × 0,017 ≈ 22 $ al mes. Lo normal: 0 €.
 // Lo que no cabe en los topes se retoma el mes siguiente.
 import { aObjeto, comando, leerJSON, guardarJSON, varios } from "./almacen";
-import { PRODUCTOS, categoriasDeProducto, notaAjustada } from "./despensaProductos";
+import { productoPorId, PRODUCTOS, categoriasDeProducto, notaAjustada } from "./despensaProductos";
 import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { leerFichas } from "./despensaFichas";
 import { hoyEnLeon } from "./estadisticas";
@@ -382,12 +382,22 @@ export async function resumenDespensa() {
   };
 }
 
+// ¿Este texto (especialidades, premios...) nombra el producto? Por el principio de las palabras de su nombre.
+const sinTildes = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+function nombraProducto(texto, producto) {
+  const p = productoPorId(producto);
+  if (!p || !texto) return false;
+  const raices = sinTildes(p.nombre).split(/[^a-zñ]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+  const palabras = sinTildes(texto).split(/[^a-zñ]+/);
+  return raices.some((r) => palabras.some((w) => w.startsWith(r)));
+}
+
 // Lo que necesita la página pública (sin campos internos), ya listo para pasarlo al navegador.
 // En la página de un producto, también las tiendas de Google Maps donde se compra (las de la IA van primero y no se repiten).
 export async function catalogoParaWeb({ producto } = {}) {
   const { tiendas } = await leerDespensa().catch(() => ({ tiendas: [] }));
-  const lista = tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, producto: p, zona }) =>
-    ({ nombre, localidad, especialidad, porque, precio, puntuacion, nota: nota ?? null, resenas: resenas || 0, fuente, placeId, lat, lon, producto: p, zona }));
+  const lista = tiendas.map(({ nombre, localidad, especialidad, porque, precio, puntuacion, nota, resenas, fuente, placeId, lat, lon, producto: p, zona, premios }) =>
+    ({ nombre, localidad, especialidad, porque, precio, puntuacion, nota: nota ?? null, resenas: resenas || 0, fuente, placeId, lat, lon, producto: p, zona, premios: premios || [] }));
   const cats = producto ? categoriasDeProducto(producto) : [];
   if (!cats.length) return lista;
   const ya = new Set(lista.filter((t) => t.producto === producto).map((t) => t.placeId));
@@ -398,7 +408,10 @@ export async function catalogoParaWeb({ producto } = {}) {
     .map(({ nombre, localidad, nota, resenas, placeId, lat, lon, zona }) => {
       const f = fichas[placeId];
       const premios = (f?.premios || []).map((x) => (x.anio ? `${x.que} (${x.anio})` : x.que));
-      const extra = (premios.length ? 1 : 0) + (f?.especialidades?.length ? 0.3 : 0);
+      // Especialista: sus premios o especialidades nombran ESTE producto (un cecinero en la página de la cecina).
+      // Suma 2, como en el buscador, para que no le adelante una carnicería genérica con mejor nota.
+      const especialista = nombraProducto([...(f?.especialidades || []), ...premios, f?.destaca].filter(Boolean).join(" "), producto);
+      const extra = (premios.length ? 1 : 0) + (f?.especialidades?.length ? 0.3 : 0) + (especialista ? 2 : 0);
       return {
         nombre, localidad, especialidad: f?.especialidades?.join(", ") || null, porque: f?.destaca || null, premios, precio: null,
         puntuacion: Math.min(10, Math.round((puntuacionGoogle({ nota, resenas }) + extra) * 10) / 10),
