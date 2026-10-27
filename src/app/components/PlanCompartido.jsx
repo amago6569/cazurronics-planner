@@ -206,6 +206,7 @@ export default function PlanCompartido({ inicial }) {
           <p className="relative text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">¿Y tu plan, <span className={TITULO_GRADIENTE}>cazurro</span>?</p>
           <p className="relative text-slate-600 mt-2 mb-5">Dime qué te apetece y te monto el tuyo en menos de un minuto. Gratis.</p>
           <Link href="/?ref=plan-compartido" className={`${BOTON_CTA} relative`}>✨ Crear mi plan</Link>
+          <a href="https://www.instagram.com/cazurronics" target="_blank" rel="noopener noreferrer" className="relative mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-rose-500 transition-colors">Planes gratis cada finde en <span className="text-rose-500">@cazurronics</span> →</a>
         </section>
       </div>
 
