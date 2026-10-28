@@ -1,6 +1,7 @@
 // ============ UTILIDADES COMPARTIDAS ============
 // Usado por app/api/plan/route.js (generar plan) y app/api/retocar/route.js (cambiar una parada).
 import { comando, sinRomper } from './almacen';
+import { direccionEnLeon, enProvinciaLeon } from './provincia';
 
 // Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
 // en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
@@ -302,6 +303,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     if (dataSearch.results && dataSearch.results.length > 0) {
       const candidatosEnZona = dataSearch.results.filter(r => {
         if (!r.geometry || r.business_status === 'CLOSED_PERMANENTLY') return false;
+        // Solo sitios que Google sitúa en la provincia de León (por mapa y por código postal 24xxx)
+        if (!enProvinciaLeon(r.geometry.location.lat, r.geometry.location.lng) || !direccionEnLeon(r.formatted_address)) return false;
         const distanciaKm = haversineKm(lat, lon, r.geometry.location.lat, r.geometry.location.lng);
         return distanciaKm <= Number(radio) * 1.1;
       });
@@ -394,4 +397,4 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   parada.streetView = streetView;
 
   return { parada, problemaConfigPlaces };
-}
+}

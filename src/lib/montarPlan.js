@@ -103,13 +103,16 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
   );
 
   const rutaValidada = [];
-  let problemaGlobal = null;
+  let problemaGlobal = null, fueraDeProvincia = 0;
   for (const { parada, problemaConfigPlaces } of enriquecidas) {
     if (problemaConfigPlaces) problemaGlobal = problemaConfigPlaces;
     // Lo que Google sitúa fuera de la provincia no entra (p. ej. un bar de Benavente con radio grande desde La Bañeza)
     if (parada && enProvinciaLeon(parada.lat, parada.lon)) rutaValidada.push(parada);
+    else if (parada) fueraDeProvincia++;
   }
 
+  // Si todo lo que salió era de fuera, el plan no es de León: se dice claro
+  if (rutaValidada.length === 0 && fueraDeProvincia) return { exito: false, uso, mensaje: AVISO_MAPA.replace('Mueve el punto del mapa dentro de la provincia', 'Pide algo de la provincia') };
   if (rutaValidada.length === 0) return { exito: false, uso, mensaje: problemaGlobal ? `Error en Google Places: ${problemaGlobal}` : "No encontramos locales reales en esa zona. Amplía el radio." };
 
   const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax);

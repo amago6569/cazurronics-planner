@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { enProvinciaLeon, sitioFueraEnTexto, esSitioDeFuera } from "../src/lib/provincia";
+import { direccionEnLeon, enProvinciaLeon, sitioFueraEnTexto, esSitioDeFuera } from "../src/lib/provincia";
 import { fueraDeLeon } from "../src/lib/montarPlan";
 import { leerPeticionDespensa } from "../src/lib/despensaBuscar";
 import { validarEventoIA } from "../src/lib/eventos";
@@ -41,5 +41,11 @@ describe("solo provincia de León", () => {
     expect(validarEventoIA({ ...base, localidad: "Benavente" }, "2026-11-01", "2026-11-05")).toBeNull();
     expect(validarEventoIA({ ...base, localidad: "Astorga" }, "2026-11-01", "2026-11-05")).not.toBeNull();
     expect(esSitioDeFuera("Valencia de Don Juan")).toBe(false);
+  });
+  it("un sitio de Google solo vale si su dirección es de León", () => {
+    expect(direccionEnLeon("Calle Ancha, 5, 24003 León")).toBe(true);
+    expect(direccionEnLeon("Plaza Mayor, 1, 49600 Benavente, Zamora")).toBe(false);
+    expect(direccionEnLeon("Calle Uría, 33003 Oviedo, Asturias")).toBe(false);
+    expect(direccionEnLeon("Plaza Mayor, León")).toBe(true);
   });
 });

@@ -85,6 +85,12 @@ export function sitioFueraEnTexto(texto) {
 const SET_FUERA = new Set([...FUERA, "valencia"]);
 export const esSitioDeFuera = (nombre) => SET_FUERA.has(normalizar(nombre));
 
+// Código postal de la dirección de Google: los de León empiezan por 24. Sin código postal no se juzga.
+export function direccionEnLeon(direccion) {
+  const cp = String(direccion || "").match(/\b(\d{5})\b/);
+  return !cp || cp[1].startsWith("24");
+}
+
 // Mensajes para la persona (los mismos en planes, retoques y Despensa)
 export const AVISO_MAPA = "Cazurronics solo hace planes en León capital y provincia 🦁 Mueve el punto del mapa dentro de la provincia y te montamos el planazo.";
 export const avisoSitio = (sitio) => `Lo nuestro es León 🦁 Solo hacemos planes en León capital y provincia, así que ${sitio} se nos escapa. Prueba con un sitio de la provincia.`;
