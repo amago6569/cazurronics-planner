@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PRESS } from "../../../lib/estilos";
 import { Andarin, CAMISAS, ESTADOS, Monigote, fmt, hace } from "./monigotes";
+import Ordenes from "./ordenes";
 
 const ANCHO = 1000, FONDO = 760, INCLINA = 58; // la planta (en unidades de mundo) y cuánto se inclina la cámara
 
@@ -203,14 +204,14 @@ export default function Oficina3D({ departamentos, jefe, alElegir }) {
 }
 
 // La ficha que sale al tocar un monigote
-export function FichaEmpleado({ e, jefe, alCerrar }) {
+export function FichaEmpleado({ e, jefe, alCerrar, clave, alTerminar }) {
   if (!e) return null;
   const est = ESTADOS[e.estado] || ESTADOS.ok;
   const p = e.parte;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6" onClick={alCerrar}>
       <div className="absolute inset-0 bg-slate-900/25 backdrop-blur-[2px] cz-fade" />
-      <div onClick={(ev) => ev.stopPropagation()} className="relative w-full max-w-md rounded-[2rem] bg-white/90 backdrop-blur-2xl ring-1 ring-white shadow-[0_30px_80px_-20px_rgba(15,23,42,0.5)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] cz-sheet">
+      <div onClick={(ev) => ev.stopPropagation()} className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain rounded-[2rem] bg-white/90 backdrop-blur-2xl ring-1 ring-white shadow-[0_30px_80px_-20px_rgba(15,23,42,0.5)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] cz-sheet">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-300 sm:hidden" />
         {e.jefe ? (
           <>
@@ -236,6 +237,7 @@ export function FichaEmpleado({ e, jefe, alCerrar }) {
             ) : p?.texto && <p className="mt-3 text-sm font-semibold text-slate-800">{p.texto}</p>}
             {p?.error && <p className="mt-3 text-xs text-rose-600">{p.error}</p>}
             <p className="text-xs text-slate-400 mt-4">🕒 {e.horario} · último turno {hace(p?.fin)}</p>
+            {e.ordenes && <Ordenes key={e.id} e={e} clave={clave} alTerminar={alTerminar} />}
           </>
         )}
         <button onClick={alCerrar} className={`${PRESS} mt-5 w-full h-12 rounded-full bg-slate-900 text-white font-semibold`}>Cerrar</button>

@@ -481,33 +481,51 @@ export async function barrerEventos({ tramo } = {}) {
   if (!def) throw new Error(`El tramo ${id} no existe`);
   const informe = { tramo: id, nombre: def.nombre, desde, hasta, inicio: new Date(inicio).toISOString(), fuentes: {} };
 
+  const encargos = await leerEncargos().catch(() => ({}));
+  Object.assign(informe, await trabajarEn(def, { desde, hasta, inicio, encargos }));
+  await guardarJSON(`eventos:tramo:${id}`, informe, 10 * 24 * 3600);
+  // Los encargos que iban en este turno ya están hechos
+  const usados = [...new Set(def.busquedas.map((b) => b.empleado))].filter((e) => encargos[e]?.length);
+  if (usados.length) await sinRomper(comando(["HDEL", ENCARGOS, ...usados]), "encargos");
+  await resumirBarridos();
+  return informe;
+}
+
+// Hace un grupo de búsquedas (un tramo o una orden tuya): busca, comprueba fuentes, suma a la agenda
+// lo bueno y deja en la bandeja lo dudoso. Devuelve el parte con el mismo formato que un tramo.
+async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos = {} }) {
   const agenda = await eventosProximos().catch(() => []);
+  const conEncargo = (b) => (encargos[b.empleado]?.length
+    ? `${b.extra || ""}\n    ENCARGO DEL JEFE (búscalo también, si encaja en esta búsqueda): ${encargos[b.empleado].map((x) => x.texto).join("; ")}.`
+    : b.extra);
   const tareas = [
-    ...(def.jcyl ? [["Junta de Castilla y León (datos abiertos)", async () => ({ eventos: await fuenteJCyL(desde, hasta), dominios: new Set() })]] : []),
-    ...def.busquedas.map((b) => [b.nombre, () => fuenteBusqueda({ ...b, conocidos: yaConocidos(agenda, b) }), b.empleado]),
+    ...(jcyl ? [["Junta de Castilla y León (datos abiertos)", async () => ({ eventos: await fuenteJCyL(desde, hasta), dominios: new Set() })]] : []),
+    ...busquedas.map((b) => [b.nombre, () => fuenteBusqueda({ ...b, extra: conEncargo(b), conocidos: yaConocidos(agenda, b) }), b.empleado]),
   ];
   const resultados = await enTandas(tareas.map(([, f]) => f), 10);
 
+  const fuentes = {};
   let encontrados = 0, descartados = 0, errores = 0;
   const nuevos = [], dudosos = [];
   const limite = inicio + 54000; // todo el tramo cabe en el minuto de Vercel
   await Promise.all(resultados.map(async (r, i) => {
     const [nombre, , empleado = "junta"] = tareas[i];
-    if (r.status !== "fulfilled") { errores++; informe.fuentes[nombre] = { ok: false, empleado, error: String(r.reason?.message || r.reason).slice(0, 200) }; return; }
+    if (r.status !== "fulfilled") { errores++; fuentes[nombre] = { ok: false, empleado, error: String(r.reason?.message || r.reason).slice(0, 200) }; return; }
     const { buenos, descartados: malos } = await verificarFuentes(r.value.eventos, r.value.dominios, { limite });
     encontrados += r.value.eventos.length; descartados += malos.length;
-    informe.fuentes[nombre] = { ok: true, empleado, eventos: buenos.length, ...(malos.length ? { descartados: malos.length } : {}) };
+    fuentes[nombre] = { ok: true, empleado, eventos: buenos.length, ...(malos.length ? { descartados: malos.length } : {}) };
     nuevos.push(...buenos.map((e) => ({ ...e, verificado: true })));
     // Lo que no se pudo comprobar (no lo que tiene una página que no existe) va a la bandeja del jefe, para que decidas tú
     dudosos.push(...malos.filter((e) => e.motivo === "duda").map((e) => ({ ...e, empleado })));
   }));
 
-  informe.nuevos = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta) : 0;
+  const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta) : 0;
   if (dudosos.length) await sinRomper(guardarDudosos(dudosos), "bandeja del jefe");
-  Object.assign(informe, { encontrados, descartados, errores, busquedas: tareas.length, fin: new Date().toISOString() });
-  await guardarJSON(`eventos:tramo:${id}`, informe, 10 * 24 * 3600);
-  await resumirBarridos();
-  return informe;
+  return {
+    fuentes, nuevos: sumados, encontrados, descartados, errores, busquedas: tareas.length, dudosos: dudosos.length,
+    muestra: nuevos.slice(0, 8).map((e) => ({ titulo: e.titulo, fecha: e.fecha, localidad: e.localidad || "" })),
+    fin: new Date().toISOString(),
+  };
 }
 
 // Mete eventos en la agenda de cada día SIN BORRAR lo que ya había: lo nuevo entra, lo repetido
@@ -827,3 +845,92 @@ export async function asegurarBarridoReciente() {
   if (!(await comando(["SET", "barrido:pausa", "1", "NX", "EX", 600]))) return false;
   return (await repetirUno(await tramosAtrasados())) || false;
 }
+
+// ============ ÓRDENES A LOS EMPLEADOS (desde la ficha de /panel/oficina) ============
+// · "Ponte a trabajar ya": repite el turno de ese empleado al momento. Como mucho una vez cada 6 h por empleado.
+// · Encargo: un texto concreto ("mira la feria del pimiento de Fresno"). Para su próximo turno va dentro de sus
+//   búsquedas (0 € extra); "ya mismo" es 1 búsqueda suelta (~0,005 €), como mucho 10 al día entre todos.
+const ENCARGOS = "oficina:encargos", MAX_ENCARGOS = 5, HORAS_ENTRE_ORDENES = 6, ENCARGOS_YA_AL_DIA = 10;
+// Los que buscan con la IA (la Despensa y los avisos de negocio van por su cuenta)
+export const EMPLEADOS_BUSCADORES = [...TIPOS.map((t) => t.id), "pueblos", "comarcas", "capital", "ultima", "teatros"];
+// Los que tienen sus propios tramos enteros: su turno es el tramo suyo más atrasado
+const TRAMOS_DE = { pueblos: /^m/, comarcas: /^d[234]$/, teatros: /^d5$/, ultima: /^r$/ };
+
+export async function leerEncargos() {
+  const crudo = aObjeto(await comando(["HGETALL", ENCARGOS]));
+  return Object.fromEntries(Object.entries(crudo).map(([k, v]) => { try { return [k, JSON.parse(v)]; } catch { return [k, []]; } }));
+}
+
+async function trabajarYa(empleado) {
+  const inicio = Date.now();
+  const desde = hoyEnLeon();
+  const hasta = sumarDias(desde, DIAS_VENTANA - 1);
+  if (TRAMOS_DE[empleado]) {
+    const ids = IDS_TRAMOS.filter((id) => TRAMOS_DE[empleado].test(id));
+    const partes = await varios(ids.map((id) => ["GET", `eventos:tramo:${id}`]));
+    const fin = (v) => { try { return JSON.parse(v)?.fin || ""; } catch { return ""; } };
+    const tramo = ids.map((id, i) => [id, fin(partes[i])]).sort((a, b) => a[1].localeCompare(b[1]))[0][0];
+    if (!(await comando(["SET", `barrido:cerrojo:${tramo}`, "1", "NX", "EX", 300]))) throw new Error("Ya está trabajando en ese turno");
+    return barrerEventos({ tramo });
+  }
+  // Los de tipo de plan y "León a fondo" tienen sus búsquedas repartidas entre tramos: se hacen sueltas
+  const busquedas = definirTramos(desde).flatMap((t) => t.busquedas).filter((b) => b.empleado === empleado);
+  const encargos = await leerEncargos().catch(() => ({}));
+  const parte = await trabajarEn({ busquedas }, { desde, hasta, inicio, encargos });
+  await guardarJSON(`oficina:ya:${empleado}`, parte, 10 * 24 * 3600);
+  if (encargos[empleado]?.length) await sinRomper(comando(["HDEL", ENCARGOS, empleado]), "encargos");
+  return parte;
+}
+
+// Partes de las órdenes sueltas, en el mismo formato que partesPorEmpleado (para que la oficina los vea)
+export async function partesDeOrdenes() {
+  const ids = EMPLEADOS_BUSCADORES.filter((e) => !TRAMOS_DE[e]);
+  const crudos = await varios(ids.map((e) => ["GET", `oficina:ya:${e}`]));
+  const partes = {};
+  crudos.forEach((v, i) => { try { const p = JSON.parse(v); if (p?.fin) partes[ids[i]] = partesPorEmpleado([p])[ids[i]]; } catch {} });
+  return partes;
+}
+
+export async function ordenar({ empleado, accion, texto, ya }) {
+  if (!EMPLEADOS_BUSCADORES.includes(empleado)) return { exito: false, mensaje: "Ese empleado no recibe órdenes" };
+  if (accion === "trabajar") {
+    const clave = `oficina:orden:${empleado}`;
+    if (!(await comando(["SET", clave, "1", "NX", "EX", HORAS_ENTRE_ORDENES * 3600]))) {
+      return { exito: false, mensaje: `Ya le mandaste trabajar hace menos de ${HORAS_ENTRE_ORDENES} horas` };
+    }
+    try {
+      const parte = await trabajarYa(empleado);
+      if (parte.busquedas && parte.errores >= parte.busquedas) await comando(["DEL", clave]); // si falló entero, puedes volver a pedírselo
+      return { exito: true, parte: resumenOrden(parte) };
+    } catch (e) {
+      await comando(["DEL", clave]).catch(() => null);
+      throw e;
+    }
+  }
+  if (accion !== "encargo") return { exito: false, mensaje: "Orden desconocida" };
+  const limpio = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (limpio.length < 4) return { exito: false, mensaje: "Escribe qué tiene que buscar" };
+  if (!ya) {
+    const lista = (await leerEncargos())[empleado] || [];
+    if (lista.length >= MAX_ENCARGOS) return { exito: false, mensaje: `Ya tiene ${MAX_ENCARGOS} encargos pendientes` };
+    lista.push({ texto: limpio, cuando: new Date().toISOString() });
+    await varios([["HSET", ENCARGOS, empleado, JSON.stringify(lista)], ["EXPIRE", ENCARGOS, 14 * 24 * 3600]]);
+    return { exito: true, encargos: lista };
+  }
+  const hoy = hoyEnLeon();
+  const hechos = await comando(["INCRBY", `oficina:encargosYa:${hoy}`, 1]);
+  await comando(["EXPIRE", `oficina:encargosYa:${hoy}`, 2 * 24 * 3600]);
+  if (hechos > ENCARGOS_YA_AL_DIA) return { exito: false, mensaje: `Hoy ya van ${ENCARGOS_YA_AL_DIA} encargos al momento. Déjalo para su próximo turno.` };
+  const desde = hoy, hasta = sumarDias(desde, DIAS_VENTANA - 1);
+  const suya = definirTramos(desde).flatMap((t) => t.busquedas).find((b) => b.empleado === empleado);
+  const parte = await trabajarEn({
+    busquedas: [{
+      nombre: `Encargo · ${limpio.slice(0, 40)}`, empleado, tema: limpio, pistas: suya?.pistas || "prensa local, webs de ayuntamientos y organizadores",
+      donde: "León capital y la provincia de León (España)", desde, hasta,
+      extra: "Es un encargo concreto del jefe: céntrate en esto y búscalo a fondo (web, redes del organizador, prensa local).",
+    }],
+  }, { desde, hasta, inicio: Date.now() });
+  return { exito: true, parte: resumenOrden(parte) };
+}
+
+const resumenOrden = (p) => ({ busquedas: p.busquedas, encontrados: p.encontrados, nuevos: p.nuevos, dudosos: p.dudosos || 0, errores: p.errores, muestra: p.muestra || [] });

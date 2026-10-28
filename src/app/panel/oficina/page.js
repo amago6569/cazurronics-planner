@@ -11,7 +11,7 @@ import { CAMISAS, ESTADOS, Monigote, diaCorto, fmt, hace } from "./monigotes";
 import Oficina3D, { FichaEmpleado } from "./Oficina3D";
 
 
-function Mesa({ e, i, departamento }) {
+function Mesa({ e, i, departamento, alElegir }) {
   const est = ESTADOS[e.estado] || ESTADOS.nuevo;
   const p = e.parte;
   const colores = CAMISAS[departamento] || CAMISAS.agenda;
@@ -19,7 +19,7 @@ function Mesa({ e, i, departamento }) {
     ? [`${fmt(p.eventos)} encontrados`, p.descartados ? `${fmt(p.descartados)} sin fuente` : null, p.errores ? `${p.errores} fallos` : null].filter(Boolean).join(" · ")
     : p.texto);
   return (
-    <article className={`${GLASS} group rounded-[1.75rem] p-3 sm:p-4 flex flex-col transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:shadow-[0_22px_50px_-18px_rgba(15,23,42,0.35)] cz-up`} style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}>
+    <button type="button" onClick={() => alElegir(e)} className={`${GLASS} ${PRESS} text-left group rounded-[1.75rem] p-3 sm:p-4 flex flex-col transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:shadow-[0_22px_50px_-18px_rgba(15,23,42,0.35)] cz-up`} style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}>
       <div className="relative rounded-2xl bg-gradient-to-b from-white/70 to-white/20 ring-1 ring-white/80 overflow-hidden">
         <span className={`absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${est.pill}`}>
           <i className={`w-1.5 h-1.5 rounded-full ${est.punto}`} />{est.texto}
@@ -34,8 +34,9 @@ function Mesa({ e, i, departamento }) {
           {p?.error && <p className="text-[11px] text-rose-600 line-clamp-2">{p.error}</p>}
           <p className="text-[11px] text-slate-400">🕒 {e.horario} · último turno {hace(p?.fin)}</p>
         </div>
+        {e.encargos?.length > 0 && <p className="text-[11px] font-semibold text-amber-600">📝 {e.encargos.length} {e.encargos.length === 1 ? "encargo pendiente" : "encargos pendientes"}</p>}
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -192,13 +193,13 @@ export default function Oficina() {
               <p className="text-xs text-slate-500">{d.nota}</p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {d.empleados.map((e, i) => <Mesa key={e.id} e={e} i={i} departamento={d.id} />)}
+              {d.empleados.map((e, i) => <Mesa key={e.id} e={e} i={i} departamento={d.id} alElegir={setElegido} />)}
             </div>
           </section>
         ))}
       </div>
 
-      <FichaEmpleado e={elegido} jefe={datos.jefe} alCerrar={() => setElegido(null)} />
+      <FichaEmpleado e={elegido} jefe={datos.jefe} alCerrar={() => setElegido(null)} clave={clave} alTerminar={() => cargar(clave)} />
 
       {/* En el móvil, actualizar queda al alcance del pulgar */}
       <div className="sm:hidden fixed inset-x-0 bottom-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-white/80 to-transparent">
