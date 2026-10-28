@@ -80,3 +80,17 @@ describe("telegram", () => {
     expect(trozos.join("\n")).toBe(texto);
   });
 });
+
+describe("emparejar el bot", () => {
+  it("solo empareja con el código vigente y una sola vez", async () => {
+    const { abrirEmparejamiento, emparejar, leerDueno } = await import("../src/lib/telegram");
+    const codigo = await abrirEmparejamiento();
+    expect(await emparejar(111, "otro-codigo")).toBe(false);
+    expect(await emparejar(111, undefined)).toBe(false);
+    expect(await leerDueno()).toBeNull();
+    expect(await emparejar(222, codigo)).toBe(true);
+    expect(await leerDueno()).toBe("222");
+    expect(await emparejar(333, codigo)).toBe(false);
+    expect(await leerDueno()).toBe("222");
+  });
+});

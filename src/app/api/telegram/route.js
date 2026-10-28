@@ -1,8 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { claveDePanelValida } from "../../../lib/lugares";
-import { DOMINIO } from "../../../lib/captacion";
-import { activarWebhook, chatDelDueno, enviarTelegram, escribiendo, secretoValido, telegramConfigurado } from "../../../lib/telegram";
+import { abrirEmparejamiento, activarWebhook, chatDelDueno, emparejar, enviarTelegram, escribiendo, leerDueno, secretoValido, telegramConfigurado } from "../../../lib/telegram";
 import { cifrasInstagram, cifrasWeb, resumenSemanal, responderPregunta } from "../../../lib/asesor";
 
 export const maxDuration = 45;
@@ -29,13 +28,14 @@ export async function POST(request) {
 
   after(async () => {
     try {
-      // Primera vez: aún no sabemos cuál es tu chat. Te lo dice para que lo pongas en Vercel, y nada más.
-      if (!process.env.TELEGRAM_CHAT_ID) {
-        await enviarTelegram(chatId, `Tu número de chat es ${chatId}. Ponlo en Vercel como TELEGRAM_CHAT_ID y haz Redeploy. Hasta entonces no contesto a nadie.`);
+      const orden = texto.split(/[\s@]/)[0].toLowerCase();
+      const dueno = await leerDueno();
+      // Primera vez: el /start que llega justo después de abrir el enlace de activar queda como dueño
+      if (!dueno) {
+        if (orden === "/start" && (await emparejar(chatId, texto.split(/\s+/)[1]))) await enviarTelegram(chatId, `✅ Listo, ya te reconozco. Solo te contestaré a ti.\n\n${AYUDA}`);
         return;
       }
-      if (!chatDelDueno(chatId)) return; // a cualquier otro, silencio
-      const orden = texto.split(/[\s@]/)[0].toLowerCase();
+      if (!chatDelDueno(chatId, dueno)) return; // a cualquier otro, silencio
       if (orden === "/start" || orden === "/ayuda" || orden === "/help") return await enviarTelegram(chatId, AYUDA);
       if (orden === "/web") return await enviarTelegram(chatId, await cifrasWeb());
       if (orden === "/instagram") return await enviarTelegram(chatId, await cifrasInstagram());
@@ -59,8 +59,13 @@ export async function GET(request) {
     return NextResponse.json({ exito: false, mensaje: "Faltan TELEGRAM_TOKEN o TELEGRAM_SECRETO en Vercel. Añádelas y haz Redeploy." }, { status: 503 });
   }
   try {
-    const info = await activarWebhook(`${DOMINIO}/api/telegram`);
-    return NextResponse.json({ exito: true, mensaje: "Bot conectado. Escríbele /start en Telegram.", direccion: info?.url, pendientes: info?.pending_update_count ?? 0 });
+    // La dirección por la que se ha abierto este enlace (www.cazurronics.es): cazurronics.es sin www redirige
+    // con un 308 y Telegram no sigue redirecciones, así que los mensajes se perderían.
+    const info = await activarWebhook(`${new URL(request.url).origin}/api/telegram`);
+    if (await leerDueno()) return NextResponse.json({ exito: true, mensaje: "Bot conectado y ya emparejado contigo.", direccion: info?.url });
+    // Enlace de un solo uso: al abrirlo, Telegram manda "/start <código>" y ese chat queda como dueño
+    const enlace = `https://t.me/${info.usuario}?start=${await abrirEmparejamiento()}`;
+    return NextResponse.json({ exito: true, mensaje: "Bot conectado. Abre este enlace en los próximos 15 minutos para emparejarlo contigo (solo vale una vez).", enlace, direccion: info?.url });
   } catch (e) {
     return NextResponse.json({ exito: false, mensaje: String(e?.message || e) }, { status: 502 });
   }

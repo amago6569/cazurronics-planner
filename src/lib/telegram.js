@@ -3,8 +3,10 @@
 // Variables en Vercel:
 //   TELEGRAM_TOKEN    el que da @BotFather al crear el bot
 //   TELEGRAM_SECRETO  cualquier texto largo inventado: Telegram lo manda en cada aviso y así nadie más puede llamar al bot
-//   TELEGRAM_CHAT_ID  tu número de chat (el bot te lo dice la primera vez que le escribes)
+//   TELEGRAM_CHAT_ID  (opcional) tu número de chat. Si no está, el bot se empareja con un enlace de un solo uso
+//                     que da /api/telegram?activar=CLAVE (caduca en 15 minutos); el chat que lo abre queda como dueño.
 import { timingSafeEqual } from "node:crypto";
+import { comando, nuevoId } from "./almacen";
 
 const API = "https://api.telegram.org";
 const MAX_MENSAJE = 4000; // Telegram corta en 4096
@@ -21,9 +23,34 @@ export function secretoValido(recibido) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function chatDelDueno(chatId) {
-  const dueno = limpio(process.env.TELEGRAM_CHAT_ID);
-  return Boolean(dueno) && String(chatId) === dueno;
+const CLAVE_DUENO = "telegram:dueno";
+const CLAVE_EMPAREJAR = "telegram:emparejar";
+const MINUTOS_EMPAREJAR = 15;
+
+export function chatDelDueno(chatId, dueno = limpio(process.env.TELEGRAM_CHAT_ID)) {
+  return Boolean(dueno) && String(chatId) === String(dueno);
+}
+
+// El chat del dueño: el de Vercel si está; si no, el que se emparejó con /start
+export async function leerDueno() {
+  return limpio(process.env.TELEGRAM_CHAT_ID) || limpio(await comando(["GET", CLAVE_DUENO]).catch(() => "")) || null;
+}
+
+// Código de un solo uso para el enlace t.me/<bot>?start=<código>. Solo lo ve quien tiene la clave del panel.
+export async function abrirEmparejamiento() {
+  const codigo = nuevoId(16);
+  await comando(["SET", CLAVE_EMPAREJAR, codigo, "EX", MINUTOS_EMPAREJAR * 60]);
+  return codigo;
+}
+
+// true si este chat acaba de quedar como dueño: solo con el código vigente, y se borra al usarlo
+export async function emparejar(chatId, codigo) {
+  const vigente = limpio(await comando(["GET", CLAVE_EMPAREJAR]).catch(() => ""));
+  const a = Buffer.from(limpio(codigo)), b = Buffer.from(vigente);
+  if (!vigente || a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  await comando(["DEL", CLAVE_EMPAREJAR]);
+  await comando(["SET", CLAVE_DUENO, String(chatId)]);
+  return true;
 }
 
 // Parte un texto largo en trozos que Telegram acepta, cortando por saltos de línea cuando se puede
@@ -74,5 +101,6 @@ export async function activarWebhook(url) {
       { command: "instagram", description: "Cifras de Instagram" },
     ],
   }).catch(() => null);
-  return llamarTelegram("getWebhookInfo", {});
+  const [info, bot] = await Promise.all([llamarTelegram("getWebhookInfo", {}), llamarTelegram("getMe", {})]);
+  return { ...info, usuario: bot?.username };
 }
