@@ -1,7 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { claveDePanelValida } from "../../../lib/lugares";
-import { DOMINIO } from "../../../lib/captacion";
 import { activarWebhook, chatDelDueno, enviarTelegram, escribiendo, secretoValido, telegramConfigurado } from "../../../lib/telegram";
 import { cifrasInstagram, cifrasWeb, resumenSemanal, responderPregunta } from "../../../lib/asesor";
 
@@ -59,7 +58,9 @@ export async function GET(request) {
     return NextResponse.json({ exito: false, mensaje: "Faltan TELEGRAM_TOKEN o TELEGRAM_SECRETO en Vercel. Añádelas y haz Redeploy." }, { status: 503 });
   }
   try {
-    const info = await activarWebhook(`${DOMINIO}/api/telegram`);
+    // La dirección por la que se ha abierto este enlace (www.cazurronics.es): cazurronics.es sin www redirige
+    // con un 308 y Telegram no sigue redirecciones, así que los mensajes se perderían.
+    const info = await activarWebhook(`${new URL(request.url).origin}/api/telegram`);
     return NextResponse.json({ exito: true, mensaje: "Bot conectado. Escríbele /start en Telegram.", direccion: info?.url, pendientes: info?.pending_update_count ?? 0 });
   } catch (e) {
     return NextResponse.json({ exito: false, mensaje: String(e?.message || e) }, { status: 502 });
