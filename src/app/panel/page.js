@@ -63,9 +63,9 @@ export default function Panel() {
 
   // Cada barrido va por tramos, uno detrás de otro, para que cada uno quepa en el minuto de Vercel
   const BARRIDOS = {
-    diario: { texto: "Barrido diario", ids: ["d0", "d1", "d2", "d3", "d4", "d5"] },
+    diario: { texto: "Barrido diario", ids: [...Array.from({ length: 8 }, (_, i) => `t${i}`), "d2", "d3", "d4", "d5"] },
     novedades: { texto: "Novedades", ids: ["r"] },
-    gordo: { texto: "Barrido gordo", ids: ["m0", "m1", "m2", "m3", "m4", "m5", "m6", "m7"] },
+    gordo: { texto: "Pueblos", ids: Array.from({ length: 23 }, (_, i) => `m${i}`) },
   };
   const barrer = async (tipo) => {
     const { ids } = BARRIDOS[tipo];
@@ -150,6 +150,7 @@ export default function Panel() {
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">Panel <span className={TITULO_GRADIENTE}>Cazurronics</span></h1>
           </div>
           <div className="flex items-center gap-2">
+            <a href="/panel/oficina" className={`${PRESS} h-10 px-4 inline-flex items-center rounded-full bg-slate-900 text-white text-sm font-semibold`}>🏢 Oficina</a>
             {almacen === "memoria" && <span className="text-xs font-semibold text-amber-800 bg-amber-100 ring-1 ring-amber-200 rounded-full px-3 py-1.5">⚠️ Datos en memoria: conecta Upstash en Vercel</span>}
             <button onClick={() => cargar(clave)} className={`${PRESS} h-10 px-4 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold`}>Actualizar</button>
           </div>
@@ -240,7 +241,7 @@ export default function Panel() {
                 <p className="text-xs text-slate-500">{barrido ? `Última pasada: ${new Date(barrido.fin || barrido.inicio).toLocaleString("es-ES")} · ${barrido.total ?? 0} planes en la agenda${barrido.descartados ? ` · ${barrido.descartados} descartados por fuente falsa` : ""}` : "Todavía no se ha hecho ningún barrido"}</p>
               </div>
             </div>
-            {/* Lanzar a mano (los crons lo hacen solos: diario de madrugada, novedades a mediodía y tarde, gordo cada domingo; si ya se hizo hace poco, no se repite) */}
+            {/* Lanzar a mano (los crons lo hacen solos: diario de madrugada, novedades a mediodía y tarde, pueblos domingos y miércoles; si ya se hizo hace poco, no se repite) */}
             <div className="flex flex-wrap gap-2 mb-4">
               {Object.entries(BARRIDOS).map(([tipo, b]) => {
                 const activo = barriendo?.tipo === tipo;
