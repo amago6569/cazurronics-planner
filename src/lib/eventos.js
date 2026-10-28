@@ -15,14 +15,16 @@ import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
 import { fuentesPara } from "./intencion";
 import { apuntarNovedades } from "./novedades";
+import { enProvinciaLeon, esSitioDeFuera } from "./provincia";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
-// Mismos límites de la provincia que usa el mapa
-const LIMITES = { latMin: 41.8, latMax: 43.45, lonMin: -7.35, lonMax: -4.45 };
 
 const normalizar = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 const esFecha = (f) => typeof f === "string" && /^\d{4}-\d{2}-\d{2}$/.test(f);
-const enProvincia = (lat, lon) => lat >= LIMITES.latMin && lat <= LIMITES.latMax && lon >= LIMITES.lonMin && lon <= LIMITES.lonMax;
+// Frontera real de la provincia (lib/provincia.js), no un rectángulo que se come medio Zamora
+const enProvincia = enProvinciaLeon;
+// Coordenadas con pinta de reales (en la península): si caen fuera de León, el evento es de fuera
+const enLaPeninsula = (lat, lon) => lat > 36 && lat < 44 && lon > -10 && lon < 4;
 
 function sumarDias(fecha, n) {
   const d = new Date(`${fecha}T12:00:00Z`);
@@ -161,6 +163,9 @@ export function validarEventoIA(e, desde, hasta) {
   if (!fuente) return null; // sin fuente verificable no lo publicamos
   const lat = Number(e.lat), lon = Number(e.lon);
   const coords = Number.isFinite(lat) && Number.isFinite(lon) && enProvincia(lat, lon);
+  // Solo León: fuera lo que está en otra provincia (por coordenadas o por el nombre del pueblo)
+  if (!coords && Number.isFinite(lat) && Number.isFinite(lon) && enLaPeninsula(lat, lon)) return null;
+  if (esSitioDeFuera(e.localidad)) return null;
   return {
     titulo, fecha, fechaFin,
     hora: e.hora ? String(e.hora).slice(0, 20) : null,

@@ -4,7 +4,8 @@ import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada
 import { enSegundoPlano, leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
 import { dentroDelLimite, dentroDelTopeDiario } from '../../../lib/freno';
 import { claveLugar, esNegocio, esPrueba, registrarApariciones, sitiosComprobados, sitiosParaPrompt } from '../../../lib/lugares';
-import { planesConGoogle } from '../../../lib/montarPlan';
+import { fueraDeLeon, planesConGoogle } from '../../../lib/montarPlan';
+import { enProvinciaLeon } from '../../../lib/provincia';
 import { registrar } from '../../../lib/estadisticas';
 
 export const maxDuration = 60;
@@ -27,6 +28,9 @@ export async function POST(request) {
     if (!instruccion || !paradaAntigua || typeof paradaAntigua !== 'object') {
       return NextResponse.json({ exito: false, mensaje: "No he entendido qué parada cambiar. Ábrela otra vez y dime qué prefieres." }, { status: 400 });
     }
+    // Solo León capital y provincia, sin gastar IA en lo de fuera (ver lib/provincia.js)
+    const fuera = fueraDeLeon({ lat: peticion.lat, lon: peticion.lon, texto: instruccion });
+    if (fuera) return NextResponse.json({ exito: false, mensaje: fuera }, { status: 200 });
     if (!(await dentroDelLimite(request, 'retoque', MAX_RETOQUES, VENTANA_S))) {
       return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos cambios seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
     }
@@ -51,7 +55,7 @@ export async function POST(request) {
     const prompt = `
       Cazurronics Planner. Cambia la parada "${paradaAntigua.titulo}" (${paradaAntigua.hora}).
       El usuario pide: "${instruccion}".
-      RESTRICCIONES: Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
+      RESTRICCIONES: Solo provincia de León (España). Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
       ${bloqueSitios}
       Devuelve SOLO un JSON así:
       "lugar": solo si es un evento o ruta: el local, plaza o recinto concreto donde es; si es un negocio normal, null.
@@ -63,7 +67,7 @@ export async function POST(request) {
     if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
     const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });
 
-    if (!parada) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
+    if (!parada || !enProvinciaLeon(parada.lat, parada.lon)) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
 
     // NUEVO: identificador del lugar + actualizar el plan guardado (el enlace compartido ve el cambio)
     parada.lugarId = esNegocio(parada) ? claveLugar(parada) : null; // un evento no cuenta como local
