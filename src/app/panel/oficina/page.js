@@ -9,6 +9,7 @@ import Fondo from "../../components/Fondo";
 import { GLASS, GLASS_SOFT, PRESS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../../lib/estilos";
 import { CAMISAS, ESTADOS, Monigote, diaCorto, fmt, hace } from "./monigotes";
 import Oficina3D, { FichaEmpleado } from "./Oficina3D";
+import Novedades from "./novedades";
 
 
 function Mesa({ e, i, departamento, alElegir }) {
@@ -184,6 +185,7 @@ export default function Oficina() {
         </section>
 
         <Despacho jefe={datos.jefe} />
+        <Novedades lista={datos.novedades || []} departamentos={datos.departamentos} />
         <Bandeja lista={datos.bandeja} decidir={decidir} enCurso={enCurso} />
 
         {modo === "lista" && datos.departamentos.map((d) => (

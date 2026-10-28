@@ -14,6 +14,7 @@ import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
 import { fuentesPara } from "./intencion";
+import { apuntarNovedades } from "./novedades";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
 // Mismos límites de la provincia que usa el mapa
@@ -506,7 +507,7 @@ async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos 
 
   const fuentes = {};
   let encontrados = 0, descartados = 0, errores = 0;
-  const nuevos = [], dudosos = [];
+  const nuevos = [], dudosos = [], deQuien = new Map();
   const limite = inicio + 54000; // todo el tramo cabe en el minuto de Vercel
   await Promise.all(resultados.map(async (r, i) => {
     const [nombre, , empleado = "junta"] = tareas[i];
@@ -515,11 +516,12 @@ async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos 
     encontrados += r.value.eventos.length; descartados += malos.length;
     fuentes[nombre] = { ok: true, empleado, eventos: buenos.length, ...(malos.length ? { descartados: malos.length } : {}) };
     nuevos.push(...buenos.map((e) => ({ ...e, verificado: true })));
+    for (const e of buenos) deQuien.set(claveEvento(e), empleado);
     // Lo que no se pudo comprobar (no lo que tiene una página que no existe) va a la bandeja del jefe, para que decidas tú
     dudosos.push(...malos.filter((e) => e.motivo === "duda").map((e) => ({ ...e, empleado })));
   }));
 
-  const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta) : 0;
+  const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta, (e) => deQuien.get(claveEvento(e)) || null) : 0;
   if (dudosos.length) await sinRomper(guardarDudosos(dudosos), "bandeja del jefe");
   return {
     fuentes, nuevos: sumados, encontrados, descartados, errores, busquedas: tareas.length, dudosos: dudosos.length,
@@ -551,8 +553,10 @@ async function conCerrojo(tarea) {
   }
 }
 
-async function sumarALaAgenda(eventos, desde, hasta) {
-  return conCerrojo(async () => {
+// quien = (evento) => nombre del empleado que lo encontró, para la lista de novedades de la oficina
+async function sumarALaAgenda(eventos, desde, hasta, quien = () => null) {
+  const entran = [];
+  const nuevos = await conCerrojo(async () => {
     const porDia = fusionarPorDia([eventos], desde, hasta);
     const fechas = Object.keys(porDia);
     if (!fechas.length) return 0;
@@ -564,11 +568,19 @@ async function sumarALaAgenda(eventos, desde, hasta) {
       try { antes = JSON.parse(actuales[i] || "[]").filter(fiable); } catch {}
       const junto = ordenarPorHora(deduplicar([...antes, ...porDia[f]]));
       nuevos += Math.max(0, junto.length - antes.length);
+      const yaEstaban = new Set(antes.map(claveEvento));
+      entran.push(...junto.filter((e) => !yaEstaban.has(claveEvento(e))));
       return ["SET", `eventos:${f}`, JSON.stringify(junto), "EX", 21 * 24 * 3600];
     });
     await varios(comandos);
     return nuevos;
   });
+  if (entran.length) {
+    await sinRomper(apuntarNovedades(entran.map((e) => ({
+      tipo: "evento", titulo: e.titulo, fecha: e.fecha, localidad: e.localidad, lugar: e.lugar, fuente: e.fuente, quien: quien(e),
+    }))), "novedades");
+  }
+  return nuevos;
 }
 
 // ============ BANDEJA DEL JEFE ============
@@ -610,7 +622,7 @@ export async function decidirDudoso(id, decision) {
   if (decision === "subir") {
     const { encontrado: _, empleado: __, ...e } = JSON.parse(crudo);
     const desde = hoyEnLeon();
-    await sumarALaAgenda([{ ...e, verificado: true, revisado: true }], desde, sumarDias(desde, DIAS_VENTANA - 1));
+    await sumarALaAgenda([{ ...e, verificado: true, revisado: true }], desde, sumarDias(desde, DIAS_VENTANA - 1), () => "bandeja");
   } else {
     await varios([["HSET", TIRADOS, id, hoyEnLeon()], ["EXPIRE", TIRADOS, 30 * 24 * 3600]]);
   }

@@ -5,6 +5,8 @@ import { leerJSON } from "../../../../lib/almacen";
 import { hoyEnLeon, leerGastoIA } from "../../../../lib/estadisticas";
 import { decidirDudoso, eventosProximos, leerBandeja, leerEncargos, ordenar, partesDeOrdenes } from "../../../../lib/eventos";
 import { montarOficina } from "../../../../lib/oficina";
+import { EMPLEADO_DESPENSA, encargosDespensa, ordenarDespensa } from "../../../../lib/despensa";
+import { leerNovedades } from "../../../../lib/novedades";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // una orden de "trabajar ya" es un turno entero
@@ -14,6 +16,7 @@ export const maxDuration = 60; // una orden de "trabajar ya" es un turno entero
 //  · POST { id, decision: "subir" | "tirar" } → decides tú sobre un evento de la bandeja
 //  · POST { empleado, accion: "trabajar" }         → ese empleado repite su turno ya (máx. 1 cada 6 h)
 //  · POST { empleado, accion: "encargo", texto, ya } → encargo para su próximo turno, o al momento si ya = true
+//    (a "despensa-productos" el encargo lleva también la comarca: { zona })
 async function acceso(request) {
   if (!process.env.PANEL_CLAVE) return NextResponse.json({ exito: false, mensaje: "Falta la variable PANEL_CLAVE en el servidor." }, { status: 503 });
   const r = await claveConFreno(request, claveDePanelValida(request.headers.get("x-clave") || ""));
@@ -42,11 +45,12 @@ export async function GET(request) {
   const bloqueo = await acceso(request);
   if (bloqueo) return bloqueo;
   try {
-    const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos] = await Promise.all([
+    const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades] = await Promise.all([
       leerJSON("eventos:ultimoBarrido"), leerBandeja(), eventosProximos(), leerGastoIA().catch(() => null), leerJSON("oficina:jefe"),
       leerJSON("despensa:ultimoBarrido"), leerJSON("despensa:g:ultimo"), leerJSON("despensa:fichas:ultimo"),
       leerJSON("oficina:turno:captacion"), leerJSON("oficina:turno:finde"),
       partesDeOrdenes().catch(() => ({})), leerEncargos().catch(() => ({})),
+      encargosDespensa().catch(() => []), leerNovedades().catch(() => []),
     ]);
     const hoy = hoyEnLeon();
     const nuevosHoy = (barrido?.tramos || []).filter((t) => t.fin && new Date(t.fin).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) === hoy).reduce((s, t) => s + (t.nuevos || 0), 0);
@@ -56,9 +60,9 @@ export async function GET(request) {
       nuevosHoy,
       gastoMes: gasto?.[0]?.tareas?.reduce((s, t) => s + t.dolares, 0) ?? null,
       jefe,
-      encargos,
+      encargos: { ...encargos, [EMPLEADO_DESPENSA]: encargosDesp.map((texto) => ({ texto })) },
     });
-    return NextResponse.json({ exito: true, ...oficina, bandeja: bandeja.slice(0, 60) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ exito: true, ...oficina, bandeja: bandeja.slice(0, 60), novedades }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[oficina]", e);
     return NextResponse.json({ exito: false, mensaje: `Error del servidor: ${e?.message || e}` }, { status: 500 });
@@ -71,7 +75,9 @@ export async function POST(request) {
   const cuerpo = await request.json().catch(() => ({}));
   if (typeof cuerpo.empleado === "string") {
     try {
-      return NextResponse.json(await ordenar({ empleado: cuerpo.empleado, accion: cuerpo.accion, texto: cuerpo.texto, ya: cuerpo.ya === true }));
+      const orden = { accion: cuerpo.accion, texto: cuerpo.texto, ya: cuerpo.ya === true };
+      if (cuerpo.empleado === EMPLEADO_DESPENSA) return NextResponse.json(await ordenarDespensa({ ...orden, zona: cuerpo.zona }));
+      return NextResponse.json(await ordenar({ empleado: cuerpo.empleado, ...orden }));
     } catch (e) {
       console.error("[oficina] orden", e);
       return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
