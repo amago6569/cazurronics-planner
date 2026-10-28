@@ -7,78 +7,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Fondo from "../../components/Fondo";
 import { GLASS, GLASS_SOFT, PRESS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../../lib/estilos";
+import { CAMISAS, ESTADOS, Monigote, diaCorto, fmt, hace } from "./monigotes";
+import Oficina3D, { FichaEmpleado } from "./Oficina3D";
 
-const fmt = (n) => new Intl.NumberFormat("es-ES").format(n || 0);
-const PIELES = ["#f6d2b8", "#e9b894", "#c98e66", "#f3c9a5", "#8d5a3b", "#fbe0c8"];
-const PELOS = ["#2b1d14", "#6b3f1d", "#c8902e", "#1f2937", "#9a3412", "#57534e", "#b45309"];
-const CAMISAS = { agenda: ["#f43f5e", "#fb7185", "#e11d48"], territorio: ["#0ea5e9", "#38bdf8", "#0284c7"], despensa: ["#f59e0b", "#fbbf24", "#d97706"], negocio: ["#8b5cf6", "#a78bfa", "#7c3aed"] };
-const ESTADOS = {
-  ok: { texto: "Al día", punto: "bg-emerald-500", pill: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  tarde: { texto: "Con retraso", punto: "bg-amber-500", pill: "bg-amber-50 text-amber-800 ring-amber-200" },
-  error: { texto: "Con fallos", punto: "bg-rose-500", pill: "bg-rose-50 text-rose-700 ring-rose-200" },
-  nuevo: { texto: "Aún no ha trabajado", punto: "bg-slate-300", pill: "bg-white/70 text-slate-500 ring-slate-200" },
-};
-
-function hace(fecha) {
-  if (!fecha) return "todavía no";
-  const min = Math.max(0, Math.round((Date.now() - Date.parse(fecha)) / 60000));
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.round(min / 60);
-  return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
-}
-const diaCorto = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
-
-// El monigote en su mesa. estado: ok (teclea) · tarde (duerme) · error (humo) · nuevo (silla vacía, a medias)
-function Monigote({ estado = "ok", semilla = 0, camisa = "#f43f5e", emoji = "💻", jefe = false, className = "" }) {
-  const piel = PIELES[semilla % PIELES.length];
-  const pelo = PELOS[(semilla * 3 + 1) % PELOS.length];
-  const duerme = estado === "tarde";
-  const teclea = estado === "ok";
-  return (
-    <svg viewBox="0 0 120 92" className={className} role="img" aria-label={ESTADOS[estado]?.texto}>
-      <ellipse cx="60" cy="86" rx="46" ry="5" fill="rgba(15,23,42,0.08)" />
-      {/* silla */}
-      <rect x="34" y="20" width="52" height="46" rx="14" fill="rgba(15,23,42,0.10)" />
-      {/* persona */}
-      <g opacity={estado === "nuevo" ? 0.35 : 1}>
-        <g className={duerme ? "" : "cz-respira"}>
-          <rect x="40" y="44" width="40" height="23" rx="11" fill={camisa} />
-          {jefe && <path d="M60 46 l-3.5 5 3.5 12 3.5-12z" fill="#0f172a" />}
-          {jefe && <path d="M54 44 l6 5 6-5" fill="#fff" />}
-          <g transform={duerme ? "rotate(14 60 34)" : undefined}>
-            <circle cx="60" cy="31" r="13" fill={piel} />
-            <path d={semilla % 2 ? "M47 29 q1-14 13-14 q12 0 13 14 q-6-7-13-7 q-7 0-13 7z" : "M47 30 q0-15 13-15 q13 0 13 15 q-3-4-6-5 q-7 3-20 5z"} fill={pelo} />
-            {duerme ? (
-              <><path d="M53.5 33 q2 1.6 4 0" stroke="#334155" strokeWidth="1.4" fill="none" strokeLinecap="round" /><path d="M62.5 33 q2 1.6 4 0" stroke="#334155" strokeWidth="1.4" fill="none" strokeLinecap="round" /></>
-            ) : (
-              <><circle cx="55.5" cy="32" r="1.5" fill="#1e293b" /><circle cx="64.5" cy="32" r="1.5" fill="#1e293b" /></>
-            )}
-            {estado === "error"
-              ? <path d="M56 38.5 q4-2.4 8 0" stroke="#9f1239" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-              : <path d="M56.5 37.5 q3.5 2.6 7 0" stroke="#9a3412" strokeWidth="1.4" fill="none" strokeLinecap="round" />}
-            <circle cx="52" cy="36" r="2" fill="#fb7185" opacity=".25" />
-            <circle cx="68" cy="36" r="2" fill="#fb7185" opacity=".25" />
-          </g>
-        </g>
-        {/* manos sobre el teclado */}
-        <rect x="37" y="58" width="12" height="7" rx="3.5" fill={piel} className={teclea ? "cz-teclea" : ""} />
-        <rect x="71" y="58" width="12" height="7" rx="3.5" fill={piel} className={teclea ? "cz-teclea-2" : ""} />
-      </g>
-      {/* mesa */}
-      <rect x="10" y="63" width="100" height="7" rx="3.5" fill="#fff" stroke="rgba(15,23,42,0.08)" />
-      <rect x="18" y="70" width="5" height="14" rx="2" fill="rgba(15,23,42,0.14)" />
-      <rect x="97" y="70" width="5" height="14" rx="2" fill="rgba(15,23,42,0.14)" />
-      {/* portátil visto por detrás, con la pegatina del puesto */}
-      <path d="M44 63 L48 45 H72 L76 63 Z" fill={estado === "error" ? "#fecdd3" : "#e2e8f0"} stroke="rgba(15,23,42,0.12)" />
-      {teclea && <path d="M48 45 H72" stroke="#7dd3fc" strokeWidth="1.6" className="cz-brillo" />}
-      <text x="60" y="58.5" textAnchor="middle" fontSize="10">{emoji}</text>
-      {jefe && <><rect x="86" y="54" width="9" height="9" rx="2" fill="#fff" stroke="rgba(15,23,42,0.15)" /><path d="M95 56.5 q3 0 3 2.5 q0 2.5-3 2.5" stroke="rgba(15,23,42,0.25)" fill="none" /></>}
-      {/* lo que le pasa */}
-      {duerme && <><text x="78" y="28" fontSize="9" className="cz-zzz" fill="#64748b">z</text><text x="85" y="21" fontSize="11" className="cz-zzz" style={{ animationDelay: ".8s" }} fill="#64748b">z</text></>}
-      {estado === "error" && <><circle cx="76" cy="44" r="4" fill="#94a3b8" className="cz-humo" /><circle cx="81" cy="40" r="4.5" fill="#fda4af" className="cz-humo" style={{ animationDelay: ".6s" }} /><text x="76" y="24" fontSize="10">❗</text></>}
-    </svg>
-  );
-}
 
 function Mesa({ e, i, departamento }) {
   const est = ESTADOS[e.estado] || ESTADOS.nuevo;
@@ -179,6 +110,8 @@ export default function Oficina() {
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [enCurso, setEnCurso] = useState(null);
+  const [modo, setModo] = useState("3d"); // "3d" (la planta) o "lista" (las mesas en tarjetas)
+  const [elegido, setElegido] = useState(null);
 
   const cargar = useCallback(async (c) => {
     setError(""); setCargando(true);
@@ -237,10 +170,22 @@ export default function Oficina() {
           <button onClick={() => cargar(clave)} className={`${PRESS} hidden sm:inline-flex items-center h-10 px-4 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold`}>{cargando ? "Actualizando…" : "Actualizar"}</button>
         </header>
 
+        <section className="space-y-3 cz-up">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h2 className="font-bold text-slate-900 text-lg">La planta</h2>
+            <div className={`${GLASS_SOFT} flex p-1 rounded-full`}>
+              {[["3d", "🏢 3D"], ["lista", "📋 Lista"]].map(([id, texto]) => (
+                <button key={id} onClick={() => setModo(id)} className={`${PRESS} h-9 px-4 rounded-full text-sm font-semibold ${modo === id ? "bg-slate-900 text-white" : "text-slate-600"}`}>{texto}</button>
+              ))}
+            </div>
+          </div>
+          {modo === "3d" && <Oficina3D departamentos={datos.departamentos} jefe={datos.jefe} alElegir={setElegido} />}
+        </section>
+
         <Despacho jefe={datos.jefe} />
         <Bandeja lista={datos.bandeja} decidir={decidir} enCurso={enCurso} />
 
-        {datos.departamentos.map((d) => (
+        {modo === "lista" && datos.departamentos.map((d) => (
           <section key={d.id} className="space-y-3">
             <div className="px-1 flex flex-wrap items-baseline gap-x-3">
               <h2 className="font-bold text-slate-900 text-lg">{d.nombre}</h2>
@@ -252,6 +197,8 @@ export default function Oficina() {
           </section>
         ))}
       </div>
+
+      <FichaEmpleado e={elegido} jefe={datos.jefe} alCerrar={() => setElegido(null)} />
 
       {/* En el móvil, actualizar queda al alcance del pulgar */}
       <div className="sm:hidden fixed inset-x-0 bottom-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-white/80 to-transparent">
