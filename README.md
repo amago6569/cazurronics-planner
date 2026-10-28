@@ -36,6 +36,8 @@ Van en `.env.local` en local y en Vercel → Settings → Environment Variables.
 | `NEXT_PUBLIC_SITE_URL` | Con dominio propio | Por ejemplo `https://cazurronics.es` (sitemap, enlaces y textos para compartir). |
 | `NEXT_PUBLIC_GAS_BUSINESS_URL` | No | Google Apps Script que recibe las solicitudes de negocios (además se guardan en `/panel`). |
 | `RESEND_API_KEY`, `AVISO_EMAIL`, `AVISO_DE` | No | Correos de aviso al equipo (resumen del finde y locales listos para escribirles). |
+| `TELEGRAM_TOKEN`, `TELEGRAM_SECRETO`, `TELEGRAM_CHAT_ID` | No | Bot de Telegram "asesor de métricas" (web + Instagram). Tras ponerlas, abre `/api/telegram?activar=PANEL_CLAVE` una vez. |
+| `INSTAGRAM_TOKEN` | No | Token de la API de Instagram (inicio de sesión de Instagram). El cron `/api/telegram/diario` guarda las cifras cada mañana y lo renueva solo. |
 
 ## Cómo funciona
 
