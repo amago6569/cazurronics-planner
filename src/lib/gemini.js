@@ -48,7 +48,7 @@ export function medirUso(modelo, datos) {
 
 // json: true pide la respuesta directamente en JSON (solo sin Google Search: Gemini no admite las dos cosas a la vez)
 // tarea: nombre con el que se apunta el gasto en el panel (por defecto, el de "para")
-export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000 } = {}) {
+export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, maxSalida } = {}) {
   const fallos = [];
   const fin = Date.now() + msMax;
   for (const modelo of MODELOS[para] || MODELOS.usuario) {
@@ -61,7 +61,7 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
         method: "POST",
         signal: AbortSignal.timeout(Math.max(1000, fin - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}) } }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}) } }),
         cache: "no-store",
       });
       const pensarPoco = NIVEL_PENSAMIENTO !== "auto" && /^gemini-(flash|3)/.test(modelo);

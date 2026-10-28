@@ -84,6 +84,9 @@ function ejecutarEnMemoria([cmd, ...a]) {
     case "HSETNX": { const h = hashDe(a[0]); if (h.has(a[1])) return 0; h.set(a[1], String(a[2])); return 1; }
     case "HGET": { const h = vivo(a[0]); return h instanceof Map ? (h.get(a[1]) ?? null) : null; }
     case "HGETALL": { const h = vivo(a[0]); if (!(h instanceof Map)) return []; return [...h.entries()].flat(); }
+    case "HKEYS": { const h = vivo(a[0]); return h instanceof Map ? [...h.keys()] : []; }
+    case "HLEN": { const h = vivo(a[0]); return h instanceof Map ? h.size : 0; }
+    case "HDEL": { const h = vivo(a[0]); if (!(h instanceof Map)) return 0; let n = 0; for (const k of a.slice(1)) if (h.delete(k)) n++; return n; }
     case "ZINCRBY": {
       let z = vivo(a[0]); if (!(z instanceof Map)) { z = new Map(); mem.kv.set(a[0], z); }
       const n = Number(z.get(a[2]) || 0) + Number(a[1]); z.set(a[2], n); return String(n);
