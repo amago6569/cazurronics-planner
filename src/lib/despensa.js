@@ -28,6 +28,7 @@ import { hoyEnLeon } from "./estadisticas";
 import { ZONAS, zonaDe } from "./zonas";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { comprobarUrl, dominioConsultado } from "./eventos";
+import { apuntarNovedades } from "./novedades";
 
 const PRODUCTO = Object.fromEntries(PRODUCTOS.map((p) => [p.id, p]));
 
@@ -226,9 +227,22 @@ async function buscarYComprobar(busca, zona) {
 export async function barrerCombinacion(producto, zona) {
   const r = await buscarYComprobar(PRODUCTO[producto].busca, zona);
   if (r.sinCupo) return { producto, zona, sinCupo: true, encontradas: r.encontradas, guardadas: 0 };
+  const antes = await leerJSON(claveCombo(producto, zona)).catch(() => null);
   await guardarJSON(claveCombo(producto, zona), { fecha: new Date().toISOString(), tiendas: r.buenas, vacia: !r.buenas.length });
-  return { producto, zona, encontradas: r.encontradas, guardadas: r.buenas.length };
+  const nuevas = await apuntarTiendasNuevas(r.buenas, antes?.tiendas, PRODUCTO[producto].nombre);
+  return { producto, zona, encontradas: r.encontradas, guardadas: r.buenas.length, nuevas, muestra: muestraDe(r.buenas) };
 }
+
+// Las tiendas que no estaban antes, a la lista de novedades de la oficina
+async function apuntarTiendasNuevas(buenas, antes = [], producto, quien = "despensa-productos") {
+  const ya = new Set((antes || []).map((t) => t.placeId));
+  const nuevas = buenas.filter((t) => !ya.has(t.placeId));
+  if (nuevas.length) {
+    await apuntarNovedades(nuevas.map((t) => ({ tipo: "tienda", titulo: t.nombre, localidad: t.localidad, producto, quien }))).catch(() => null);
+  }
+  return nuevas.length;
+}
+const muestraDe = (tiendas) => tiendas.slice(0, 8).map((t) => ({ titulo: t.nombre, localidad: t.localidad || "" }));
 
 // ---------- 3b. Lo que pide la gente y no tenemos ----------
 // El buscador apunta aquí lo que falta ("aceite de oliva" en Astorga). La pasada nocturna lo busca igual que
@@ -260,17 +274,21 @@ async function leerPeticiones() {
 }
 
 // Las que faltan, de la más antigua a la más nueva (solo las 30 últimas: si alguien llenase la lista, no atasca nada)
+// Los encargos del jefe (desde /panel/oficina) pasan delante.
 export function peticionesPendientes(todas, cuantas = POR_PASADA_PETICIONES) {
-  return todas.filter((p) => !p.hecha).slice(0, 30).reverse().slice(0, cuantas);
+  const faltan = todas.filter((p) => !p.hecha);
+  return [...faltan.filter((p) => p.jefe), ...faltan.filter((p) => !p.jefe).slice(0, 30).reverse()].slice(0, cuantas);
 }
 
 async function barrerPeticion(p) {
   const r = await buscarYComprobar(p.texto, p.zona);
   if (r.sinCupo) return { peticion: p.texto, zona: p.zona, sinCupo: true, encontradas: r.encontradas, guardadas: 0 };
   const fecha = new Date().toISOString();
+  const antes = await leerJSON(claveLibre(p.id)).catch(() => null);
   await guardarJSON(claveLibre(p.id), { texto: p.texto, zona: p.zona, fecha, tiendas: r.buenas }, 180 * 86400);
   await comando(["HSET", LIBRES, p.id, fecha]);
-  return { peticion: p.texto, zona: p.zona, encontradas: r.encontradas, guardadas: r.buenas.length };
+  const nuevas = await apuntarTiendasNuevas(r.buenas, antes?.tiendas, p.texto);
+  return { peticion: p.texto, zona: p.zona, encontradas: r.encontradas, guardadas: r.buenas.length, nuevas, muestra: muestraDe(r.buenas) };
 }
 
 // ---------- 4. La pasada nocturna ----------
@@ -422,4 +440,62 @@ export async function catalogoParaWeb({ producto } = {}) {
       };
     });
   return [...lista, ...deGoogle];
+}
+
+// ---------- 6. Órdenes desde la oficina (/panel/oficina) ----------
+// Al empleado "Productos" de la Despensa se le puede mandar:
+// · trabajar: una pasada al momento (6 búsquedas + su comprobación en Google Maps). Máx. 1 cada 6 h.
+// · encargo esta noche: entra en la pasada nocturna por delante de lo que pide la gente (0 € extra).
+// · encargo ya mismo: 1 búsqueda al momento. Comparte el tope de 10 al día con los encargos de eventos.
+// Google Maps sigue con sus topes del mes (DESPENSA_TOPE_PLACES), así que nada pasa de céntimos de golpe.
+export const EMPLEADO_DESPENSA = "despensa-productos";
+
+export async function encargosDespensa() {
+  const { todas } = await leerPeticiones().catch(() => ({ todas: [] }));
+  return todas.filter((p) => p.jefe && !p.hecha).map((p) => `${p.texto} (${ZONAS.find((z) => z.id === p.zona)?.nombre || p.zona})`);
+}
+
+const resumen = (combos) => ({
+  tipo: "tiendas",
+  busquedas: combos.length,
+  encontrados: combos.reduce((s, c) => s + (c.encontradas || 0), 0),
+  nuevos: combos.reduce((s, c) => s + (c.nuevas || 0), 0),
+  comprobadas: combos.reduce((s, c) => s + (c.guardadas || 0), 0),
+  errores: combos.filter((c) => c.error).length,
+  sinCupo: combos.some((c) => c.sinCupo),
+  muestra: combos.flatMap((c) => c.muestra || []).slice(0, 8),
+});
+
+export async function ordenarDespensa({ accion, texto, zona, ya }) {
+  if (accion === "trabajar") {
+    const clave = `oficina:orden:${EMPLEADO_DESPENSA}`;
+    if (!(await comando(["SET", clave, "1", "NX", "EX", 6 * 3600]))) return { exito: false, mensaje: "Ya le mandaste trabajar hace menos de 6 horas" };
+    try {
+      const informe = await barrerDespensa();
+      if (informe.saltado) { await comando(["DEL", clave]); return { exito: false, mensaje: informe.saltado }; }
+      return { exito: true, parte: resumen(informe.combinaciones || []) };
+    } catch (e) {
+      await comando(["DEL", clave]).catch(() => null);
+      throw e;
+    }
+  }
+  if (accion !== "encargo") return { exito: false, mensaje: "Orden desconocida" };
+  const limpio = limpiarPeticion(texto);
+  if (!limpio) return { exito: false, mensaje: "Escribe qué producto buscas" };
+  if (!ZONAS.some((z) => z.id === zona)) return { exito: false, mensaje: "Elige la comarca" };
+  const p = { id: idPeticion(limpio, zona), texto: limpio, zona, fecha: new Date().toISOString(), jefe: true };
+  if (!ya) {
+    // Si ya se buscó alguna vez, se vuelve a buscar igual: lo pides tú
+    await varios([["HSET", PETICIONES, p.id, JSON.stringify({ texto: p.texto, zona, fecha: p.fecha, jefe: true })], ["HDEL", LIBRES, p.id]]);
+    return { exito: true, encargos: await encargosDespensa() };
+  }
+  if (!claveMaps()) return { exito: false, mensaje: "Falta GOOGLE_MAPS_API_KEY" };
+  const hoy = hoyEnLeon();
+  const hechos = await comando(["INCRBY", `oficina:encargosYa:${hoy}`, 1]);
+  await comando(["EXPIRE", `oficina:encargosYa:${hoy}`, 2 * 86400]);
+  if (hechos > 10) return { exito: false, mensaje: "Hoy ya van 10 encargos al momento. Déjalo para esta noche." };
+  await comando(["HSET", PETICIONES, p.id, JSON.stringify({ texto: p.texto, zona, fecha: p.fecha })]);
+  const r = await barrerPeticion(p);
+  if (r.sinCupo) return { exito: false, mensaje: "Se ha gastado el cupo gratis de Google Maps de este mes" };
+  return { exito: true, parte: resumen([r]) };
 }

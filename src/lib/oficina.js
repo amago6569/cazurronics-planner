@@ -61,7 +61,8 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
     empleados: d.empleados.map((e) => ({
       ...e, parte: partes[e.id] || null, estado: estadoEmpleado(e, partes[e.id], ahora),
       // Los que buscan con la IA aceptan órdenes desde su ficha: trabajar ya o un encargo
-      ordenes: EMPLEADOS_BUSCADORES.includes(e.id), encargos: (encargos[e.id] || []).map((x) => x.texto),
+      ordenes: EMPLEADOS_BUSCADORES.includes(e.id) || e.id === "despensa-productos", encargos: (encargos[e.id] || []).map((x) => x.texto),
+      ...(e.id === "despensa-productos" ? { conComarca: true } : {}),
     })),
   }));
   const todos = departamentos.flatMap((d) => d.empleados);

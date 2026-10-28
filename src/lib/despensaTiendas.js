@@ -20,6 +20,7 @@
 // Una vuelta completa son ~1.500 búsquedas: cabe en los cupos gratis cada mes. Lo normal: 0 €.
 // Peor caso si Google no regalase nada: 900 × 0,035 + 2.000 × 0,032 ≈ 95 $ al mes.
 import { aObjeto, comando, guardarJSON, leerJSON, varios } from "./almacen";
+import { apuntarNovedades } from "./novedades";
 import { CATEGORIAS, categoriaPorId, notaAjustada } from "./despensaProductos";
 import { hoyEnLeon } from "./estadisticas";
 import { ZONAS, zonaDe, zonaMasCercana } from "./zonas";
@@ -278,11 +279,12 @@ export async function barrerTiendas({ cuantas = POR_PASADA } = {}) {
   for (const t of nuevas) (porZona[t.zona] ||= new Map()).set(t.placeId, unirFicha(porZona[t.zona].get(t.placeId), t));
   const zonas = Object.keys(porZona);
   const viejas = zonas.length ? await varios(zonas.map((z) => ["HGETALL", claveZona(z)])) : [];
-  const escribir = [];
+  const escribir = [], estrenos = [];
   zonas.forEach((z, i) => {
     const antes = aObjeto(viejas[i]);
     const campos = [];
     for (const [id, t] of porZona[z]) {
+      if (!antes[id]) estrenos.push({ tipo: "tienda", titulo: t.nombre, localidad: t.localidad, quien: "despensa-tiendas" });
       let vieja = null;
       try { vieja = antes[id] ? JSON.parse(antes[id]) : null; } catch { /* rota */ }
       campos.push(id, JSON.stringify(unirFicha(vieja, t)));
@@ -300,6 +302,7 @@ export async function barrerTiendas({ cuantas = POR_PASADA } = {}) {
   if (marcas.length) escribir.push(["HSET", claveHechas, ...marcas]);
   if (fueras.length) escribir.push(["HSET", claveFuera, ...fueras]);
   if (escribir.length) await varios(escribir);
+  if (estrenos.length) await apuntarNovedades(estrenos).catch(() => null);
 
   const informe = {
     fin: hoy,

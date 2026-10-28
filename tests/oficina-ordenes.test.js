@@ -56,3 +56,34 @@ describe("oficina: órdenes", () => {
     expect((await ordenar({ empleado: "musica", accion: "encargo", texto: "ab" })).exito).toBe(false);
   });
 });
+
+describe("oficina: novedades y encargos de la Despensa", () => {
+  it("apunta lo nuevo y solo enseña los últimos 7 días", async () => {
+    const { apuntarNovedades, leerNovedades } = await import("../src/lib/novedades");
+    await comando(["DEL", "oficina:novedades"]);
+    await apuntarNovedades([{ tipo: "evento", titulo: "Magosto", fecha: "2026-11-01", quien: "fiestas" }, { tipo: "tienda", titulo: "Cecinas Nieto", quien: "despensa-productos" }, { titulo: "" }]);
+    const hoy = await leerNovedades();
+    expect(hoy.map((n) => n.titulo)).toEqual(["Magosto", "Cecinas Nieto"]);
+    expect(hoy[0].cuando).toBeTruthy();
+    expect(await leerNovedades(Date.now() + 8 * 86400000)).toEqual([]);
+  });
+
+  it("los encargos del jefe pasan delante de lo que pide la gente", async () => {
+    const { peticionesPendientes } = await import("../src/lib/despensa");
+    const todas = [
+      { id: "a", texto: "miel", fecha: "2026-10-27" },
+      { id: "b", texto: "cecina de chivo", fecha: "2026-10-28", jefe: true },
+      { id: "c", texto: "pan", fecha: "2026-10-26" },
+      { id: "d", texto: "queso", fecha: "2026-10-20", hecha: true },
+    ];
+    expect(peticionesPendientes(todas, 2).map((p) => p.id)).toEqual(["b", "c"]);
+  });
+
+  it("el encargo de la Despensa para esta noche pide comarca y queda pendiente", async () => {
+    const { ordenarDespensa, encargosDespensa } = await import("../src/lib/despensa");
+    expect((await ordenarDespensa({ accion: "encargo", texto: "cecina de chivo", zona: "marte" })).exito).toBe(false);
+    const r = await ordenarDespensa({ accion: "encargo", texto: "cecina de chivo", zona: "leon", ya: false });
+    expect(r.exito).toBe(true);
+    expect((await encargosDespensa()).join()).toMatch(/cecina de chivo \(León capital\)/);
+  });
+});
