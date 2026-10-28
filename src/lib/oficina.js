@@ -2,7 +2,7 @@
 // Cada tarea automática de la web es un "empleado" con su mesa: qué busca, cuándo trabaja y cómo le ha ido.
 // El jefe resume el día y avisa de quien va con retraso o con fallos. Funciones puras: el servidor reúne
 // los datos (lib/eventos, lib/despensa...) y aquí solo se ordenan para el panel. No llaman a la IA: 0 €.
-import { TIPOS } from "./eventos";
+import { EMPLEADOS_BUSCADORES, TIPOS } from "./eventos";
 
 // turno = horas entre un turno y el siguiente (para saber si alguien se lo ha saltado)
 const NOMBRES_TIPO = {
@@ -55,10 +55,14 @@ export function estadoEmpleado(emp, parte, ahora = Date.now()) {
 }
 
 // partes = { idEmpleado: { fin, busquedas?, eventos?, descartados?, errores?, texto?, error? } }
-export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null } = {}, ahora = Date.now()) {
+export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {} } = {}, ahora = Date.now()) {
   const departamentos = DEPARTAMENTOS.map((d) => ({
     ...d,
-    empleados: d.empleados.map((e) => ({ ...e, parte: partes[e.id] || null, estado: estadoEmpleado(e, partes[e.id], ahora) })),
+    empleados: d.empleados.map((e) => ({
+      ...e, parte: partes[e.id] || null, estado: estadoEmpleado(e, partes[e.id], ahora),
+      // Los que buscan con la IA aceptan órdenes desde su ficha: trabajar ya o un encargo
+      ordenes: EMPLEADOS_BUSCADORES.includes(e.id), encargos: (encargos[e.id] || []).map((x) => x.texto),
+    })),
   }));
   const todos = departamentos.flatMap((d) => d.empleados);
   const cuenta = (estado) => todos.filter((e) => e.estado === estado);
@@ -71,6 +75,8 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
   if (nuevosHoy) lineas.push(`Hoy han entrado ${nuevosHoy} eventos nuevos.`);
   if (descartados) lineas.push(`${descartados} se han quedado fuera por no tener una fuente que se pueda comprobar.`);
   if (bandeja) lineas.push(`Tienes ${bandeja} en tu bandeja esperando tu OK.`);
+  const pendientes = Object.values(encargos).reduce((s, l) => s + l.length, 0);
+  if (pendientes) lineas.push(`Hay ${pendientes} ${pendientes === 1 ? "encargo tuyo pendiente" : "encargos tuyos pendientes"} para el próximo turno.`);
   if (error.length) lineas.push(`Con fallos: ${error.map((e) => e.nombre).join(", ")}.`);
   if (tarde.length) lineas.push(`Van con retraso: ${tarde.map((e) => e.nombre).join(", ")}.${jefe?.repetido ? " Ya he mandado repetir uno." : " Los mando repetir en mi próxima ronda."}`);
   if (!error.length && !tarde.length) lineas.push("Todo el mundo ha cumplido su turno.");
