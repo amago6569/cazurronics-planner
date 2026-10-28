@@ -14,6 +14,7 @@ import { aplicarMarcas, leerSitiosMarcas } from "./despensaMarcas";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { CATEGORIAS, PRODUCTOS, categoriaPorId, productoPorId } from "./despensaProductos";
 import { ZONAS, zonaDe } from "./zonas";
+import { enProvinciaLeon, sitioFueraEnTexto } from "./provincia";
 
 const MAX_CANDIDATOS = 80;
 const MAX_RESULTADOS = 9;
@@ -38,6 +39,10 @@ export function leerPeticionDespensa(c) {
   const r = Math.round(Number(c?.radio) * 10) / 10;
   const radio = Number.isFinite(r) && r >= 0.2 ? Math.min(r, 200) : 15;
   const presupuesto = ["ajustado", "capricho"].includes(c?.presupuesto) ? c.presupuesto : "igual";
+  // Solo tiendas de León: lo de fuera se para aquí, sin IA ni búsqueda nocturna (ver lib/provincia.js)
+  const sitioFuera = sitioFueraEnTexto(texto);
+  if (sitioFuera) return { error: `La Despensa solo busca en León capital y provincia 🦁 ${sitioFuera} se nos escapa.` };
+  if (!enProvinciaLeon(lat, lon) && !lugarEnTexto(texto)) return { error: "La Despensa solo busca en León capital y provincia 🦁 Mueve el punto del mapa dentro de la provincia." };
   return { texto, lat, lon, radio, presupuesto };
 }
 

@@ -16,12 +16,22 @@ import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from '.
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
 import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from './agenda';
 import { filtrarMasEseDia } from './intencion';
+import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
+
+// Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
+export function fueraDeLeon({ lat, lon, texto }) {
+  if (!enProvinciaLeon(lat, lon)) return AVISO_MAPA;
+  const sitio = sitioFueraEnTexto(texto);
+  return sitio ? avisoSitio(sitio) : null;
+}
 
 export const planesConGoogle = () => /^(1|si|sí|true)$/i.test(String(process.env.PLANES_CON_GOOGLE || '').trim());
 
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso } o { exito: false, mensaje }
 export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000 } = {}) {
   const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
+  const fuera = fueraDeLeon({ lat, lon, texto: apetece });
+  if (fuera) return { exito: false, mensaje: fuera };
   const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
   const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
 
@@ -52,7 +62,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
     : `1. Los eventos (conciertos, mercadillos, ferias, exposiciones, fiestas...) salen SOLO de la AGENDA VERIFICADA de arriba: no añadas eventos que no estén en ella. Los sitios (bares, restaurantes, cafeterías, museos, monumentos, parques...) elígelos entre los SITIOS REALES COMPROBADOS cuando encajen, o entre sitios reales y bien valorados que conozcas con seguridad en esa zona. Antes de decidir, compara varias opciones de cada tipo y quédate con la mejor combinación de calidad, precio, distancia y lo que pide el usuario.`;
 
   const prompt = `
-      Eres Cazurronics Planner. Crea un plan en León.
+      Eres Cazurronics Planner. Crea un plan en León (solo León capital y provincia, España).
       DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: "${apetece}". Fecha: ${fecha}.
       ${bloqueTiempo}
       ${bloqueAgenda}
@@ -66,7 +76,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
       - Si no hay nada real que cumpla lo pedido ese día, devuelve [] en vez de rellenar con otras cosas.
       INSTRUCCIONES:
       ${instruccionBusqueda}
-      2. No inventes nada. No te salgas del radio. No repitas el mismo sitio o evento con otro nombre. Ordena las paradas por hora.
+      2. No inventes nada. No te salgas del radio ni de la provincia de León: nada de Zamora, Asturias, Palencia, Galicia ni otras provincias, aunque estén cerca. Si lo que pide es en otra provincia, devuelve []. No repitas el mismo sitio o evento con otro nombre. Ordena las paradas por hora.
       3. Devuelve SOLO JSON estricto con este formato:
       [{"hora": "12:00", "titulo": "Nombre Oficial", "descripcion": "Descripción del sitio.", "precio": "10€", "resenas": "4.5/5", "transporte": "5 min andando", "lat": 42.59, "lon": -5.56, "tipo": "bar", "lugar": null, "telefono": "No disponible", "web": "No disponible", "horario": "12:00 - 16:00", "fuente": "URL del evento o null"}]
       "lugar": si la parada es un evento, ruta, mercadillo, concierto o similar, el local, plaza o recinto CONCRETO donde se celebra o empieza (por ejemplo "Bar Rebote", "Plaza de San Martín"); para un bar, restaurante o negocio normal, null.
@@ -96,7 +106,8 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
   let problemaGlobal = null;
   for (const { parada, problemaConfigPlaces } of enriquecidas) {
     if (problemaConfigPlaces) problemaGlobal = problemaConfigPlaces;
-    if (parada) rutaValidada.push(parada);
+    // Lo que Google sitúa fuera de la provincia no entra (p. ej. un bar de Benavente con radio grande desde La Bañeza)
+    if (parada && enProvinciaLeon(parada.lat, parada.lon)) rutaValidada.push(parada);
   }
 
   if (rutaValidada.length === 0) return { exito: false, uso, mensaje: problemaGlobal ? `Error en Google Places: ${problemaGlobal}` : "No encontramos locales reales en esa zona. Amplía el radio." };
