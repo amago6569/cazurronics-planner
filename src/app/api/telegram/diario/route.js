@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { renovarTokenSiToca, guardarFotoInstagram, instagramConfigurado } from "../../../../lib/instagram";
-import { enviarTelegram, telegramConfigurado } from "../../../../lib/telegram";
+import { enviarTelegram, leerDueno, telegramConfigurado } from "../../../../lib/telegram";
 import { resumenSemanal } from "../../../../lib/asesor";
 
 export const maxDuration = 60;
@@ -27,9 +27,10 @@ export async function GET(request) {
     }
   }
   const lunes = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Madrid", weekday: "short" }).format(new Date()) === "Mon";
-  if (lunes && telegramConfigurado() && process.env.TELEGRAM_CHAT_ID) {
+  const dueno = lunes && telegramConfigurado() ? await leerDueno() : null;
+  if (dueno) {
     try {
-      await enviarTelegram(process.env.TELEGRAM_CHAT_ID, `📊 Resumen de la semana\n\n${await resumenSemanal()}`);
+      await enviarTelegram(dueno, `📊 Resumen de la semana\n\n${await resumenSemanal()}`);
       hecho.resumen = "enviado";
     } catch (e) {
       console.error("[telegram-diario] resumen", e?.message || e);
