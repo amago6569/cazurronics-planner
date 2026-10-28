@@ -46,7 +46,7 @@ async function datosDelPanel(request) {
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
     leerJSON("eventos:ultimoBarrido"),
-    eventosProximos(14),
+    eventosProximos(21),
     comando(["LRANGE", "negocios:solicitudes", 0, 99]).catch(() => []),
     resumenDespensa().catch(() => null),
     resumenTiendas().catch(() => null),

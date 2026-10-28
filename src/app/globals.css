@@ -36,7 +36,40 @@ body {
 .cz-pop { animation: cz-pop .35s cubic-bezier(.3,1.4,.5,1); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Oficina (/panel/oficina): los monigotes teclean, duermen o echan humo */
+@keyframes cz-teclea { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes cz-respira { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1.2px); } }
+@keyframes cz-zzz { 0% { opacity: 0; transform: translate(0, 4px) scale(.7); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(8px, -14px) scale(1.1); } }
+@keyframes cz-humo { 0% { opacity: .9; transform: translateY(0) scale(.8); } 100% { opacity: 0; transform: translateY(-16px) scale(1.4); } }
+@keyframes cz-brillo { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.cz-teclea { animation: cz-teclea .32s ease-in-out infinite; transform-box: fill-box; }
+.cz-teclea-2 { animation: cz-teclea .32s ease-in-out .16s infinite; transform-box: fill-box; }
+.cz-respira { animation: cz-respira 3.2s ease-in-out infinite; transform-box: fill-box; }
+.cz-zzz { animation: cz-zzz 2.4s ease-out infinite; }
+.cz-humo { animation: cz-humo 1.6s ease-out infinite; }
+.cz-brillo { animation: cz-brillo 2s ease-in-out infinite; }
+/* Oficina en 3D: los que andan, los pasos y los avisos que flotan. Las rutas van en unidades de la planta */
+@keyframes cz-paso { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(-14deg); } }
+@keyframes cz-bote { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+@keyframes cz-flota { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -6px); } }
+@keyframes cz-ruta-papel {
+  0%, 6% { transform: translate(700px, 320px); } 18% { transform: translate(585px, 345px); } 40% { transform: translate(585px, 610px); }
+  50%, 58% { transform: translate(680px, 650px); } 68% { transform: translate(585px, 610px); } 88% { transform: translate(585px, 345px); } 100% { transform: translate(700px, 320px); }
+}
+@keyframes cz-ruta-cafe {
+  0%, 8% { transform: translate(250px, 470px); } 30% { transform: translate(420px, 485px); } 45%, 62% { transform: translate(440px, 585px); }
+  78% { transform: translate(420px, 485px); } 100% { transform: translate(250px, 470px); }
+}
+.cz-paso { animation: cz-paso .5s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 0; }
+.cz-paso-2 { animation: cz-paso .5s ease-in-out .25s infinite; transform-box: fill-box; transform-origin: 50% 0; }
+.cz-bote { animation: cz-bote .25s ease-in-out infinite; }
+.cz-flota { animation: cz-flota 2.4s ease-in-out infinite; }
+.cz-ruta-papel { animation: cz-ruta-papel 22s linear infinite; }
+.cz-ruta-cafe { animation: cz-ruta-cafe 26s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
+  .cz-paso, .cz-paso-2, .cz-bote, .cz-flota, .cz-ruta-papel, .cz-ruta-cafe { animation: none !important; }
+  .cz-ruta-papel { transform: translate(700px, 320px); } .cz-ruta-cafe { transform: translate(440px, 585px); }
+  .cz-teclea, .cz-teclea-2, .cz-respira, .cz-zzz, .cz-humo, .cz-brillo { animation: none !important; }
   .cz-up, .cz-sheet { animation: cz-fade .5s ease both !important; }
   .cz-pop { animation: none; }
   .cz-spin, .cz-colorea { animation: none !important; }

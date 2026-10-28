@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { guardarJSON } from "../../../../lib/almacen";
 import { DOMINIO, listarCaptacion, marcarAvisados } from "../../../../lib/captacion";
 
 export const maxDuration = 30;
@@ -23,7 +24,17 @@ const cifras = (l) => {
   return partes.join(" · ");
 };
 
+// Cada turno deja su parte para la oficina (/panel/oficina), salga como salga
 export async function GET(request) {
+  const respuesta = await trabajar(request);
+  if (respuesta.status !== 401) {
+    const datos = await respuesta.clone().json().catch(() => ({}));
+    await guardarJSON("oficina:turno:captacion", { ...datos, fin: new Date().toISOString() }, 30 * 24 * 3600).catch(() => null);
+  }
+  return respuesta;
+}
+
+async function trabajar(request) {
   const secreto = process.env.CRON_SECRET;
   if (!secreto || request.headers.get("authorization") !== `Bearer ${secreto}`) {
     return NextResponse.json({ exito: false, mensaje: "No autorizado" }, { status: 401 });

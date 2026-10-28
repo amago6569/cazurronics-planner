@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { guardarJSON } from "../../../../lib/almacen";
 import { eventosProximos } from "../../../../lib/eventos";
 import { hoyEnLeon } from "../../../../lib/estadisticas";
 import { calcularFinde, DOMINIO } from "../../../../lib/finde";
@@ -14,7 +15,17 @@ export const dynamic = "force-dynamic";
 //   AVISO_DE        (opcional) remitente; por defecto el de pruebas de Resend
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// Cada turno deja su parte para la oficina (/panel/oficina), salga como salga
 export async function GET(request) {
+  const respuesta = await trabajar(request);
+  if (respuesta.status !== 401) {
+    const datos = await respuesta.clone().json().catch(() => ({}));
+    await guardarJSON("oficina:turno:finde", { ...datos, fin: new Date().toISOString() }, 30 * 24 * 3600).catch(() => null);
+  }
+  return respuesta;
+}
+
+async function trabajar(request) {
   const secreto = process.env.CRON_SECRET;
   if (!secreto || request.headers.get("authorization") !== `Bearer ${secreto}`) {
     return NextResponse.json({ exito: false, mensaje: "No autorizado" }, { status: 401 });
