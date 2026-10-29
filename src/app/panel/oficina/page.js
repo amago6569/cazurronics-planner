@@ -1,15 +1,24 @@
 "use client";
 // /panel/oficina — solo para el equipo (clave = PANEL_CLAVE, la misma que /panel).
-// La oficina de Cazurronics: cada tarea automática es un empleado con su mesa. Si ha cumplido su turno teclea,
-// si se lo ha saltado se queda dormido y si ha fallado le sale humo. El jefe da el parte del día y te deja
-// en la bandeja los eventos que nadie ha podido comprobar, para que decidas tú. No gasta IA: solo lee datos.
+// La oficina de Cazurronics: cada tarea automática es un empleado con su mesa en una oficina 3D. Si ha cumplido su
+// turno teclea, si se lo ha saltado se queda dormido y si ha fallado le sale humo. Lo que se dicen en cada turno se
+// ve en 3D (van andando a la mesa del otro) y en el chat, donde también le escribes al jefe. El jefe da el parte del
+// día y te deja en la bandeja los eventos que nadie ha podido comprobar. Ver la oficina no gasta IA.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import Fondo from "../../components/Fondo";
 import { GLASS, GLASS_SOFT, PRESS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../../lib/estilos";
 import { CAMISAS, ESTADOS, Monigote, diaCorto, fmt, hace } from "./monigotes";
-import Oficina3D, { FichaEmpleado } from "./Oficina3D";
+import { FichaEmpleado } from "./ficha";
 import Novedades from "./novedades";
+import Chat from "./chat";
+
+// three.js solo se descarga al abrir la oficina (y nunca en el servidor)
+const Oficina3D = dynamic(() => import("./Oficina3D"), {
+  ssr: false,
+  loading: () => <div className="h-[64dvh] min-h-[420px] sm:h-[620px] rounded-[2rem] bg-white/50 ring-1 ring-white/80 grid place-items-center text-sm text-slate-500 animate-pulse">Encendiendo las luces de la oficina…</div>,
+});
 
 
 function Mesa({ e, i, departamento, alElegir }) {
@@ -112,7 +121,7 @@ export default function Oficina() {
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [enCurso, setEnCurso] = useState(null);
-  const [modo, setModo] = useState("3d"); // "3d" (la planta) o "lista" (las mesas en tarjetas)
+  const [modo, setModo] = useState("3d"); // "3d" (la planta), "chat" (lo que se dicen) o "lista" (las mesas en tarjetas)
   const [elegido, setElegido] = useState(null);
 
   const cargar = useCallback(async (c) => {
@@ -174,14 +183,15 @@ export default function Oficina() {
 
         <section className="space-y-3 cz-up">
           <div className="flex items-center justify-between gap-3 px-1">
-            <h2 className="font-bold text-slate-900 text-lg">La planta</h2>
+            <h2 className="font-bold text-slate-900 text-lg">{modo === "chat" ? "El chat" : "La planta"}</h2>
             <div className={`${GLASS_SOFT} flex p-1 rounded-full`}>
-              {[["3d", "🏢 3D"], ["lista", "📋 Lista"]].map(([id, texto]) => (
+              {[["3d", "🏢 3D"], ["chat", "💬 Chat"], ["lista", "📋 Lista"]].map(([id, texto]) => (
                 <button key={id} onClick={() => setModo(id)} className={`${PRESS} h-9 px-4 rounded-full text-sm font-semibold ${modo === id ? "bg-slate-900 text-white" : "text-slate-600"}`}>{texto}</button>
               ))}
             </div>
           </div>
-          {modo === "3d" && <Oficina3D departamentos={datos.departamentos} jefe={datos.jefe} alElegir={setElegido} />}
+          {modo === "3d" && <Oficina3D departamentos={datos.departamentos} charla={datos.charla || []} alElegir={setElegido} />}
+          {modo === "chat" && <Chat charla={datos.charla || []} departamentos={datos.departamentos} clave={clave} alTerminar={() => cargar(clave)} />}
         </section>
 
         <Despacho jefe={datos.jefe} />
