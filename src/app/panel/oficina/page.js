@@ -162,7 +162,7 @@ const AYUDA = [
   ["🟢🟠", "El semáforo de arriba", "Verde: no tienes que hacer nada. Naranja: algo espera tu sí o tu no en «Hoy te toca»."],
   ["✋", "Hoy te toca", "Lo único que necesita tu dedo: locales listos para escribirles y quien falla dos días seguidos, con el porqué. Los eventos los filtra y los sube el equipo solo."],
   ["🤝", "La reunión", "Cada día el equipo propone cosas con sus cifras: descansar si no traen nada, repetir lo que falló, un encargo para el que más trae. Dices sí o no."],
-  ["🏢", "El edificio", "Cada empleado es una tarea automática de la web. En su mesa: trabajando (🔴 si es ahora mismo). En la cafetería: ya ha hecho su turno. Dormido en el sofá: se saltó el turno. En la puerta del jefe: ha fallado. 🏖️: de descanso."],
+  ["🏢", "El edificio", "Cada empleado es una tarea automática de la web. En su mesa: trabajando (🔴 si es ahora mismo). En la cafetería: ya ha hecho su turno. Dormido en el sofá: se saltó el turno. 📝 en la cafetería: ha fallado; se lo cuenta al jefe una vez y lo repasa lo primero en su próximo turno (si tiene arreglo, lo repite). 🏖️: de descanso."],
   ["🕵️", "Verificador", "Vuelve a comprobar lo que no tenía fuente segura. Lo bueno lo sube; lo falso lo tira; lo dudoso lo sube «por confirmar» y lo sigue mirando él solo hasta confirmarlo o quitarlo."],
   ["🚑", "Repesca", "Repite las búsquedas que fallaron porque Google iba lento o saturado. Gratis, dentro del cupo diario de Google."],
   ["💬", "El chat", "«Todos» es el grupo. Al jefe le puedes preguntar lo que sea («¿qué hay esta semana en Boñar?»): contesta con los datos del equipo y, si no hay nada, lo busca en ese momento. También «quita …» para sacar un evento de la web. A cada empleado le puedes preguntar «¿cómo vas?» o decirle «busca …»."],

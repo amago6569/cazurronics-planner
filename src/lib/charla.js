@@ -7,7 +7,7 @@ import { comando, varios } from "./almacen";
 const CLAVE = "oficina:charla", MAX = 200, DIAS = 7;
 export const JEFE = "jefe", TU = "tu";
 
-// lineas = [{ de, a, texto, tipo? }] — tipo: "nuevos" | "repetido" | "duda" | "fallo" | "nada" | "orden" | "chat" | "aviso"
+// lineas = [{ de, a, texto, tipo? }] — tipo: "nuevos" | "repetido" | "duda" | "fallo" | "nada" | "orden" | "chat" | "aviso" | "repaso"
 export async function apuntarCharla(lineas) {
   const lista = (lineas || []).filter((l) => l?.de && l?.texto).slice(0, 40);
   if (!lista.length) return 0;
@@ -34,6 +34,24 @@ const titulos = (lista, max = 2) => {
 const una = (opciones, semilla) => opciones[[...String(semilla)].reduce((s, c) => s + c.charCodeAt(0), 0) % opciones.length];
 const plural = (n, uno, muchos) => `${n} ${n === 1 ? uno : muchos}`;
 
+// Lo primero de cada turno: el que tenía algo fallado le cuenta al jefe qué hace con ello (una vez, al empezar).
+// r = repasoDeTurno de lib/eventos.js → { sinArreglo, yaVan, repite: [búsqueda], esperan }
+export function charlaDeRepaso({ sinArreglo = [], yaVan = [], repite = [], esperan = [] } = {}) {
+  const porQuien = {};
+  const de = (id) => (porQuien[id] ||= { ahora: 0, despues: 0, motivos: [] });
+  for (const c of [...yaVan]) de(c.b.empleado).ahora++;
+  for (const b of repite) de(b.empleado).ahora++;
+  for (const c of esperan) de(c.b.empleado).despues++;
+  for (const c of sinArreglo) de(c.b.empleado).motivos.push(c.motivo || "no se arregla repitiendo");
+  return Object.entries(porQuien).map(([id, r]) => {
+    const partes = [];
+    if (r.ahora) partes.push(`${plural(r.ahora, "búsqueda", "búsquedas")} que fallaron, las repito ahora`);
+    if (r.despues) partes.push(`${plural(r.despues, "se queda", "se quedan")} para la Repesca (no caben en este turno)`);
+    if (r.motivos.length) partes.push(`${plural(r.motivos.length, "no tiene", "no tienen")} arreglo desde aquí: ${String(r.motivos[0]).slice(0, 90)}`);
+    return { de: id, a: JEFE, tipo: "repaso", texto: `Antes de empezar he repasado lo que me falló: ${partes.join("; ")}.` };
+  });
+}
+
 // Lo que se dicen después de un turno de búsqueda.
 // porEmpleado = { id: { busquedas, entran: [evento], repetidos: [evento], dudosos: [evento], error, encargo } }
 export function charlaDeTurno(porEmpleado = {}) {
@@ -42,7 +60,7 @@ export function charlaDeTurno(porEmpleado = {}) {
     if (r.encargo) lineas.push({ de: JEFE, a: id, tipo: "orden", texto: `Alejandro te pide: «${String(r.encargo).slice(0, 80)}». Míralo en este turno.` });
     if (r.error) {
       lineas.push({ de: id, a: JEFE, tipo: "fallo", texto: `No he podido terminar: ${String(r.error).slice(0, 120)}` });
-      lineas.push({ de: JEFE, a: id, tipo: "fallo", texto: una(["Tranquilo, se lo paso a la Repesca.", "Vale, la Repesca lo repite en unas horas."], id) });
+      lineas.push({ de: JEFE, a: id, tipo: "fallo", texto: una(["Apuntado. Míralo lo primero en tu próximo turno; si no da tiempo, la Repesca.", "Vale. Al empezar tu turno lo repasas: si tiene arreglo, lo repites."], id) });
       continue;
     }
     const entran = r.entran || [];

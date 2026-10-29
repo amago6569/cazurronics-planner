@@ -17,11 +17,10 @@ import { extraerJSON, llamarGemini, motivoClaro } from "./gemini";
 import { apuntarCharla, JEFE, TU } from "./charla";
 import { esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
 import {
-  DIAS_AGENDA, apuntarRepaso, apuntarSinConfirmar, comprobarUrl, decidirSinConfirmar, dominioConsultado, leerBandeja, leerRepesca,
+  CUPO_SEGURO, DIAS_AGENDA, apuntarRepaso, apuntarSinConfirmar, comprobarUrl, decidirSinConfirmar, dominioConsultado, leerBandeja, leerRepesca,
   leerSinConfirmar, marcarRevisados, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
 } from "./eventos";
 
-const CUPO_SEGURO = 1300; // de las 1.500 peticiones gratis al día, dejamos margen para los planes y el barrido
 export const POR_PREGUNTA = 8, PREGUNTAS_POR_TURNO = 2, REPESCA_POR_TURNO = 6, VUELTAS_ANTES_DE_SUBIR = 2;
 const sumarDias = (f, n) => { const d = new Date(`${f}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const trozos = (l, n) => Array.from({ length: Math.ceil(l.length / n) }, (_, i) => l.slice(i * n, i * n + n));

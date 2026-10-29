@@ -30,7 +30,11 @@ export const hablandoEn = (p, t) => !!p && t >= p.t1 && t < p.t2;
 // Elige la siguiente conversación: recorre la charla de verdad (de los últimos días) en orden, saltando a quien
 // ya está paseando, a quien no tiene sitio o a quien está trabajando en su mesa. Si no hay charla, un café.
 // vivos = { id: { sitio, modo } } (colocar de guion.js) · ocupados = ids que ya pasean · i = por dónde va
-export function siguientePaseo({ charla = [], vivos = {}, ocupados = [], i = 0, t0 = 0, jefe = null }) {
+// dichos = Set de lo que ya se ha dicho una vez. Un fallo se le cuenta al jefe UNA sola vez (y solo si aún lo tiene
+// pendiente): luego se vuelve a la cafetería y lo repasa al empezar su turno, sin dar la lata en el despacho.
+const UNA_VEZ = new Set(["fallo", "repaso"]);
+const claveLinea = (l) => `${l.de}|${l.a}|${l.texto}`;
+export function siguientePaseo({ charla = [], vivos = {}, ocupados = [], i = 0, t0 = 0, jefe = null, dichos = new Set() }) {
   const lugar = (id) => (id === "jefe" ? jefe : vivos[id]?.sitio);
   const libre = (id) => !ocupados.includes(id) && (id === "jefe" || (vivos[id] && vivos[id].modo !== "teclea"));
   const lineas = charla.filter((l) => l.de !== "tu" && l.a !== "tu" && l.de !== l.a);
@@ -41,6 +45,10 @@ export function siguientePaseo({ charla = [], vivos = {}, ocupados = [], i = 0, 
     const anda = l.de === "jefe" ? l.a : l.de;
     const a = anda === l.de ? l.a : l.de;
     if (!libre(anda) || anda === "jefe" || ocupados.includes(a) || !lugar(anda) || !lugar(a)) continue;
+    if (UNA_VEZ.has(l.tipo)) {
+      if (dichos.has(claveLinea(l)) || (l.tipo === "fallo" && !vivos[anda]?.pendiente)) continue;
+      dichos.add(claveLinea(l));
+    }
     return { paseo: montarPaseo({ id: anda, desde: lugar(anda), hacia: lugar(a), t0, texto: l.texto, a: l.de === anda ? a : null }), i: n + 1 };
   }
   return { paseo: null, i };
