@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { asegurarBarridoReciente, barrerEventos, HORAS_MIN_CRON, IDS_TRAMOS, idTramo, jefeRepasa, tramoReciente } from "../../../lib/eventos";
 import { segundaComprobacion, turnoDeRepesca } from "../../../lib/guardia";
+import { avisosUrgentes } from "../../../lib/avisos";
+import { sinRomper } from "../../../lib/almacen";
 
 export const maxDuration = 60; // cada tramo del barrido cabe en un minuto
 export const dynamic = "force-dynamic";
@@ -22,7 +24,8 @@ export async function GET(request) {
   }
   try {
     const params = new URL(request.url).searchParams;
-    if (params.has("jefe")) return NextResponse.json({ exito: true, jefe: await jefeRepasa() });
+    // Al acabar cada turno: si la clave de la IA falla, Google retira un modelo o el día pasa de 1 €, te avisa ya por Telegram
+    if (params.has("jefe")) { const jefe = await jefeRepasa(); await sinRomper(avisosUrgentes(), "avisos"); return NextResponse.json({ exito: true, jefe }); }
     if (params.get("guardia") === "verificador") return NextResponse.json({ exito: true, verificador: await segundaComprobacion() });
     if (params.get("guardia") === "repesca") return NextResponse.json({ exito: true, repesca: await turnoDeRepesca() });
     const t = params.get("tramo");
@@ -36,6 +39,7 @@ export async function GET(request) {
       if (reciente) return NextResponse.json({ exito: true, saltado: true, informe: { tramo, hechoHaceHoras: Math.round(reciente.hace / 3600000) } });
     }
     const informe = tramo == null ? { lanzado: await asegurarBarridoReciente() } : await barrerEventos({ tramo, respetarPausas: true });
+    if (tramo != null) await sinRomper(avisosUrgentes(), "avisos");
     return NextResponse.json({ exito: true, informe });
   } catch (e) {
     return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });

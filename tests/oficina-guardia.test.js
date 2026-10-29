@@ -19,8 +19,10 @@ const webs = { "https://ayto.example/ok": 200, "https://ayto.example/no-existe":
 vi.stubGlobal("fetch", vi.fn(async (url) => {
   const estado = webs[url];
   if (estado == null) throw Object.assign(new Error("timeout"), { name: "TimeoutError" });
-  return { status: estado, ok: estado < 400, body: null, json: async () => ({}) };
+  return { status: estado, ok: estado < 400, body: null, json: async () => ({}), text: async () => paginas[url] || "" };
 }));
+// Lo que dice cada página (para ver si nombra el evento: fecha, pueblo y año)
+const paginas = {};
 
 const { comando } = await import("../src/lib/almacen");
 const { hoyEnLeon } = await import("../src/lib/estadisticas");
@@ -39,6 +41,8 @@ const evento = (titulo, fuente, extra = {}) => ({ titulo, fecha: dia(3), localid
 async function aLaBandeja(lista) {
   await comando(["HSET", "eventos:bandeja", ...lista.flatMap((e) => [ev.idDudoso(e), JSON.stringify({ ...e, encontrado: new Date().toISOString() })])]);
 }
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const paginaQueNombra = (fecha, pueblo) => `<html><body><h1>Fiestas</h1><p>El ${Number(fecha.slice(8))} de ${MESES[Number(fecha.slice(5, 7)) - 1]} de ${fecha.slice(0, 4)}, en ${pueblo}, gran magosto popular con castañas y música.</p><script>var x = 1;</script></body></html>`;
 const enAgenda = async () => ((await ev.eventosProximos()).flatMap((d) => d.eventos));
 
 beforeEach(async () => {
@@ -74,8 +78,9 @@ describe("🕵️ Verificador", () => {
       { n: 2, veredicto: "no", nota: "cancelado por lluvia" },
       { n: 3, veredicto: "nose" },
     ]), dominios: new Set(["diario.example"]) });
+    paginas["https://ayto.example/ok"] = paginaQueNombra(dia(3), "León");
     const parte = await segundaComprobacion();
-    expect(parte).toMatchObject({ confirmados: 2, falsos: 2, porConfirmar: 1, preguntas: 1 });
+    expect(parte).toMatchObject({ confirmados: 2, falsos: 2, porConfirmar: 1, preguntas: 1, sinGoogle: 1 });
     const titulos = (await enAgenda()).map((e) => `${e.titulo}${e.porConfirmar ? " (por confirmar)" : ""}`);
     expect(titulos).toEqual(expect.arrayContaining(["Magosto en la Plaza", "Feria del Pimiento", "Ruta sin pistas (por confirmar)"]));
     expect(titulos.join()).not.toMatch(/fantasma|cancelado/);

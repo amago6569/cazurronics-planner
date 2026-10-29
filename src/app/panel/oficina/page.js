@@ -14,11 +14,12 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import Fondo from "../../components/Fondo";
 import { GLASS, GLASS_SOFT, PRESS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../../lib/estilos";
+import { LIMITE_DIA_EUROS, euros } from "../../../lib/euros";
 import { CAMISAS, ESTADOS, Monigote, diaCorto, fmt, hace } from "./monigotes";
 import { FichaEmpleado } from "./ficha";
 import Novedades from "./novedades";
 import Chat from "./chat";
-import { Flujo, HoyTeToca } from "./hoy";
+import { Flujo, HoyTeToca, fallosQueTeTocan } from "./hoy";
 import Reunion from "./reunion";
 
 // three.js solo se descarga al abrir la oficina (y nunca en el servidor)
@@ -61,8 +62,9 @@ function Despacho({ jefe }) {
   const c = jefe.cifras;
   const chips = [
     ["👥", "equipo", c.equipo], ["🟢", "al día", c.alDia], ["💤", "con retraso", c.tarde], ["🔥", "con fallos", c.error],
-    ["📅", "en la agenda", c.agenda], ...(c.gastoMes != null ? [["💶", "IA este mes", `~${(c.gastoMes * 0.92).toFixed(2).replace(".", ",")} €`]] : []),
+    ["📅", "en la agenda", c.agenda],
   ];
+  const g = c.gasto;
   return (
     <section className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up overflow-hidden relative`}>
       <div aria-hidden className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-gradient-to-br from-rose-300/40 via-orange-200/30 to-amber-200/20 blur-3xl pointer-events-none" />
@@ -79,6 +81,19 @@ function Despacho({ jefe }) {
             </ul>
             {jefe.ronda && <p className="text-[11px] text-slate-400 mt-2">Última ronda del jefe {hace(jefe.ronda)}</p>}
           </div>
+          {g && (
+            <div className={`mt-3 rounded-2xl px-3.5 py-3 ring-1 ${g.hoy > LIMITE_DIA_EUROS ? "bg-rose-50 ring-rose-200" : "bg-white/70 ring-slate-900/5"}`} aria-label="Gasto de la IA">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">💶 Gasto de la IA</p>
+              <div className="mt-1 grid grid-cols-3 gap-2">
+                {[["hoy", g.hoy], ["este mes", g.mes], ["previsión mes", g.prevision]].map(([texto, valor]) => (
+                  <div key={texto}><p className="text-lg font-bold tabular-nums text-slate-900 leading-none">{euros(valor)}</p><p className="text-[11px] text-slate-500 mt-1">{texto}</p></div>
+                ))}
+              </div>
+              <p className={`text-[11px] mt-1.5 ${g.hoy > LIMITE_DIA_EUROS ? "text-rose-700 font-semibold" : "text-slate-500"}`}>
+                {g.hoy > LIMITE_DIA_EUROS ? `⚠️ Hoy ya pasa de ${euros(LIMITE_DIA_EUROS)}: te he avisado por Telegram.` : `Si un día pasa de ${euros(LIMITE_DIA_EUROS)}, te aviso por Telegram. Cambio aproximado de dólares a euros.`}
+              </p>
+            </div>
+          )}
           <div className="flex gap-2 overflow-x-auto no-scrollbar mt-3 -mx-1 px-1 pb-1">
             {chips.map(([icono, texto, valor]) => (
               <div key={texto} className={`${GLASS_SOFT} shrink-0 rounded-2xl px-3 py-2`}>
@@ -125,7 +140,7 @@ function Bandeja({ lista, decidir, enCurso }) {
 // Cómo va todo, en una frase y un color
 function Semaforo({ datos, enCursoN, alHoy }) {
   const f = datos.flujo || {};
-  const tuyas = (datos.sinConfirmar?.length || 0) + (datos.captacion?.length || 0) + datos.departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error").length;
+  const tuyas = (datos.sinConfirmar?.length || 0) + (datos.captacion?.length || 0) + fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
   const [color, texto] = tuyas
     ? ["bg-amber-400", `Tienes ${tuyas} ${tuyas === 1 ? "cosa" : "cosas"} para hoy`]
     : ["bg-emerald-500", "Todo en marcha: no tienes nada pendiente"];
@@ -182,7 +197,9 @@ export default function Oficina() {
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [enCurso, setEnCurso] = useState(null);
-  const [modo, setModo] = useState("3d"); // "3d" (la planta), "chat" (lo que se dicen) o "lista" (las mesas en tarjetas)
+  const [modo, setModoActual] = useState("3d"); // "3d" (la planta), "chat" (lo que se dicen) o "lista" (las mesas, sin 3D: va más ligera en el móvil)
+  // La vista que eliges se recuerda para la próxima vez
+  const setModo = (m) => { setModoActual(m); try { localStorage.setItem("cz-modo", m); } catch {} };
   const [elegido, setElegido] = useState(null);
   const [vista, setVista] = useState("todo"); // la sala que enfoca el 3D
   const [repeticion, setRepeticion] = useState(0); // > 0: «Anoche en 1 minuto» en marcha
@@ -219,11 +236,12 @@ export default function Oficina() {
   }, []);
 
   useEffect(() => {
-    let guardada = "", grande = false;
-    try { guardada = sessionStorage.getItem("cz-panel") || ""; grande = localStorage.getItem("cz-letra") === "1"; } catch {}
+    let guardada = "", grande = false, modoGuardado = "";
+    try { guardada = sessionStorage.getItem("cz-panel") || ""; grande = localStorage.getItem("cz-letra") === "1"; modoGuardado = localStorage.getItem("cz-modo") || ""; } catch {}
     const quieto = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const t = requestAnimationFrame(() => {
       if (grande) setLetraGrande(true);
+      if (["3d", "chat", "lista"].includes(modoGuardado)) setModo(modoGuardado);
       if (quieto) setMovimiento(false);
       if (guardada) { setClave(guardada); cargar(guardada); }
     });
@@ -238,8 +256,10 @@ export default function Oficina() {
     return () => { html.style.fontSize = ""; };
   }, [letraGrande]);
 
-  // En directo: cada minuto, si la pestaña está a la vista, vuelve a leer la oficina (solo Redis, 0 €)
+  // En directo: cada minuto mientras alguien trabaja, si la pestaña está a la vista, vuelve a leer la oficina (solo Redis, 0 €).
+  // Si nadie está trabajando, cada 3 minutos basta
   const hayDatos = !!datos;
+  const ocupados = datos?.enCurso?.length || 0;
   useEffect(() => {
     if (!hayDatos || !clave) return;
     const i = setInterval(async () => {
@@ -249,9 +269,9 @@ export default function Oficina() {
         const d = await r.json().catch(() => null);
         if (d?.exito) setDatos(d);
       } catch { /* la próxima vez */ }
-    }, 60000);
+    }, ocupados ? 60000 : 180000);
     return () => clearInterval(i);
-  }, [hayDatos, clave]);
+  }, [hayDatos, clave, ocupados]);
 
   const decidir = async (id, decision) => {
     setEnCurso(id);
@@ -279,7 +299,7 @@ export default function Oficina() {
     );
   }
 
-  const pendientes = (datos.sinConfirmar?.length || 0) + (datos.captacion?.length || 0) + datos.departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error").length;
+  const pendientes = (datos.sinConfirmar?.length || 0) + (datos.captacion?.length || 0) + fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
   return (
     <main className="min-h-[100dvh] px-4 pt-5 pb-28 sm:px-6 text-slate-800">
       <Fondo />
@@ -298,7 +318,7 @@ export default function Oficina() {
         </header>
 
         <Semaforo datos={datos} enCursoN={datos.enCurso?.length || 0} alHoy={() => ir("hoy")} />
-        <HoyTeToca bandeja={datos.bandeja} sinConfirmar={datos.sinConfirmar || []} captacion={datos.captacion} departamentos={datos.departamentos} flujo={datos.flujo || {}}
+        <HoyTeToca bandeja={datos.bandeja} sinConfirmar={datos.sinConfirmar || []} captacion={datos.captacion} departamentos={datos.departamentos} fallanSeguido={datos.fallanSeguido || []} flujo={datos.flujo || {}}
           clave={clave} alTerminar={() => cargar(clave)} alVerBandeja={() => ir("bandeja")} />
         <Reunion reunion={datos.reunion} porId={Object.fromEntries(datos.departamentos.flatMap((d) => d.empleados).map((e) => [e.id, e]))} clave={clave}
           alVer={verReunion} alFicha={fichaDe} alIr={(destino) => ir(destino)} alTerminar={() => cargar(clave)} />
@@ -324,6 +344,17 @@ export default function Oficina() {
               alElegir={setElegido} vista={vista} setVista={setVista} repeticion={repeticion > 0 ? repeticion : 0} alAcabarRepeticion={() => setRepeticion((n) => -Math.abs(n))}
               movimiento={movimiento} reunion={escena} alAcabarReunion={() => setVista("todo")} />
           )}
+          {modo === "lista" && datos.departamentos.map((d) => (
+            <section key={d.id} className="space-y-3" aria-label={d.nombre}>
+              <div className="px-1 flex flex-wrap items-baseline gap-x-3">
+                <h3 className="font-bold text-slate-900 text-base">{d.nombre}</h3>
+                <p className="text-xs text-slate-500">{d.nota}</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {d.empleados.map((e, i) => <Mesa key={e.id} e={e} i={i} departamento={d.id} alElegir={setElegido} />)}
+              </div>
+            </section>
+          ))}
           {modo === "chat" && <Chat charla={datos.charla || []} departamentos={datos.departamentos} clave={clave} alTerminar={() => cargar(clave)} con={con} setCon={setCon} />}
         </section>
 
@@ -331,17 +362,6 @@ export default function Oficina() {
         <Novedades lista={datos.novedades || []} departamentos={datos.departamentos} />
         <Bandeja lista={datos.bandeja} decidir={decidir} enCurso={enCurso} />
 
-        {modo === "lista" && datos.departamentos.map((d) => (
-          <section key={d.id} className="space-y-3">
-            <div className="px-1 flex flex-wrap items-baseline gap-x-3">
-              <h2 className="font-bold text-slate-900 text-lg">{d.nombre}</h2>
-              <p className="text-xs text-slate-500">{d.nota}</p>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {d.empleados.map((e, i) => <Mesa key={e.id} e={e} i={i} departamento={d.id} alElegir={setElegido} />)}
-            </div>
-          </section>
-        ))}
       </div>
 
       <FichaEmpleado e={elegido} jefe={datos.jefe} alCerrar={cerrarFicha} clave={clave} alTerminar={() => cargar(clave)} alHablar={hablarCon} />

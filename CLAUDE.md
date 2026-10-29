@@ -29,6 +29,8 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 ## Oficina (/panel/oficina)
 
 - Cada tarea automática es un empleado. Para meter uno nuevo basta una entrada en `DEPARTAMENTOS` de `src/lib/oficina.js` (con `rutas` de su cron) y que su tarea guarde `oficina:turno:<id>`: sale solo su monigote, su mesa (o el anexo), su ficha y su chat.
+- Webs fiables (ayuntamientos, Diputación, Junta, prensa local) en `lib/fiables.js`. Esas señales solo sirven para confirmar, nunca para tirar un evento.
+- Avisos a Alejandro: un fallo suelto no avisa (solo si se repite 2 días). La clave caducada, un modelo retirado o más de 1 € al día avisan al momento (`lib/avisos.js`).
 - Los fallos se guardan con su motivo en cristiano (`motivoClaro` en `lib/gemini.js`) y la Repesca los repite. No vuelvas a guardar solo «Error en la IA».
 
 ## Diseño

@@ -9,6 +9,7 @@
 // El jefe resume el día y avisa de quien va con retraso o con fallos. Funciones puras: el servidor reúne
 // los datos (lib/eventos, lib/despensa...) y aquí solo se ordenan para el panel. No llaman a la IA: 0 €.
 import { EMPLEADOS_BUSCADORES, TIPOS } from "./eventos";
+import { LIMITE_DIA_EUROS, euros } from "./euros";
 
 // turno = horas entre un turno y el siguiente (para saber si alguien se lo ha saltado)
 const NOMBRES_TIPO = {
@@ -73,7 +74,7 @@ export function estadoEmpleado(emp, parte, ahora = Date.now(), descanso = null) 
 }
 
 // partes = { idEmpleado: { fin, busquedas?, eventos?, descartados?, errores?, texto?, error? } }
-export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {}, rendimiento = {}, pausas = {}, enCurso = {}, sinConfirmar = 0 } = {}, ahora = Date.now()) {
+export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {}, rendimiento = {}, pausas = {}, enCurso = {}, sinConfirmar = 0, fallanSeguido = [], gasto = null } = {}, ahora = Date.now()) {
   const departamentos = DEPARTAMENTOS.map((d) => ({
     ...d,
     empleados: d.empleados.map((e) => ({
@@ -100,7 +101,11 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
   if (sinConfirmar) lineas.push(`${sinConfirmar} ${sinConfirmar === 1 ? "evento está subido" : "eventos están subidos"} sin fuente segura: échales un ojo.`);
   const pendientes = Object.values(encargos).reduce((s, l) => s + l.length, 0);
   if (pendientes) lineas.push(`Hay ${pendientes} ${pendientes === 1 ? "encargo tuyo pendiente" : "encargos tuyos pendientes"} para el próximo turno.`);
-  if (error.length) lineas.push(`Con fallos: ${error.map((e) => e.nombre).join(", ")}. La Repesca repite lo que falló.`);
+  // Un fallo suelto lo arregla la Repesca: solo se nombra a quien falla dos días seguidos
+  const seguidos = todos.filter((e) => fallanSeguido.includes(e.id));
+  if (seguidos.length) lineas.push(`Fallan dos días seguidos: ${seguidos.map((e) => e.nombre).join(", ")}. Mira el motivo en su ficha.`);
+  else if (error.length) lineas.push(`${error.length === 1 ? "Uno ha tenido" : `${error.length} han tenido`} algún fallo suelto: la Repesca se encarga.`);
+  if (gasto?.hoy > LIMITE_DIA_EUROS) lineas.push(`⚠️ La IA lleva ${euros(gasto.hoy)} hoy, más de ${euros(LIMITE_DIA_EUROS)}. Mira la tarjeta de gasto.`);
   const descansan = cuenta("descanso");
   if (descansan.length) lineas.push(`De descanso: ${descansan.map((e) => e.nombre).join(", ")}.`);
   if (tarde.length) lineas.push(`Van con retraso: ${tarde.map((e) => e.nombre).join(", ")}.${jefe?.repetido ? " Ya he mandado repetir uno." : " Los mando repetir en mi próxima ronda."}`);
@@ -114,7 +119,7 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
     jefe: {
       lineas,
       ronda: jefe?.fin || null,
-      cifras: { equipo: todos.length, alDia: cuenta("ok").length, tarde: tarde.length, error: error.length, encontrados, bandeja, agenda, gastoMes, sinConfirmar },
+      cifras: { gasto, equipo: todos.length, alDia: cuenta("ok").length, tarde: tarde.length, error: error.length, encontrados, bandeja, agenda, gastoMes, sinConfirmar },
     },
   };
 }

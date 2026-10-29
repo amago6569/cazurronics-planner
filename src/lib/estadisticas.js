@@ -86,7 +86,28 @@ export async function registrarGastoIA(tarea, uso) {
     ["HINCRBY", clave, `${t}:busquedas`, Math.round(Number(uso?.consultas) || 0)],
     ["HINCRBY", clave, `${t}:microdolares`, Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6)],
     ["EXPIRE", clave, MESES_GASTO],
+    // El total del día, para la tarjeta de gasto de la oficina y el aviso de 1 € al día
+    ["INCRBY", `ia:dia:${hoyEnLeon()}`, Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6)],
+    ["EXPIRE", `ia:dia:${hoyEnLeon()}`, 40 * 24 * 3600],
   ]);
+}
+
+// Google factura en dólares; para la oficina lo pasamos a euros con un cambio aproximado
+export const EUROS_POR_DOLAR = 0.9;
+
+// Lo que lleva gastado la IA en euros: hoy, ayer y el mes (con su previsión, estirando lo que va de mes a todos sus días).
+// dolaresMes viene de leerGastoIA (el total por tareas del mes)
+export async function leerGastoDias(dolaresMes = 0) {
+  const hoy = hoyEnLeon();
+  const [a, m, d] = hoy.split("-").map(Number);
+  const diasMes = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  const [deHoy, deAyer] = await varios([["GET", `ia:dia:${hoy}`], ["GET", `ia:dia:${hoyEnLeon(-1)}`]]);
+  const redondo = (n) => Math.round(n * 100) / 100;
+  const mes = redondo((Number(dolaresMes) || 0) * EUROS_POR_DOLAR);
+  return {
+    hoy: redondo(((Number(deHoy) || 0) / 1e6) * EUROS_POR_DOLAR), ayer: redondo(((Number(deAyer) || 0) / 1e6) * EUROS_POR_DOLAR),
+    mes, prevision: redondo((mes / d) * diasMes),
+  };
 }
 
 // { mes, tareas: [{ tarea, llamadas, entrada, salida, busquedas, dolares }] } de este mes y el anterior, la más cara primero
