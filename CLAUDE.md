@@ -23,7 +23,7 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 
 - No toques el contrato de `/api/plan`, `/api/retocar` ni el envío a Google Apps Script (`NEXT_PUBLIC_GAS_BUSINESS_URL`) salvo que se pida.
 - Los rediseños cambian la parte visual. Los estados de React y las llamadas al servidor se quedan como estaban.
-- Eventos: lo de fuente comprobada se publica; lo dudoso pasa por el Verificador (`lib/guardia.js`): confirmado → web, desmentido o enlace roto → fuera, sin confirmar → web marcado «por confirmar» y aviso a Alejandro (panel y Telegram) para que lo quite si no cuadra. Regla suya del 29-10-2026: «que los suba pero que me deje un mensaje». Los bares y restaurantes sin ficha real en Google Places se descartan. Mantén esos filtros.
+- Eventos: lo de fuente comprobada se publica; lo dudoso pasa por el Verificador (`lib/guardia.js`): confirmado → web, desmentido o enlace roto → fuera, sin confirmar → web marcado «por confirmar» y aviso a Alejandro (panel y Telegram) para que lo quite si no cuadra. Regla suya del 29-10-2026 (ampliada ese mismo día): «que pase los filtros que quiera, pero que se haga solo». Lo «por confirmar» no espera su Vale/Quitar: el Verificador lo vuelve a mirar solo (Google, otra web) y lo confirma o lo quita; en Telegram va una línea, no botones por evento. Los bares y restaurantes sin ficha real en Google Places se descartan. Mantén esos filtros.
 - Los crons de `vercel.json` llevan horas escalonadas para no saturar la cuota. Si añades uno, ponlo en una hora libre.
 
 ## Oficina (/panel/oficina)
@@ -32,6 +32,8 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 - Webs fiables (ayuntamientos, Diputación, Junta, prensa local) en `lib/fiables.js`. Esas señales solo sirven para confirmar, nunca para tirar un evento.
 - Avisos a Alejandro: un fallo suelto no avisa (solo si se repite 2 días). La clave caducada, un modelo retirado o más de 1 € al día avisan al momento (`lib/avisos.js`).
 - Los fallos se guardan con su motivo en cristiano (`motivoClaro` en `lib/gemini.js`) y la Repesca los repite. No vuelvas a guardar solo «Error en la IA».
+
+- El jefe (`hablarConJefe` en `lib/jefe.js` + `lib/jefeSabe.js`) contesta con datos reales de la oficina, nunca «no tengo esa información». Si de ese pueblo y fechas no hay eventos, busca en ese momento (modelo 2.x, máx. `BUSCA_AL_DIA` al día, 6 h de memoria por pregunta) y lo sube a la agenda. Regla de Alejandro (29-10-2026): «que le pregunte algo y me responda, que sepa».
 
 ## Diseño
 

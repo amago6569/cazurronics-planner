@@ -6,7 +6,8 @@
 //   1. vuelve a abrir el enlace con más calma (8 s, la página entera);
 //   2. si sigue sin saberse, pregunta a Google por ellos, de 8 en 8 (como mucho 2 preguntas por turno);
 //   3. confirmado → a la web normal · desmentido (cancelado, otra fecha, la página no existe) → fuera ·
-//      sin confirmar → a la web igual, marcado «por confirmar», y te avisa (panel y Telegram) para que lo quites si no cuadra.
+//      sin confirmar → a la web igual, marcado «por confirmar». Lo sigue mirando él solo en los turnos siguientes (con las
+//      preguntas a Google que le sobren) y lo confirma o lo quita; tú no tienes que decidir nada evento a evento.
 //   Lo que no le da tiempo a mirar se queda para su siguiente turno; a la segunda vuelta se sube «por confirmar».
 // 🚑 Repesca (2 veces al día): repite las búsquedas que fallaron (Google lento o saturado), 6 por turno.
 //   Cada una lleva su motivo en cristiano. Tras 3 intentos se deja: su próximo turno normal la hace igual.
@@ -16,8 +17,8 @@ import { extraerJSON, llamarGemini, motivoClaro } from "./gemini";
 import { apuntarCharla, JEFE, TU } from "./charla";
 import { esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
 import {
-  DIAS_AGENDA, apuntarSinConfirmar, comprobarUrl, dominioConsultado, leerBandeja, leerRepesca, marcarRevisados,
-  sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
+  DIAS_AGENDA, apuntarRepaso, apuntarSinConfirmar, comprobarUrl, decidirSinConfirmar, dominioConsultado, leerBandeja, leerRepesca,
+  leerSinConfirmar, marcarRevisados, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
 } from "./eventos";
 
 const CUPO_SEGURO = 1300; // de las 1.500 peticiones gratis al día, dejamos margen para los planes y el barrido
@@ -60,9 +61,16 @@ export async function leerVeredictos(texto, dominios, grupo, comprobar = (u) => 
 // leer: cómo se descarga cada página (las pruebas lo cambian)
 export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000) } = {}) {
   const limite = inicio + 50000;
-  const bandeja = await leerBandeja();
+  const [bandeja, subidos, cupo] = await Promise.all([leerBandeja(), leerSinConfirmar().catch(() => []), quedaCupo()]);
   const confirmados = [], porConfirmar = [], falsos = [], quedan = [];
   let preguntas = 0, fallo = null;
+  // Si sobran preguntas a Google este turno, se usan para volver a mirar lo subido «por confirmar» (como mucho una
+  // vez al día cada uno): confirmado → se le quita la marca · desmentido → fuera de la web · nada claro → sigue igual.
+  // Así no tienes que decidir tú evento a evento.
+  const aPreguntar = [], repaso = [];
+  const libres = Math.max(0, PREGUNTAS_POR_TURNO - Math.ceil(Math.min(bandeja.length, 40) / POR_PREGUNTA));
+  const aRepasar = cupo && libres ? trozos(subidos.filter((e) => !e.repaso || Date.now() - Date.parse(e.repaso) > 20 * 3600000)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha)).slice(0, libres * POR_PREGUNTA), POR_PREGUNTA) : [];
   if (bandeja.length) {
     // 1. Sin Google (0 €): dos webs distintas con el mismo evento, o el enlace otra vez, con calma, leyendo la página.
     //    Confirma si es una web oficial o si la página dice la fecha, el pueblo y el año. Si la página carga pero no
@@ -81,13 +89,14 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
 
     // 2. Google, de 8 en 8
     const grupos = trozos(dudan, POR_PREGUNTA);
-    const aPreguntar = (await quedaCupo()) ? grupos.slice(0, PREGUNTAS_POR_TURNO) : [];
+    aPreguntar.push(...(cupo ? grupos.slice(0, PREGUNTAS_POR_TURNO) : []));
     const sinPreguntar = grupos.slice(aPreguntar.length).flat();
-    const res = await Promise.allSettled(aPreguntar.map(async (g) => {
+    const res = await Promise.allSettled([...aPreguntar, ...aRepasar].map(async (g) => {
       const { texto, dominios } = await llamarGemini(promptVerificar(g), { para: "barrido", tarea: "verificador", temperatura: 0, msMax: Math.max(5000, Math.min(38000, limite - Date.now() - 6000)), msPorModelo: 24000, maxSalida: 2048 });
       return leerVeredictos(texto, dominios, g);
     }));
-    res.forEach((r, gi) => {
+    repaso.push(...res.slice(aPreguntar.length));
+    res.slice(0, aPreguntar.length).forEach((r, gi) => {
       const g = aPreguntar[gi];
       if (r.status !== "fulfilled") { fallo = motivoClaro(r.reason); sinPreguntar.push(...g); return; }
       preguntas++;
@@ -101,6 +110,28 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     // Lo que no ha podido mirar: a la segunda vuelta se sube «por confirmar» igual (así nada se queda colgado)
     for (const e of sinPreguntar) ((e.vueltas || 0) + 1 >= VUELTAS_ANTES_DE_SUBIR ? porConfirmar : quedan).push(e);
   }
+
+  // Lo subido «por confirmar» que se ha vuelto a mirar
+  if (!bandeja.length && aRepasar.length) {
+    const res = await Promise.allSettled(aRepasar.map(async (g) => {
+      const { texto, dominios } = await llamarGemini(promptVerificar(g), { para: "barrido", tarea: "verificador", temperatura: 0, msMax: Math.max(5000, Math.min(38000, limite - Date.now() - 6000)), msPorModelo: 24000, maxSalida: 2048 });
+      return leerVeredictos(texto, dominios, g);
+    }));
+    repaso.push(...res);
+  }
+  const repasados = { confirmados: 0, quitados: 0 };
+  const sinCambio = [];
+  for (const [gi, r] of repaso.entries()) {
+    if (r.status !== "fulfilled") continue;
+    preguntas++;
+    for (const [i, e] of aRepasar[gi].entries()) {
+      const v = r.value[i];
+      if (v.decision === "confirmado" && (await decidirSinConfirmar(e.id, "vale")).exito) repasados.confirmados++;
+      else if (v.decision === "falso" && (await decidirSinConfirmar(e.id, "quitar")).exito) repasados.quitados++;
+      else sinCambio.push(e);
+    }
+  }
+  await sinRomper(apuntarRepaso(sinCambio), "repaso");
 
   const limpio = ({ id: _, encontrado: __, revisadoEn: ___, vueltas: ____, nota: _____, porque: ______, fuentesVistas: _______, ...e }) => e;
   const desde = hoyEnLeon(), hasta = sumarDias(desde, DIAS_AGENDA - 1);
@@ -117,11 +148,14 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     pendientes: quedan.length, preguntas, sinGoogle: confirmados.filter((e) => e.porque).length, error: fallo && !revisados ? fallo.texto : null,
     texto: !bandeja.length ? "Bandeja vacía: nada que revisar" : `${revisados} revisados: ${confirmados.length} confirmados, ${porConfirmar.length} subidos por confirmar, ${falsos.length} falsos`,
     descartes: falsos.slice(0, 5).map((e) => ({ titulo: e.titulo, nota: e.nota })),
+    repasados,
   };
+  if (repasados.confirmados || repasados.quitados) parte.texto += ` · de lo subido «por confirmar»: ${repasados.confirmados} confirmados y ${repasados.quitados} quitados`;
   await guardarJSON("oficina:turno:verificador", parte, 14 * 24 * 3600);
   const charla = [];
   if (revisados) charla.push({ de: "verificador", a: JEFE, tipo: "nuevos", texto: `He repasado ${revisados} dudosos: ${confirmados.length} confirmados, ${porConfirmar.length} sin confirmar y ${falsos.length} falsos.` });
-  if (porConfirmar.length) charla.push({ de: JEFE, a: TU, tipo: "duda", texto: `Te he subido ${porConfirmar.length} sin fuente segura: ${titulos(porConfirmar)}. Si alguno no cuadra, quítalo en «Hoy te toca».` });
+  if (porConfirmar.length) charla.push({ de: JEFE, a: TU, tipo: "aviso", texto: `He subido ${porConfirmar.length} «por confirmar»: ${titulos(porConfirmar)}. Los sigo mirando yo; si alguno no te cuadra, dime «quita …».` });
+  if (repasados.confirmados || repasados.quitados) charla.push({ de: "verificador", a: JEFE, tipo: "nuevos", texto: `He vuelto a mirar lo subido «por confirmar»: ${repasados.confirmados} confirmados y ${repasados.quitados} quitados por falsos.` });
   if (falsos.length) charla.push({ de: "verificador", a: JEFE, tipo: "fallo", texto: `Fuera ${titulos(falsos, 1)}: ${falsos[0].nota}.` });
   if (fallo && !revisados) charla.push({ de: "verificador", a: JEFE, tipo: "fallo", texto: `No he podido preguntar a Google: ${fallo.texto}` });
   await sinRomper(apuntarCharla(charla), "charla");
