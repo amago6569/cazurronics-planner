@@ -7,7 +7,10 @@ import { enSegundoPlano } from "./almacen";
 import { registrarGastoIA } from "./estadisticas";
 
 const MODELOS = {
-  usuario: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
+  // Planes y retoques: gemini-2.5-flash primero. gemini-flash-latest se cobra como un 3.x (0,75 $ / 3,75 $ por millón de
+  // tokens, frente a 0,30 $ / 2,50 $) y era lo que más pesaba en la factura de los planes. Queda de reserva por si el 2.5
+  // se satura. PLANES_GEMINI_3=1 en Vercel vuelve a ponerlo el primero si los planes salen peor.
+  usuario: ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
   // Solo modelos 2.x: en ellos las búsquedas en Google entran en las 1.500 peticiones gratis al día. Los 3.x (como
   // gemini-flash-lite-latest) cobran CADA búsqueda; cuando el 2.5 se saturaba (429) el barrido saltaba a uno 3.x y
   // eso fue la mayor parte de la factura. Si los 2.x no responden, ese tramo se salta y se repite en la siguiente pasada.
@@ -17,6 +20,14 @@ const MODELOS = {
   // El asesor de Telegram: sin Google, solo lee las cifras que le pasamos (~0,0005 $ por pregunta).
   asesor: ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"],
 };
+const modelosPara = (para) => {
+  if (para === "usuario" && /^(1|si|sí|true)$/i.test(String(process.env.PLANES_GEMINI_3 || "").trim())) {
+    return ["gemini-flash-latest", ...MODELOS.usuario.filter((m) => m !== "gemini-flash-latest")];
+  }
+  return MODELOS[para] || MODELOS.usuario;
+};
+// gemini-2.5-flash también piensa y lo cobra como salida: con un tope el plan sale igual y cuesta menos
+const PENSAR_25 = 1024;
 // Los modelos 3.x "piensan" antes de contestar y esos tokens se cobran. Con "low" el plan sale igual y cuesta bastante menos
 // (y tarda menos). GEMINI_PENSAMIENTO=auto en Vercel devuelve el comportamiento de fábrica; también vale minimal, medium o high.
 const NIVEL_PENSAMIENTO = String(process.env.GEMINI_PENSAMIENTO || "low").trim().toLowerCase();
@@ -36,16 +47,19 @@ const PRECIOS = [
   [/^gemini-2\.0/, { entrada: 0.1, salida: 0.4, busqueda: 0.035, porConsulta: false }],
 ];
 
-// Tokens, búsquedas y coste aproximado de una respuesta de Gemini
+// Tokens, búsquedas y coste aproximado de una respuesta de Gemini.
+// En los 2.x la búsqueda NO se suma aquí: las 1.500 primeras del día son gratis. Se devuelve aparte
+// (peticionGratis = 1) y registrarGastoIA solo la cobra si ese día se pasa de la cuota.
 export function medirUso(modelo, datos) {
   const u = datos?.usageMetadata || {};
   const consultas = (datos?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
   const precio = PRECIOS.find(([re]) => re.test(modelo))?.[1] || PRECIOS[0][1];
   const entrada = Number(u.promptTokenCount) || 0;
   const salida = (Number(u.candidatesTokenCount) || 0) + (Number(u.thoughtsTokenCount) || 0);
-  const busquedas = precio.porConsulta ? consultas : (consultas ? 1 : 0);
-  const dolares = (entrada * precio.entrada + salida * precio.salida) / 1e6 + busquedas * precio.busqueda;
-  return { modelo, entrada, salida, consultas, dolares: Math.round(dolares * 100000) / 100000 };
+  const pagadas = precio.porConsulta ? consultas : 0;
+  const peticionGratis = !precio.porConsulta && consultas ? 1 : 0;
+  const dolares = (entrada * precio.entrada + salida * precio.salida) / 1e6 + pagadas * precio.busqueda;
+  return { modelo, entrada, salida, consultas, peticionGratis, precioPeticion: peticionGratis ? precio.busqueda : 0, dolares: Math.round(dolares * 100000) / 100000 };
 }
 
 // json: true pide la respuesta directamente en JSON (solo sin Google Search: Gemini no admite las dos cosas a la vez)
@@ -53,7 +67,7 @@ export function medirUso(modelo, datos) {
 export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, maxSalida } = {}) {
   const fallos = [];
   const fin = Date.now() + msMax;
-  for (const modelo of MODELOS[para] || MODELOS.usuario) {
+  for (const modelo of modelosPara(para)) {
     const queda = fin - Date.now();
     if (queda < 3000) break;
     try {
@@ -63,7 +77,7 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
         method: "POST",
         signal: AbortSignal.timeout(Math.max(1000, fin - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}) } }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}), ...(/^gemini-2\.5-flash$/.test(modelo) ? { thinkingConfig: { thinkingBudget: PENSAR_25 } } : {}) } }),
         cache: "no-store",
       });
       const pensarPoco = NIVEL_PENSAMIENTO !== "auto" && /^gemini-(flash|3)/.test(modelo);

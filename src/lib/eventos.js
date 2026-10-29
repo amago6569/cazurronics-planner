@@ -14,7 +14,8 @@ import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
 import { fuentesPara } from "./intencion";
-import { apuntarNovedades } from "./novedades";
+import { apuntarNovedades, apuntarRendimiento } from "./novedades";
+import { apuntarCharla, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera } from "./provincia";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
@@ -513,21 +514,38 @@ async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos 
   const fuentes = {};
   let encontrados = 0, descartados = 0, errores = 0;
   const nuevos = [], dudosos = [], deQuien = new Map();
+  // Para lo que se dicen en la oficina: qué ha traído cada uno
+  const porEmpleado = {};
+  const de = (emp) => (porEmpleado[emp] ||= { busquedas: 0, buenos: [], entran: [], repetidos: [], dudosos: [], encargo: encargos[emp]?.map((x) => x.texto).join("; ") || null });
   const limite = inicio + 54000; // todo el tramo cabe en el minuto de Vercel
   await Promise.all(resultados.map(async (r, i) => {
     const [nombre, , empleado = "junta"] = tareas[i];
-    if (r.status !== "fulfilled") { errores++; fuentes[nombre] = { ok: false, empleado, error: String(r.reason?.message || r.reason).slice(0, 200) }; return; }
+    de(empleado).busquedas++;
+    if (r.status !== "fulfilled") { errores++; fuentes[nombre] = { ok: false, empleado, error: String(r.reason?.message || r.reason).slice(0, 200) }; de(empleado).error = fuentes[nombre].error; return; }
     const { buenos, descartados: malos } = await verificarFuentes(r.value.eventos, r.value.dominios, { limite });
     encontrados += r.value.eventos.length; descartados += malos.length;
     fuentes[nombre] = { ok: true, empleado, eventos: buenos.length, ...(malos.length ? { descartados: malos.length } : {}) };
     nuevos.push(...buenos.map((e) => ({ ...e, verificado: true })));
     for (const e of buenos) deQuien.set(claveEvento(e), empleado);
+    de(empleado).buenos.push(...buenos);
+    de(empleado).dudosos.push(...malos.filter((e) => e.motivo === "duda"));
     // Lo que no se pudo comprobar (no lo que tiene una página que no existe) va a la bandeja del jefe, para que decidas tú
     dudosos.push(...malos.filter((e) => e.motivo === "duda").map((e) => ({ ...e, empleado })));
   }));
 
-  const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta, (e) => deQuien.get(claveEvento(e)) || null) : 0;
+  const hechas = {};
+  for (const [, , empleado = "junta"] of tareas) (hechas[empleado] ||= { busquedas: 0 }).busquedas++;
+  await sinRomper(apuntarRendimiento(hechas), "rendimiento");
+  let entraron = [];
+  const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta, (e) => deQuien.get(claveEvento(e)) || null, (lista) => { entraron = lista; }) : 0;
   if (dudosos.length) await sinRomper(guardarDudosos(dudosos), "bandeja del jefe");
+  const claveEntro = new Set(entraron.map(claveEvento));
+  for (const r of Object.values(porEmpleado)) {
+    // Si un error tumbó solo una de sus búsquedas pero otras trajeron cosas, cuenta lo que trajo
+    if (r.error && r.buenos.length) r.error = null;
+    for (const e of r.buenos) (claveEntro.has(claveEvento(e)) ? r.entran : r.repetidos).push(e);
+  }
+  await sinRomper(apuntarCharla(charlaDeTurno(porEmpleado)), "charla");
   return {
     fuentes, nuevos: sumados, encontrados, descartados, errores, busquedas: tareas.length, dudosos: dudosos.length,
     muestra: nuevos.slice(0, 8).map((e) => ({ titulo: e.titulo, fecha: e.fecha, localidad: e.localidad || "" })),
@@ -559,7 +577,7 @@ async function conCerrojo(tarea) {
 }
 
 // quien = (evento) => nombre del empleado que lo encontró, para la lista de novedades de la oficina
-async function sumarALaAgenda(eventos, desde, hasta, quien = () => null) {
+async function sumarALaAgenda(eventos, desde, hasta, quien = () => null, avisar = () => {}) {
   const entran = [];
   const nuevos = await conCerrojo(async () => {
     const porDia = fusionarPorDia([eventos], desde, hasta);
@@ -580,10 +598,14 @@ async function sumarALaAgenda(eventos, desde, hasta, quien = () => null) {
     await varios(comandos);
     return nuevos;
   });
+  avisar(entran);
   if (entran.length) {
     await sinRomper(apuntarNovedades(entran.map((e) => ({
       tipo: "evento", titulo: e.titulo, fecha: e.fecha, localidad: e.localidad, lugar: e.lugar, fuente: e.fuente, quien: quien(e),
     }))), "novedades");
+    const porQuien = {};
+    for (const e of entran) { const q = quien(e); if (q) (porQuien[q] ||= { nuevos: 0 }).nuevos++; }
+    await sinRomper(apuntarRendimiento(porQuien), "rendimiento");
   }
   return nuevos;
 }
@@ -850,6 +872,9 @@ export async function jefeRepasa() {
   const repetido = await repetirUno(atrasados);
   const parte = { fin: new Date().toISOString(), atrasados: atrasados.map((t) => t.id), repetido };
   await guardarJSON("oficina:jefe", parte, 14 * 24 * 3600);
+  await sinRomper(apuntarCharla([atrasados.length
+    ? { de: "jefe", a: "tu", tipo: "aviso", texto: `Ronda hecha: ${atrasados.length} ${atrasados.length === 1 ? "turno iba" : "turnos iban"} con retraso${repetido ? " y ya he mandado repetir uno" : ""}.` }
+    : { de: "jefe", a: "tu", tipo: "aviso", texto: "Ronda hecha: todo el mundo al día." }]), "charla");
   return parte;
 }
 

@@ -21,6 +21,7 @@
 // Peor caso si Google no regalase nada: 900 × 0,035 + 2.000 × 0,032 ≈ 95 $ al mes.
 import { aObjeto, comando, guardarJSON, leerJSON, varios } from "./almacen";
 import { apuntarNovedades } from "./novedades";
+import { apuntarCharla } from "./charla";
 import { CATEGORIAS, categoriaPorId, notaAjustada } from "./despensaProductos";
 import { hoyEnLeon } from "./estadisticas";
 import { ZONAS, zonaDe, zonaMasCercana } from "./zonas";
@@ -302,7 +303,10 @@ export async function barrerTiendas({ cuantas = POR_PASADA } = {}) {
   if (marcas.length) escribir.push(["HSET", claveHechas, ...marcas]);
   if (fueras.length) escribir.push(["HSET", claveFuera, ...fueras]);
   if (escribir.length) await varios(escribir);
-  if (estrenos.length) await apuntarNovedades(estrenos).catch(() => null);
+  if (estrenos.length) {
+    await apuntarNovedades(estrenos).catch(() => null);
+    await apuntarCharla([{ de: "despensa-tiendas", a: "jefe", tipo: "nuevos", texto: `He dado de alta ${estrenos.length === 1 ? "una tienda nueva" : `${estrenos.length} tiendas nuevas`} de Google Maps: ${estrenos.slice(0, 2).map((t) => t.titulo).join(" y ")}.` }]).catch(() => null);
+  }
 
   const informe = {
     fin: hoy,

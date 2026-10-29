@@ -82,23 +82,40 @@ async function llamarTelegram(metodo, cuerpo) {
   return datos.result;
 }
 
-// Texto plano (sin Markdown): así un asterisco o un guion bajo en un nombre nunca rompe el envío
-export async function enviarTelegram(chatId, texto) {
-  for (const trozo of trocear(texto)) {
-    await llamarTelegram("sendMessage", { chat_id: chatId, text: trozo, link_preview_options: { is_disabled: true } });
+// Texto plano (sin Markdown): así un asterisco o un guion bajo en un nombre nunca rompe el envío.
+// botones = [[{ text, callback_data } | { text, url }], ...] van debajo del último trozo.
+export async function enviarTelegram(chatId, texto, botones = null) {
+  const trozos = trocear(texto);
+  for (const [i, trozo] of trozos.entries()) {
+    const conBotones = botones?.length && i === trozos.length - 1 ? { reply_markup: { inline_keyboard: botones } } : {};
+    await llamarTelegram("sendMessage", { chat_id: chatId, text: trozo, link_preview_options: { is_disabled: true }, ...conBotones });
   }
+}
+
+// Al pulsar un botón: el aviso pequeño arriba y, si se indica, el mensaje sin botones y con lo que se decidió debajo
+export const contestarBoton = (id, texto = "") => llamarTelegram("answerCallbackQuery", { callback_query_id: id, text: texto.slice(0, 190) }).catch(() => null);
+export const cerrarBotones = (chatId, mensajeId, texto) => llamarTelegram("editMessageText", { chat_id: chatId, message_id: mensajeId, text: texto.slice(0, MAX_MENSAJE), link_preview_options: { is_disabled: true } }).catch(() => null);
+
+// Los botones necesitan que Telegram mande también "callback_query". Los bots activados antes solo pedían "message":
+// el parte diario lo comprueba y, si falta, lo añade solo (misma dirección y mismo secreto). No hay que tocar nada.
+export async function asegurarBotones() {
+  const info = await llamarTelegram("getWebhookInfo", {});
+  if (!info?.url || (info.allowed_updates || []).includes("callback_query")) return false;
+  await llamarTelegram("setWebhook", { url: info.url, secret_token: limpio(process.env.TELEGRAM_SECRETO), allowed_updates: ["message", "callback_query"] });
+  return true;
 }
 
 export const escribiendo = (chatId) => llamarTelegram("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => null);
 
 // Le dice a Telegram a qué dirección mandar los mensajes del bot (se hace una vez, desde /api/telegram?activar=CLAVE)
 export async function activarWebhook(url) {
-  await llamarTelegram("setWebhook", { url, secret_token: limpio(process.env.TELEGRAM_SECRETO), allowed_updates: ["message"], drop_pending_updates: true });
+  await llamarTelegram("setWebhook", { url, secret_token: limpio(process.env.TELEGRAM_SECRETO), allowed_updates: ["message", "callback_query"], drop_pending_updates: true });
   await llamarTelegram("setMyCommands", {
     commands: [
       { command: "resumen", description: "Resumen de la semana con una recomendación" },
       { command: "web", description: "Cifras de la web (últimos 7 días)" },
       { command: "instagram", description: "Cifras de Instagram" },
+      { command: "jefe", description: "Parte del jefe de la oficina, ahora" },
     ],
   }).catch(() => null);
   const [info, bot] = await Promise.all([llamarTelegram("getWebhookInfo", {}), llamarTelegram("getMe", {})]);

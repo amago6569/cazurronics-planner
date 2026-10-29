@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardarJSON } from "../../../../lib/almacen";
 import { DOMINIO, listarCaptacion, marcarAvisados } from "../../../../lib/captacion";
+import { leerDueno, telegramConfigurado } from "../../../../lib/telegram";
 
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
@@ -44,6 +45,8 @@ async function trabajar(request) {
     const nuevos = g.listos.filter((l) => !l.avisadoEn);
     const recordar = g.seguimiento.filter((l) => l.toca && !l.recordatorioAvisadoEn);
     if (!nuevos.length && !recordar.length) return NextResponse.json({ exito: true, enviado: false, motivo: "Nada nuevo que avisar" });
+    // Con Telegram, los locales van en el parte del jefe con botones (más tarde, a las 8:45 UTC): sin correo repetido
+    if (telegramConfigurado() && (await leerDueno())) return NextResponse.json({ exito: true, enviado: false, pendientes: nuevos.length + recordar.length, motivo: "Van en el parte del jefe por Telegram" });
 
     const clave = process.env.RESEND_API_KEY, para = process.env.AVISO_EMAIL;
     if (!clave || !para) {

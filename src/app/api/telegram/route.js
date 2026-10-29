@@ -1,18 +1,20 @@
 import { after, NextResponse } from "next/server";
 import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { claveDePanelValida } from "../../../lib/lugares";
-import { abrirEmparejamiento, activarWebhook, chatDelDueno, emparejar, enviarTelegram, escribiendo, leerDueno, secretoValido, telegramConfigurado } from "../../../lib/telegram";
-import { cifrasInstagram, cifrasWeb, resumenSemanal, responderPregunta } from "../../../lib/asesor";
+import { abrirEmparejamiento, activarWebhook, cerrarBotones, chatDelDueno, contestarBoton, emparejar, enviarTelegram, escribiendo, leerDueno, secretoValido, telegramConfigurado } from "../../../lib/telegram";
+import { cifrasInstagram, cifrasWeb, resumenSemanal } from "../../../lib/asesor";
+import { cambiarMensaje, hablarConJefe, parteDiario, pulsarBoton } from "../../../lib/jefe";
 
-export const maxDuration = 45;
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-const AYUDA = `🦁 Soy tu asesor de métricas. Pregúntame lo que quieras de la web o de Instagram, por ejemplo:
+const AYUDA = `👔 Soy el jefe de tu oficina. Pregúntame cifras de la web o de Instagram, o dale órdenes al equipo, por ejemplo:
 · ¿Cuántos planes esta semana?
-· ¿Qué publicación funcionó mejor?
-· ¿Qué local sale más en los planes?
+· Que Música mire los conciertos de El Gran Café
+· Que Productos busque cecina de chivo por Boñar
 
-Atajos: /resumen (con recomendación), /web y /instagram (solo cifras).`;
+Cada mañana te mando el parte, tu bandeja y los locales listos para escribirles, con botones.
+Atajos: /jefe (parte ahora), /resumen (con recomendación), /web y /instagram (solo cifras).`;
 
 // Telegram llama aquí con cada mensaje que recibe el bot.
 // Se contesta "ok" al momento y la respuesta se manda después (si no, Telegram reintenta y llegarían duplicados).
@@ -21,6 +23,24 @@ export async function POST(request) {
     return NextResponse.json({ exito: false }, { status: 401 });
   }
   const aviso = await request.json().catch(() => null);
+  // Un botón pulsado (bandeja o captación)
+  const boton = aviso?.callback_query;
+  if (boton?.id) {
+    after(async () => {
+      const chat = boton.message?.chat?.id;
+      try {
+        if (!chatDelDueno(chat, await leerDueno())) return contestarBoton(boton.id);
+        const r = await pulsarBoton(boton.data, { chatId: chat });
+        await contestarBoton(boton.id, r.aviso || "");
+        if (r.cierre && boton.message?.message_id) await cerrarBotones(chat, boton.message.message_id, `${boton.message.text || ""}\n\n${r.cierre}`);
+        if (r.respuesta) await enviarTelegram(chat, r.respuesta, r.botones);
+      } catch (e) {
+        console.error("[telegram] botón", e?.message || e);
+        await contestarBoton(boton.id, "No ha podido ser, prueba en el panel");
+      }
+    });
+    return NextResponse.json({ ok: true });
+  }
   const mensaje = aviso?.message;
   const chatId = mensaje?.chat?.id;
   const texto = String(mensaje?.text || "").trim();
@@ -40,7 +60,15 @@ export async function POST(request) {
       if (orden === "/web") return await enviarTelegram(chatId, await cifrasWeb());
       if (orden === "/instagram") return await enviarTelegram(chatId, await cifrasInstagram());
       await escribiendo(chatId);
-      const respuesta = orden === "/resumen" ? await resumenSemanal() : await responderPregunta(texto);
+      if (orden === "/jefe") {
+        for (const m of await parteDiario({ conCaptacion: false })) await enviarTelegram(chatId, m.texto, m.botones);
+        return;
+      }
+      if (orden === "/resumen") return await enviarTelegram(chatId, await resumenSemanal());
+      // Si acabas de pulsar ✏️ en un mensaje de captación, esto es cómo quieres cambiarlo
+      const cambiado = await cambiarMensaje(chatId, texto);
+      if (cambiado) return await enviarTelegram(chatId, cambiado.texto, cambiado.botones);
+      const { respuesta } = await hablarConJefe(texto, { desde: "telegram" });
       await enviarTelegram(chatId, respuesta);
     } catch (e) {
       console.error("[telegram]", e?.message || e);
