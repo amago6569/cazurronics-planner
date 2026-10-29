@@ -2,6 +2,7 @@
 // Usado por app/api/plan/route.js (generar plan) y app/api/retocar/route.js (cambiar una parada).
 import { comando, sinRomper } from './almacen';
 import { direccionEnLeon, enProvinciaLeon } from './provincia';
+import { bonito, seParecen } from './nombres';
 
 // Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
 // en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
@@ -271,6 +272,25 @@ export const TIPOS_UBICACION_FLEXIBLE = ['concierto', 'mercadillo', 'fiesta', 'e
 export const TIPOS_CON_FICHA_OBLIGATORIA = ['bar', 'restaurante', 'discoteca', 'cafeteria', 'cafetería', 'pub', 'taberna', 'sidreria', 'sidrería'];
 const necesitaFicha = (tipo) => TIPOS_CON_FICHA_OBLIGATORIA.includes(String(tipo || '').toLowerCase());
 
+// Lo que de verdad sabemos de un local cuando la IA no lo conocía: qué es según Google, dónde está y su nota.
+// Sin especialidades, historia ni premios, que es justo lo que se inventaba.
+const QUE_ES = [['night_club', 'Discoteca'], ['restaurant', 'Restaurante'], ['bar', 'Bar'], ['cafe', 'Cafetería'], ['bakery', 'Cafetería y panadería']];
+const QUE_ES_IA = { bar: 'Bar', restaurante: 'Restaurante', cafeteria: 'Cafetería', 'cafetería': 'Cafetería', discoteca: 'Discoteca', pub: 'Pub', taberna: 'Taberna', sidreria: 'Sidrería', 'sidrería': 'Sidrería' };
+const PRECIOS = ['', 'económico', 'de precio medio', 'algo caro', 'caro'];
+export function descripcionReal(objetivo, tipo, nombreZona) {
+  const tipos = Array.isArray(objetivo?.types) ? objetivo.types : [];
+  const que = QUE_ES.find(([k]) => tipos.includes(k))?.[1] || QUE_ES_IA[String(tipo || '').toLowerCase()] || 'Local';
+  // "C. Mayor, 3, 24850 Boñar, León, España" → "Boñar"
+  const pueblo = String(objetivo?.formatted_address || '').match(/\b24\d{3}\s+([^,]+)/)?.[1]?.trim() || nombreZona;
+  const precio = PRECIOS[objetivo?.price_level] || '';
+  const frases = [`${que}${precio ? ` ${precio}` : ''}${pueblo ? ` en ${pueblo}` : ''}.`];
+  if (typeof objetivo?.rating === 'number' && objetivo.user_ratings_total) {
+    frases.push(`Tiene un ${String(objetivo.rating).replace('.', ',')} en Google con ${objetivo.user_ratings_total} reseñas.`);
+  }
+  frases.push('Lo hemos elegido por su nota en Google y su cercanía.');
+  return frases.join(' ');
+}
+
 // Dado UNA parada (tal cual la devuelve Gemini) y el contexto de la búsqueda, la enriquece con datos
 // reales: coordenadas verificadas, teléfono, web, horario, reseñas, foto real y Street View.
 // Devuelve la parada enriquecida, o null si debe descartarse (bar/restaurante/discoteca sin ficha real).
@@ -313,7 +333,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
         if (parada.tipo === 'concierto' || parada.tipo === 'fiesta' || parada.tipo === 'mercadillo') {
           objetivo = candidatosEnZona[0];
         } else {
-          const listaCandidatos = candidatosEnZona.slice(0, 5);
+          // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota
+          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && seParecen(parada.titulo, r.name));
+          const listaCandidatos = mismoNombre ? [mismoNombre] : candidatosEnZona.slice(0, 5);
           objetivo = listaCandidatos.reduce((mejor, actual) => {
             const puntuacionActual = puntuarCandidato(actual, parada.tipo, lat, lon, priceLevelObjetivo, radio);
             const puntuacionMejor = mejor ? puntuarCandidato(mejor, parada.tipo, lat, lon, priceLevelObjetivo, radio) : -Infinity;
@@ -333,6 +355,14 @@ export async function enriquecerParada(paradaOriginal, contexto) {
 
       if (typeof objetivo.rating === 'number') {
         parada.resenas = `${objetivo.rating}/5 (${objetivo.user_ratings_total || 0} reseñas)`;
+      }
+      // En los pueblos la IA a veces se inventa un bar ("Mesón El Rincón, famoso por su cecina") y Google
+      // devuelve otro que sí existe. La ubicación ya es la del real: el nombre y lo que se cuenta, también.
+      if (necesitaFicha(parada.tipo) && objetivo.name && !seParecen(parada.titulo, objetivo.name)) {
+        parada.titulo = bonito(objetivo.name);
+        parada.descripcion = descripcionReal(objetivo, parada.tipo, nombreZona);
+        parada.lugar = null;
+        parada.fuente = null;
       }
 
       if (objetivo.place_id) {

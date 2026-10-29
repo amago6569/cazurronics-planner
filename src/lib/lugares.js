@@ -7,14 +7,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { comando, varios, aObjeto, aRanking, leerJSON, guardarJSON } from "./almacen";
 import { haversineKm } from "./planUtils";
+import { bonito, seParecen, slug } from "./nombres";
+
+export { slug };
 
 const SECRETO = process.env.NEGOCIOS_SECRETO || process.env.PANEL_CLAVE || "";
 const TIPOS_COMER = ["bar", "restaurante", "cafeteria", "cafetería", "taberna", "sidreria", "sidrería"];
-
-export function slug(texto) {
-  return String(texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
-}
 
 export function claveLugar(parada) {
   if (parada?.placeId) return `p_${String(parada.placeId).replace(/[^\w-]/g, "").slice(0, 120)}`;
@@ -34,15 +32,6 @@ export const esPrueba = (request) => /(?:^|;\s*)cz_prueba=1(?:;|$)/.test(request
 // por casualidad, le sumaban apariciones. Ahora solo cuentan los tipos de negocio con ficha real cuyo nombre
 // en Google se parece al de la parada.
 export const TIPOS_NEGOCIO = ["bar", "restaurante", "cafeteria", "cafetería", "taberna", "sidreria", "sidrería", "pub", "discoteca", "museo"];
-const PALABRAS_VACIAS = new Set(["bar", "restaurante", "cafeteria", "cafe", "pub", "taberna", "mesón", "meson", "de", "del", "la", "el", "los", "las", "y", "en", "leon", "casa", "museo"]);
-const palabras = (t) => slug(t).split("-").filter((w) => w.length >= 3 && !PALABRAS_VACIAS.has(w));
-const seParecen = (a, b) => {
-  const sa = slug(a), sb = slug(b);
-  if (!sa || !sb) return false;
-  if (sa.includes(sb) || sb.includes(sa)) return true;
-  const pb = new Set(palabras(b));
-  return palabras(a).some((w) => pb.has(w));
-};
 // El tipo de negocio lo dice Google si lo sabe (así un evento que se celebra en un museo o un bar cuenta para ESE local);
 // si no, vale el tipo que puso la IA.
 const TIPO_POR_GOOGLE = [["bar", "bar"], ["restaurant", "restaurante"], ["cafe", "cafeteria"], ["night_club", "discoteca"], ["museum", "museo"]];
@@ -53,12 +42,6 @@ export function tipoNegocio(p) {
   const t = String(p?.tipo || "").toLowerCase();
   return TIPOS_NEGOCIO.includes(t) ? t : null;
 }
-// Nombre de Google más presentable: si viene todo en mayúsculas, a minúsculas con inicial en cada palabra
-const bonito = (n) => {
-  const s = String(n || "").trim();
-  if (!s || s !== s.toUpperCase() || !/[A-ZÁÉÍÓÚÑ]/.test(s)) return s;
-  return s.toLowerCase().replace(/(^|[\s\-(])([a-záéíóúñü])/g, (m, a, b) => a + b.toUpperCase()).replace(/ (De|Del|Y|En) /g, (m, w) => " " + w.toLowerCase() + " ");
-};
 // Cuenta como local si tiene ficha de Google, es un tipo de negocio y su nombre en Google es el de la parada
 // o el del sitio donde se celebra ("lugar").
 export const esNegocio = (p) => !!(p?.placeId && p.nombreGoogle && tipoNegocio(p) && (seParecen(p.titulo, p.nombreGoogle) || (p.lugar && seParecen(p.lugar, p.nombreGoogle))));
