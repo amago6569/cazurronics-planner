@@ -3,6 +3,8 @@
 // del trabajo (ver guion.js). Cada empleado está donde toca según su horario real (vercel.json) y su estado:
 // en su mesa durante su turno, en la cafetería si ya lo ha hecho, dormido en el sofá si se lo ha saltado y
 // esperando en la puerta del jefe si ha fallado. «Anoche en 1 minuto» repite las últimas 24 h con sus cifras.
+// Entre turnos no están quietos: se levantan a hablar entre ellos (lo que se dijeron de verdad, ver vida.js) y, al
+// pulsar «Ver la reunión», los que tienen propuesta van a la mesa redonda y la dicen por turnos.
 // Un dedo mueve la planta, dos dedos (o la rueda) acercan, y tocar a alguien abre su ficha. Ver esto no gasta IA.
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
@@ -11,8 +13,9 @@ import { Html, MapControls } from "@react-three/drei";
 import { PRESS } from "../../../lib/estilos";
 import { dondeEsta, proximoTurno } from "../../../lib/turnos";
 import { CAMISAS, PELOS, PIELES, fmt } from "./monigotes";
-import { BARRA, CAFE_MESAS, CAFE_SITIOS, CAFE_SOFAS, DESTINOS, EDIFICIO, MOSTRADOR, SALAS, colocar, planta } from "./guion";
+import { BARRA, CAFE_MESAS, CAFE_SITIOS, CAFE_SOFAS, DESTINOS, EDIFICIO, MESA_REUNION, MOSTRADOR, SALAS, TABURETES, colocar, planta, sitioReunion } from "./guion";
 import { bocadillosEn, contadores, enVuelo, horaReal, montarRepeticion, poseEn } from "./repeticion";
+import { A_LA_VEZ, CADA, hablandoEn, montarReunionEscena, poseDePaseo, poseDeReunion, siguientePaseo } from "./vida";
 
 // ---------- Materiales y piezas compartidas (low-poly, sin sombras en tiempo real) ----------
 const MATS = new Map();
@@ -32,7 +35,7 @@ const C = {
   suelo: "#c9cdd3", pasillo: "#e3e5e8", pared: "#f3f2ef", marco: "#2b2f36", madera: "#b98552", maderaOscura: "#8a5a35",
   negro: "#23262d", pantalla: "#1d2026", verde: "#4f8f4a", verdeClaro: "#6aa85c", maceta: "#e7e2da", acera: "#d4d6d9", asfalto: "#8f949b",
 };
-const LUZ = { ok: "#22c55e", tarde: "#f59e0b", error: "#ef4444", nuevo: "#38bdf8" };
+const LUZ = { ok: "#22c55e", tarde: "#f59e0b", error: "#ef4444", nuevo: "#38bdf8", descanso: "#a78bfa" };
 const OFFSET = new THREE.Vector3(30, 33, 30);
 const ALTO = 2.8; // paredes exteriores
 
@@ -62,6 +65,18 @@ function crearReloj() {
   };
 }
 const useSegundo = (reloj) => useSyncExternalStore(reloj.subscribe, () => Math.floor(reloj.get() * 8) / 8, () => 0);
+
+// Los bocadillos de la oficina en directo: el director los apunta aquí y solo se repintan cuando cambian
+function crearTablon() {
+  let lista = [], firma = "";
+  const subs = new Set();
+  return {
+    get: () => lista,
+    set(nueva) { const f = nueva.map((b) => `${b.quien}|${b.texto}`).join("~"); if (f !== firma) { firma = f; lista = nueva; subs.forEach((fn) => fn()); } },
+    subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+  };
+}
+const VACIA = [];
 
 // ---------- El edificio ----------
 function Ventana({ x, z, ancho, giro = 0 }) {
@@ -270,8 +285,8 @@ function Cafeteria() {
         <Caja p={[0, 0.55, 0]} s={[0.5, 0.1, 0.42]} c={C.negro} />
         <Cil p={[0, 0.3, 0.2]} r={0.04} h={0.03} m={mat("#f59e0b", { emissive: "#f59e0b", emissiveIntensity: 1 })} rotation={[Math.PI / 2, 0, 0]} />
       </group>
-      {Array.from({ length: 6 }, (_, i) => (
-        <group key={i} position={[-15.2 + i * 0.95, 0, 2.6]}>
+      {TABURETES.map((x) => (
+        <group key={x} position={[x, 0, 2.6]}>
           <Cil p={[0, 0.36, 0]} r={0.03} h={0.72} c={C.marco} />
           <Cil p={[0, 0.74, 0]} r={0.2} h={0.06} c={C.negro} />
         </group>
@@ -356,8 +371,7 @@ function Control({ sinFuente }) {
       </group>
       {/* Mesa de entrada del archivo */}
       <Caja p={[DESTINOS.archivo[0], 0.42, DESTINOS.archivo[2]]} s={[1.4, 0.84, 0.6]} c={C.madera} />
-      <Planta x={-0.5} z={-10.4} alta={1.2} />
-      <Planta x={5.5} z={-10.4} />
+      <Planta x={2.5} z={-10.45} alta={1.2} />
     </group>
   );
 }
@@ -393,6 +407,19 @@ function Escaparate({ planes }) {
         <Caja p={[0, 1.55, 0.045]} s={[1.85, 0.95, 0.01]} m={mat("#fb7185", { emissive: "#fb7185", emissiveIntensity: 0.5 })} />
       </group>
       <Sofa x={5.6} z={8.5} largo={2} color="#e11d48" />
+      {/* Sala de reuniones: mesa redonda con 8 sillas */}
+      <Cil p={[MESA_REUNION[0], 0.74, MESA_REUNION[1]]} r={1.05} h={0.06} c={C.maderaOscura} />
+      <Cil p={[MESA_REUNION[0], 0.37, MESA_REUNION[1]]} r={0.08} h={0.74} c={C.marco} />
+      {Array.from({ length: 8 }, (_, i) => {
+        const s = sitioReunion(i);
+        return (
+          <group key={i} position={[s.pos[0], 0, s.pos[1]]} rotation={[0, s.giro, 0]}>
+            <Caja p={[0, 0.45, 0]} s={[0.44, 0.06, 0.42]} c="#f1f5f9" />
+            <Caja p={[0, 0.72, -0.2]} s={[0.42, 0.5, 0.05]} c="#f1f5f9" />
+            <Cil p={[0, 0.22, 0]} r={0.03} h={0.44} c={C.marco} />
+          </group>
+        );
+      })}
       <Planta x={15.4} z={2} alta={1.3} />
       <Planta x={15.4} z={10.3} />
       {/* En la calle: gente mirando el escaparate (más cuantos más planes) y árboles */}
@@ -452,7 +479,7 @@ function Persona({ e, poses, piel, pelo, camisa, alTocar, semilla, jefe, rotulo 
     const t = clock.elapsedTime + semilla;
     g.current.position.set(p.x, 0, p.z);
     g.current.rotation.y = p.giro || 0;
-    const sentado = ["teclea", "sentado", "duerme", "jefe"].includes(p.modo);
+    const sentado = ["teclea", "sentado", "duerme", "jefe", "reunion"].includes(p.modo);
     const anda = p.modo === "anda";
     cuerpo.current.position.y = sentado ? (p.modo === "duerme" ? -0.38 : -0.32) : anda ? Math.abs(Math.sin(t * 10)) * 0.05 : 0;
     cuerpo.current.rotation.x = p.modo === "duerme" ? -0.25 : p.modo === "teclea" ? 0.06 : 0;
@@ -479,6 +506,13 @@ function Persona({ e, poses, piel, pelo, camisa, alTocar, semilla, jefe, rotulo 
       brazoI.current.rotation.z = 0.5; brazoD.current.rotation.z = -0.5;
       cabeza.current.rotation.z = Math.sin(t * 6) * 0.1;
       piernaD.current.rotation.x = Math.max(0, Math.sin(t * 8)) * -0.3;
+    } else if (p.modo === "habla") {
+      // De pie, hablando con las manos
+      brazoI.current.rotation.x = -0.35 + Math.sin(t * 4) * 0.25; brazoD.current.rotation.x = -0.75 + Math.sin(t * 5 + 1) * 0.45;
+      cabeza.current.rotation.x = Math.sin(t * 6) * 0.06;
+    } else if (p.modo === "reunion") {
+      brazoI.current.rotation.x = brazoD.current.rotation.x = -1.0;
+      cabeza.current.rotation.y = Math.sin(t * 0.6) * 0.25;
     } else if (p.modo === "entrega") {
       brazoI.current.rotation.x = brazoD.current.rotation.x = -1.4;
     } else {
@@ -563,11 +597,13 @@ function Carpetas({ rep, reloj }) {
   ));
 }
 
-// El director: en directo deja a cada uno en su sitio; en la repetición mueve a todos según el reloj
-function Director({ rep, enDirecto, poses, reloj, repitiendo, pausa, alAcabar }) {
+// El director: en directo deja a cada uno en su sitio (y los saca a pasear o a la reunión); en la repetición
+// mueve a todos según el reloj
+function Director({ rep, enDirecto, poses, reloj, repitiendo, pausa, alAcabar, vivos, jefe, charla, movimiento, reunion, alAcabarReunion, tablon }) {
   const s = useRef(0);
   const acabado = useRef(false);
-  useFrame((_, delta) => {
+  const vida = useRef({ paseos: [], i: 0, siguiente: 2, escena: null, reunionHecha: 0 });
+  useFrame(({ clock }, delta) => {
     if (repitiendo && rep && !rep.vacia) {
       if (!pausa) s.current = Math.min(rep.duracion, s.current + Math.min(delta, 0.1));
       reloj.set(s.current);
@@ -577,9 +613,48 @@ function Director({ rep, enDirecto, poses, reloj, repitiendo, pausa, alAcabar })
       if (s.current >= rep.duracion && !acabado.current) { acabado.current = true; alAcabar(); }
       return;
     }
-    for (const [id, p] of Object.entries(enDirecto)) poses.set(id, p);
+    const t = clock.elapsedTime, v = vida.current;
+    // La reunión que has pedido: todos los que proponen, a la mesa redonda
+    if (reunion?.n && reunion.n !== v.reunionHecha) {
+      v.reunionHecha = reunion.n;
+      v.paseos = [];
+      v.escena = montarReunionEscena(reunion.participantes || [], vivos, jefe, t);
+    }
+    if (v.escena && t >= v.escena.fin) { v.escena = null; v.siguiente = t + CADA; alAcabarReunion?.(); }
+    v.paseos = v.paseos.filter((p) => t < p.t3);
+    if (movimiento && !v.escena && t >= v.siguiente && v.paseos.length < A_LA_VEZ) {
+      const r = siguientePaseo({ charla, vivos, ocupados: v.paseos.flatMap((p) => [p.id, p.a]), i: v.i, t0: t, jefe });
+      v.i = r.i;
+      if (r.paseo) v.paseos.push(r.paseo);
+      v.siguiente = t + CADA;
+    }
+    for (const [id, p] of Object.entries(enDirecto)) {
+      const enReunion = v.escena?.paseos.find((x) => x.id === id);
+      poses.set(id, (enReunion && poseDeReunion(enReunion, t)) || poseDePaseo(v.paseos.find((x) => x.id === id), t) || p);
+    }
+    tablon.set([
+      ...v.paseos.filter((p) => hablandoEn(p, t) && p.texto).map((p) => ({ quien: p.id, a: p.a, texto: p.texto })),
+      ...(v.escena?.bocadillos || []).filter((b) => t >= b.s0 && t < b.s1).map((b) => ({ quien: b.quien, texto: b.texto, reunion: true })),
+    ]);
   });
   return null;
+}
+
+// Los bocadillos en directo (paseos y reunión)
+function BocadillosVivos({ tablon, poses, porId }) {
+  const lista = useSyncExternalStore(tablon.subscribe, tablon.get, () => VACIA);
+  return lista.map((b) => {
+    const p = poses.get(b.quien);
+    if (!p) return null;
+    return (
+      <Etiqueta key={`${b.quien}${b.texto}`} position={[p.x, b.reunion ? 2.2 : 2.5, p.z]} center zIndexRange={[40, 20]}>
+        <div className={`cz-fade w-[150px] sm:w-[220px] -translate-y-1/2 rounded-2xl rounded-bl-md px-2.5 py-1.5 text-[12px] leading-snug shadow-[0_12px_30px_-10px_rgba(15,23,42,0.45)] ring-1 select-none ${b.reunion ? "bg-amber-50 text-slate-900 ring-amber-200" : "bg-white text-slate-800 ring-slate-900/5"}`}>
+          <p className="text-[10px] font-bold text-rose-500">{nombreDe(b.quien, porId)}{b.a ? ` → ${nombreDe(b.a, porId)}` : ""}</p>
+          <p className="line-clamp-3">{b.texto}</p>
+        </div>
+      </Etiqueta>
+    );
+  });
 }
 
 // ---------- Cámara isométrica: encuadra la sala elegida y no deja salirse del edificio ----------
@@ -652,7 +727,7 @@ function Rotulos({ rep, reloj, repitiendo, flujo, bandeja }) {
   const cifras = {
     archivo: [c ? `+${fmt(c.archivo)}` : fmt(flujo.agenda), c ? " nuevos" : " en la agenda"],
     buzon: [c ? `+${fmt(c.buzon)}` : fmt(bandeja), c ? " dudosos" : " en tu buzón"],
-    papelera: [c ? `+${fmt(c.papelera)}` : fmt(flujo.sinFuente), " sin fuente"],
+    papelera: [c ? `+${fmt(c.papelera)}` : fmt(flujo.sinFuente), " a revisar"],
   };
   return (
     <>
@@ -709,12 +784,13 @@ function Narrador({ rep, reloj, porId, pausa, setPausa, alParar }) {
   );
 }
 
-export default function Oficina3D({ departamentos, charla = [], golpes = [], bandeja = [], flujo = {}, alElegir, vista = "todo", setVista, repeticion, alAcabarRepeticion }) {
+export default function Oficina3D({ departamentos, charla = [], golpes = [], bandeja = [], flujo = {}, alElegir, vista = "todo", setVista, repeticion, alAcabarRepeticion, movimiento = true, reunion = null, alAcabarReunion }) {
   const sitios = useMemo(() => planta(departamentos), [departamentos]);
   const empleados = useMemo(() => departamentos.flatMap((d) => d.empleados.map((e, i) => ({ ...e, dep: d.id, i }))), [departamentos]);
   const porId = useMemo(() => Object.fromEntries(empleados.map((e) => [e.id, e])), [empleados]);
   const [poses] = useState(() => new Map());
   const [reloj] = useState(crearReloj);
+  const [tablon] = useState(crearTablon);
   const capa = useRef(null);
   const [pausa, setPausa] = useState(false);
 
@@ -728,16 +804,18 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
   }, []);
 
   // En directo: cada uno en su sitio según su turno y su estado
-  const { enDirecto, rotulos, trabajando, siguiente, resto } = useMemo(() => {
-    if (ahora == null) return { enDirecto: {}, rotulos: {}, trabajando: [], siguiente: null, resto: {} };
+  const { enDirecto, rotulos, trabajando, siguiente, resto, vivos } = useMemo(() => {
+    if (ahora == null) return { enDirecto: {}, rotulos: {}, trabajando: [], siguiente: null, resto: {}, vivos: {} };
     const donde = Object.fromEntries(empleados.map((e) => [e.id, dondeEsta(e, ahora)]));
     const sitio = colocar(donde, sitios);
     const enDirecto = { jefe: { x: sitios.jefe.silla[0], z: sitios.jefe.silla[1], giro: 0, modo: "jefe" } };
     const rotulos = {};
     for (const e of empleados) {
+      if (!sitio[e.id]?.sitio) continue;
       const { sitio: s, modo } = sitio[e.id];
       enDirecto[e.id] = { x: s.pos[0], z: s.pos[1], giro: s.giro || 0, modo };
-      if (modo === "teclea") rotulos[e.id] = { texto: `${e.emoji} ${e.nombre}` };
+      if (modo === "teclea") rotulos[e.id] = e.enCurso ? { texto: `🔴 ${e.emoji} ${e.nombre}`, color: "bg-rose-600/90" } : { texto: `${e.emoji} ${e.nombre}` };
+      if (e.descanso) rotulos[e.id] = { texto: "🏖️", color: "bg-violet-500/90" };
       // Los que esperan en la puerta están juntos: sus rótulos, a dos alturas para que no se pisen
       if (modo === "espera") rotulos[e.id] = { texto: `⚠️ ${e.nombre}`, color: "bg-rose-600/90", alto: Object.values(rotulos).filter((r) => r.espera).length % 2 ? 2.9 : 2.35, espera: true };
       if (modo === "duerme") rotulos[e.id] = { texto: "💤", color: "bg-amber-500/90" };
@@ -745,7 +823,7 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
     const trabajando = empleados.filter((e) => donde[e.id] === "mesa");
     const cuenta = (d) => Object.values(donde).filter((x) => x === d).length;
     const prox = empleados.map((e) => ({ e, t: proximoTurno(e.turnos, ahora) })).filter((x) => x.t).sort((a, b) => a.t - b.t)[0] || null;
-    return { enDirecto, rotulos, trabajando, siguiente: prox, resto: { cafe: cuenta("cafe"), sofa: cuenta("sofa"), puerta: cuenta("puerta") } };
+    return { enDirecto, rotulos, trabajando, siguiente: prox, resto: { cafe: cuenta("cafe"), sofa: cuenta("sofa"), puerta: cuenta("puerta") }, vivos: sitio };
   }, [ahora, empleados, sitios]);
 
   // La repetición de las últimas 24 h (se monta al pulsar ▶)
@@ -785,7 +863,7 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
             <Despensa />
             <Negocio />
             <Escaparate planes={flujo.planesAyer || 0} />
-            {empleados.map((e) => <Escritorio key={e.id} x={sitios[e.id].mesa[0]} z={sitios[e.id].mesa[1]} luz={luzDe(e)} />)}
+            {empleados.filter((e) => sitios[e.id]).map((e) => <Escritorio key={e.id} x={sitios[e.id].mesa[0]} z={sitios[e.id].mesa[1]} luz={luzDe(e)} />)}
             {empleados.map((e, i) => (
               <Persona key={e.id} e={e} poses={poses} semilla={i * 1.7} camisa={camisa(e)} piel={PIELES[(i * 7) % PIELES.length]} pelo={PELOS[(i * 5) % PELOS.length]}
                 rotulo={repitiendo ? null : rotulos[e.id]} alTocar={() => alElegir(e)} />
@@ -794,7 +872,9 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
             <Carpetas rep={rep} reloj={reloj} />
             <Rotulos rep={rep} reloj={reloj} repitiendo={repitiendo} flujo={flujo} bandeja={bandeja.length} />
             {rep && !rep.vacia && <Bocadillos rep={rep} reloj={reloj} poses={poses} porId={porId} />}
-            <Director key={repeticion || 0} rep={rep} enDirecto={enDirecto} poses={poses} reloj={reloj} repitiendo={repitiendo} pausa={pausa} alAcabar={alAcabarRepeticion} />
+            {!repitiendo && <BocadillosVivos tablon={tablon} poses={poses} porId={porId} />}
+            <Director key={repeticion || 0} rep={rep} enDirecto={enDirecto} poses={poses} reloj={reloj} repitiendo={repitiendo} pausa={pausa} alAcabar={alAcabarRepeticion}
+              vivos={vivos} jefe={sitios.jefe} charla={charla.slice(-40)} movimiento={movimiento} reunion={reunion} alAcabarReunion={alAcabarReunion} tablon={tablon} />
             <Camara vista={vista} />
           </Canvas>
         </Capa.Provider>

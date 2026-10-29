@@ -1,5 +1,11 @@
 // ============ LA OFICINA (/panel/oficina) ============
 // Cada tarea automática de la web es un "empleado" con su mesa: qué busca, cuándo trabaja y cómo le ha ido.
+//
+// AÑADIR UN EMPLEADO NUEVO (una tarea nueva de la web): basta una entrada aquí, en su departamento.
+//   { id, emoji, nombre, puesto, horario, turno (horas entre turnos), rutas: ["/api/su-cron?param=x"] }
+// y que su tarea deje su parte en Redis (oficina:turno:<id> con { fin, texto, error }). Con eso sale solo su
+// monigote con mesa propia en la sala de su departamento (o en el anexo si la sala está llena), su ficha, su chat,
+// su sitio en «Anoche en 1 minuto» y su hora de turno sacada de vercel.json. Un departamento nuevo va al anexo.
 // El jefe resume el día y avisa de quien va con retraso o con fallos. Funciones puras: el servidor reúne
 // los datos (lib/eventos, lib/despensa...) y aquí solo se ordenan para el panel. No llaman a la IA: 0 €.
 import { EMPLEADOS_BUSCADORES, TIPOS } from "./eventos";
@@ -31,22 +37,34 @@ export const DEPARTAMENTOS = [
   {
     id: "despensa", nombre: "Despensa de León", nota: "Tiendas y productores de producto local",
     empleados: [
-      { id: "despensa-productos", emoji: "🧺", nombre: "Productos", puesto: "Dónde comprar cada producto y lo que pide la gente", horario: "Cada noche", turno: 24 },
-      { id: "despensa-tiendas", emoji: "🏪", nombre: "Tiendas", puesto: "Tiendas de la provincia en Google Maps", horario: "Cada noche", turno: 24 },
-      { id: "despensa-fichas", emoji: "🏅", nombre: "Fichas", puesto: "Premios y especialidades de cada tienda", horario: "Cada tarde", turno: 24 },
+      { id: "despensa-productos", emoji: "🧺", nombre: "Productos", puesto: "Dónde comprar cada producto y lo que pide la gente", horario: "Cada noche", turno: 24, rutas: ["/api/despensa/barrido"] },
+      { id: "despensa-tiendas", emoji: "🏪", nombre: "Tiendas", puesto: "Tiendas de la provincia en Google Maps", horario: "Cada noche", turno: 24, rutas: ["/api/despensa/tiendas"] },
+      { id: "despensa-fichas", emoji: "🏅", nombre: "Fichas", puesto: "Premios y especialidades de cada tienda", horario: "Cada tarde", turno: 24, rutas: ["/api/despensa/fichas"] },
     ],
   },
   {
     id: "negocio", nombre: "Negocio", nota: "Avisos que te llegan por correo",
     empleados: [
-      { id: "captacion", emoji: "📣", nombre: "Captación", puesto: "Te avisa de los locales listos para escribirles", horario: "Cada mañana", turno: 24 },
-      { id: "finde", emoji: "📅", nombre: "Resumen del finde", puesto: "Texto e imágenes del finde para redes", horario: "Jueves por la mañana", turno: 168 },
+      { id: "captacion", emoji: "📣", nombre: "Captación", puesto: "Te avisa de los locales listos para escribirles", horario: "Cada mañana", turno: 24, rutas: ["/api/captacion/aviso"] },
+      { id: "finde", emoji: "📅", nombre: "Resumen del finde", puesto: "Texto e imágenes del finde para redes", horario: "Jueves por la mañana", turno: 168, rutas: ["/api/finde/aviso"] },
+    ],
+  },
+  {
+    id: "control", nombre: "Control de calidad", nota: "Arreglan lo que el barrido deja a medias (lib/guardia.js)",
+    empleados: [
+      { id: "verificador", emoji: "🕵️", nombre: "Verificador", puesto: "Vuelve a comprobar los eventos sin fuente segura: confirma, tira los falsos y sube el resto avisándote", horario: "8:50, 13:50 y 19:50", turno: 12, rutas: ["/api/barrido?guardia=verificador"] },
+      { id: "repesca", emoji: "🚑", nombre: "Repesca", puesto: "Repite las búsquedas que fallaron (Google lento o saturado)", horario: "7:50 y 15:50", turno: 16, rutas: ["/api/barrido?guardia=repesca"] },
     ],
   },
 ];
 
-// Estado de una mesa: "error" (falló la mayoría de su trabajo), "tarde" (se ha saltado su turno), "ok" o "nuevo" (aún no ha trabajado)
-export function estadoEmpleado(emp, parte, ahora = Date.now()) {
+// Las rutas de cron de cada empleado, para saber cuándo le toca: [["/api/despensa/barrido", "despensa-productos"], ...]
+export const RUTAS_EMPLEADOS = DEPARTAMENTOS.flatMap((d) => d.empleados.flatMap((e) => (e.rutas || []).map((r) => [r, e.id])));
+
+// Estado de una mesa: "error" (falló la mayoría de su trabajo), "tarde" (se ha saltado su turno), "ok", "nuevo" (aún no ha
+// trabajado) o "descanso" (la reunión le ha dado unos días libres)
+export function estadoEmpleado(emp, parte, ahora = Date.now(), descanso = null) {
+  if (descanso) return "descanso";
   if (!parte?.fin) return "nuevo";
   if (parte.busquedas && parte.errores >= Math.ceil(parte.busquedas / 2)) return "error";
   if (parte.error) return "error";
@@ -55,11 +73,12 @@ export function estadoEmpleado(emp, parte, ahora = Date.now()) {
 }
 
 // partes = { idEmpleado: { fin, busquedas?, eventos?, descartados?, errores?, texto?, error? } }
-export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {}, rendimiento = {} } = {}, ahora = Date.now()) {
+export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {}, rendimiento = {}, pausas = {}, enCurso = {}, sinConfirmar = 0 } = {}, ahora = Date.now()) {
   const departamentos = DEPARTAMENTOS.map((d) => ({
     ...d,
     empleados: d.empleados.map((e) => ({
-      ...e, parte: partes[e.id] || null, estado: estadoEmpleado(e, partes[e.id], ahora),
+      ...e, parte: partes[e.id] || null, estado: estadoEmpleado(e, partes[e.id], ahora, pausas[e.id]),
+      descanso: pausas[e.id] || null, enCurso: enCurso[e.id] || null,
       // Los que buscan con la IA aceptan órdenes desde su ficha: trabajar ya o un encargo
       ordenes: EMPLEADOS_BUSCADORES.includes(e.id) || e.id === "despensa-productos", encargos: (encargos[e.id] || []).map((x) => x.texto),
       ...(e.id === "despensa-productos" ? { conComarca: true } : {}),
@@ -77,10 +96,13 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
   lineas.push(`El equipo ha encontrado ${encontrados} eventos en su último turno y hay ${agenda} en la agenda de las próximas 3 semanas.`);
   if (nuevosHoy) lineas.push(`Hoy han entrado ${nuevosHoy} eventos nuevos.`);
   if (descartados) lineas.push(`${descartados} se han quedado fuera por no tener una fuente que se pueda comprobar.`);
-  if (bandeja) lineas.push(`Tienes ${bandeja} en tu bandeja esperando tu OK.`);
+  if (bandeja) lineas.push(`${bandeja} ${bandeja === 1 ? "evento espera" : "eventos esperan"} la segunda comprobación del Verificador.`);
+  if (sinConfirmar) lineas.push(`${sinConfirmar} ${sinConfirmar === 1 ? "evento está subido" : "eventos están subidos"} sin fuente segura: échales un ojo.`);
   const pendientes = Object.values(encargos).reduce((s, l) => s + l.length, 0);
   if (pendientes) lineas.push(`Hay ${pendientes} ${pendientes === 1 ? "encargo tuyo pendiente" : "encargos tuyos pendientes"} para el próximo turno.`);
-  if (error.length) lineas.push(`Con fallos: ${error.map((e) => e.nombre).join(", ")}.`);
+  if (error.length) lineas.push(`Con fallos: ${error.map((e) => e.nombre).join(", ")}. La Repesca repite lo que falló.`);
+  const descansan = cuenta("descanso");
+  if (descansan.length) lineas.push(`De descanso: ${descansan.map((e) => e.nombre).join(", ")}.`);
   if (tarde.length) lineas.push(`Van con retraso: ${tarde.map((e) => e.nombre).join(", ")}.${jefe?.repetido ? " Ya he mandado repetir uno." : " Los mando repetir en mi próxima ronda."}`);
   if (!error.length && !tarde.length) lineas.push("Todo el mundo ha cumplido su turno.");
   // Con una semana de datos ya se ve quién busca mucho para nada
@@ -92,7 +114,7 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
     jefe: {
       lineas,
       ronda: jefe?.fin || null,
-      cifras: { equipo: todos.length, alDia: cuenta("ok").length, tarde: tarde.length, error: error.length, encontrados, bandeja, agenda, gastoMes },
+      cifras: { equipo: todos.length, alDia: cuenta("ok").length, tarde: tarde.length, error: error.length, encontrados, bandeja, agenda, gastoMes, sinConfirmar },
     },
   };
 }

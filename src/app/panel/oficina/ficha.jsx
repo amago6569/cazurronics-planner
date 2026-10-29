@@ -1,18 +1,26 @@
 "use client";
 // La ficha que sale al tocar un empleado (en la oficina 3D o en la lista): su último turno y tus órdenes.
+import { useEffect } from "react";
 import { PRESS } from "../../../lib/estilos";
 import { ESTADOS, fmt, hace } from "./monigotes";
 import Ordenes from "./ordenes";
 
 // La ficha que sale al tocar un monigote
-export function FichaEmpleado({ e, jefe, alCerrar, clave, alTerminar }) {
+export function FichaEmpleado({ e, jefe, alCerrar, clave, alTerminar, alHablar }) {
+  // Escape la cierra (teclado)
+  useEffect(() => {
+    if (!e) return;
+    const tecla = (ev) => { if (ev.key === "Escape") alCerrar(); };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [e, alCerrar]);
   if (!e) return null;
   const est = ESTADOS[e.estado] || ESTADOS.ok;
   const p = e.parte;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6" onClick={alCerrar}>
       <div className="absolute inset-0 bg-slate-900/25 backdrop-blur-[2px] cz-fade" />
-      <div onClick={(ev) => ev.stopPropagation()} className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain rounded-[2rem] bg-white/90 backdrop-blur-2xl ring-1 ring-white shadow-[0_30px_80px_-20px_rgba(15,23,42,0.5)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] cz-sheet">
+      <div role="dialog" aria-modal="true" aria-label={e.jefe ? "El jefe" : e.nombre} onClick={(ev) => ev.stopPropagation()} className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain rounded-[2rem] bg-white/90 backdrop-blur-2xl ring-1 ring-white shadow-[0_30px_80px_-20px_rgba(15,23,42,0.5)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] cz-sheet">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-300 sm:hidden" />
         {e.jefe ? (
           <>
@@ -31,12 +39,27 @@ export function FichaEmpleado({ e, jefe, alCerrar, clave, alTerminar }) {
             <p className="text-sm text-slate-600 mt-3">{e.puesto}</p>
             {p?.busquedas != null ? (
               <div className="grid grid-cols-3 gap-2 mt-4">
-                {[["Encontrados", p.eventos], ["Sin fuente", p.descartados], ["Búsquedas", p.busquedas]].map(([t, n]) => (
+                {[["Encontrados", p.eventos], ["A revisar", p.descartados], ["Búsquedas", p.busquedas]].map(([t, n]) => (
                   <div key={t} className="rounded-2xl bg-slate-50 ring-1 ring-slate-900/5 p-3 text-center"><p className="text-xl font-bold tabular-nums text-slate-900">{fmt(n)}</p><p className="text-[11px] text-slate-500">{t}</p></div>
                 ))}
               </div>
             ) : p?.texto && <p className="mt-3 text-sm font-semibold text-slate-800">{p.texto}</p>}
-            {p?.error && <p className="mt-3 text-xs text-rose-600">{p.error}</p>}
+            {e.enCurso && <p className="mt-3 rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2 text-sm font-semibold text-rose-700">🔴 Está trabajando ahora mismo</p>}
+            {e.descanso && <p className="mt-3 rounded-xl bg-violet-50 ring-1 ring-violet-200 px-3 py-2 text-sm text-violet-800">🏖️ De descanso hasta el {e.descanso} (lo decidiste en la reunión). Sus turnos no gastan búsquedas.</p>}
+            {(p?.motivos?.length > 0 || p?.error) && (
+              <div className="mt-3 rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-600">Por qué falló</p>
+                <ul className="mt-1 space-y-1 text-sm text-slate-800">
+                  {(p.motivos?.length ? p.motivos : [{ texto: p.error }]).map((m, i) => <li key={i}>{m.busqueda ? <span className="text-slate-500">{m.busqueda}: </span> : null}{m.texto}</li>)}
+                </ul>
+              </div>
+            )}
+            {p?.descartes?.length > 0 && (
+              <div className="mt-3 rounded-xl bg-slate-50 ring-1 ring-slate-900/5 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Lo último que tiró por falso</p>
+                <ul className="mt-1 space-y-1 text-sm text-slate-700">{p.descartes.map((d) => <li key={d.titulo}>«{d.titulo}»: {d.nota}</li>)}</ul>
+              </div>
+            )}
             {e.rinde?.busquedas > 0 && (
               <p className="mt-3 text-xs text-slate-600 bg-slate-50 ring-1 ring-slate-900/5 rounded-xl px-3 py-2">
                 📈 Últimos {e.rinde.dias} {e.rinde.dias === 1 ? "día" : "días"}: {fmt(e.rinde.busquedas)} búsquedas y <b>{fmt(e.rinde.nuevos)} eventos nuevos</b>
@@ -44,6 +67,7 @@ export function FichaEmpleado({ e, jefe, alCerrar, clave, alTerminar }) {
               </p>
             )}
             <p className="text-xs text-slate-400 mt-4">🕒 {e.horario} · último turno {hace(p?.fin)}</p>
+            {alHablar && <button onClick={() => alHablar(e.id)} className={`${PRESS} mt-4 w-full h-12 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-800 font-semibold`}>💬 Hablar con {e.nombre}</button>}
             {e.ordenes && <Ordenes key={e.id} e={e} clave={clave} alTerminar={alTerminar} />}
           </>
         )}

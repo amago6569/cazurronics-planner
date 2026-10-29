@@ -8,7 +8,8 @@
 import { comando } from "./almacen";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { datosOficina } from "./oficinaDatos";
-import { decidirDudoso, eventosProximos, ordenar, EMPLEADOS_BUSCADORES } from "./eventos";
+import { decidirDudoso, decidirSinConfirmar, eventosProximos, ordenar, pausar, EMPLEADOS_BUSCADORES } from "./eventos";
+import { segundaComprobacion, turnoDeRepesca } from "./guardia";
 import { EMPLEADO_DESPENSA, ordenarDespensa } from "./despensa";
 import { guardarSeguimiento, listarCaptacion, marcarAvisados, DOMINIO } from "./captacion";
 import { BORRADOR, canal, enlaceEnviar, textoBase } from "./mensajeCaptacion";
@@ -35,13 +36,14 @@ export async function parteDiario({ conCaptacion = true } = {}) {
   if (ofi.jefe.cifras.gastoMes != null) lineas.push(`IA este mes: ${ofi.jefe.cifras.gastoMes.toFixed(2).replace(".", ",")} $.`);
   const mensajes = [{ texto: `👔 Parte del jefe\n\n${lineas.map((l) => `· ${l}`).join("\n")}\n\nPanel: ${DOMINIO}/panel/oficina` }];
 
-  for (const e of ofi.bandeja.slice(0, MAX_BANDEJA)) {
+  // Lo que el Verificador subió sin poder confirmarlo: ya está en la web; tú solo dices si se queda
+  for (const e of ofi.sinConfirmar.slice(0, MAX_BANDEJA)) {
     mensajes.push({
-      texto: `📥 Bandeja · ${diaCorto(e.fecha)}${e.hora ? ` ${e.hora}` : ""}\n${e.titulo}\n${[e.lugar, e.localidad].filter(Boolean).join(", ")}\nLo trajo ${nombreDe(e.empleado)}. No se pudo comprobar la fuente${e.fuente ? `: ${e.fuente}` : "."}`,
-      botones: [[{ text: "✅ Subir a la web", callback_data: `b:s:${e.id}` }, { text: "🗑 Tirar", callback_data: `b:t:${e.id}` }]],
+      texto: `⚠️ Subido sin fuente segura · ${diaCorto(e.fecha)}${e.hora ? ` ${e.hora}` : ""}\n${e.titulo}\n${[e.lugar, e.localidad].filter(Boolean).join(", ")}\nLo trajo ${nombreDe(e.empleado)}. Ni el enlace ni Google lo confirman${e.fuente ? `: ${e.fuente}` : "."}`,
+      botones: [[{ text: "👍 Vale", callback_data: `q:v:${e.id}` }, { text: "🗑 Quitar de la web", callback_data: `q:q:${e.id}` }]],
     });
   }
-  if (ofi.bandeja.length > MAX_BANDEJA) mensajes.push({ texto: `…y ${ofi.bandeja.length - MAX_BANDEJA} más en la bandeja del panel.` });
+  if (ofi.sinConfirmar.length > MAX_BANDEJA) mensajes.push({ texto: `…y ${ofi.sinConfirmar.length - MAX_BANDEJA} más en el panel («Hoy te toca»).` });
   if (conCaptacion) mensajes.push(...(await tarjetasCaptacion()));
   return mensajes;
 }
@@ -102,6 +104,12 @@ export async function tarjetasCaptacion({ marcar = true } = {}) {
 export async function pulsarBoton(datos, { chatId } = {}) {
   const [grupo, accion, ...resto] = String(datos || "").split(":");
   const id = resto.join(":");
+  if (grupo === "q") {
+    const r = await decidirSinConfirmar(id, accion === "q" ? "quitar" : "vale");
+    if (!r.exito) return { aviso: r.mensaje || "Ya no está" };
+    await apuntarCharla([{ de: TU, a: "verificador", tipo: "orden", texto: accion === "q" ? "Ese no cuadra: quítalo de la web." : "Ese está bien, déjalo." }]).catch(() => null);
+    return { aviso: accion === "q" ? "Quitado" : "Hecho", cierre: accion === "q" ? "🗑 Quitado de la web (no vuelve en 30 días)" : "👍 Se queda en la web" };
+  }
   if (grupo === "b") {
     const r = await decidirDudoso(id, accion === "s" ? "subir" : "tirar");
     if (!r.exito) return { aviso: r.mensaje || "Ya no está" };
@@ -159,6 +167,78 @@ export async function reescribirMensaje(id, instruccion) {
   if (l.mensajes.enlace && !nuevo.includes(l.mensajes.enlace)) return { exito: false, mensaje: "La IA ha quitado el enlace a su panel y así no vale. Pídemelo de otra forma." };
   await comando(["SET", BORRADOR(id), nuevo, "EX", 14 * 24 * 3600]);
   return { exito: true, texto: nuevo, local: l, recordar };
+}
+
+// ---------- Hablar con cualquier empleado (0 €: sin IA) ----------
+// «busca…/mira…» → encargo para su próximo turno · «ponte/repite/trabaja ya» → repite su turno · lo demás → te cuenta cómo va
+const PIDE_BUSCAR = /^(busca|buscad|mira|mirad|investiga|encuentra|apunta|averigua)\b|\b(que busques|puedes buscar|podrías buscar|búscame|mírame)\b/i;
+const PIDE_TRABAJAR = /\b(ponte|repite|repítelo|trabaja|curra|ahora mismo|ya mismo|dale caña)\b/i;
+const hace = (iso) => { if (!iso) return "todavía no"; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `hace ${m} min` : m < 2880 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`; };
+
+export function estadoEnPalabras(e) {
+  const p = e.parte || {};
+  const l = [];
+  if (e.descanso) l.push(`Estoy de descanso hasta el ${e.descanso}.`);
+  if (e.enCurso) l.push("Ahora mismo estoy trabajando.");
+  l.push(p.fin ? `Mi último turno fue ${hace(p.fin)}${p.busquedas != null ? `: ${p.busquedas} búsquedas, ${p.eventos || 0} eventos con fuente${p.descartados ? ` y ${p.descartados} sin fuente segura` : ""}` : p.texto ? `: ${p.texto}` : ""}.` : "Aún no he trabajado ningún turno.");
+  if (p.motivos?.length) l.push(`Lo que falló: ${p.motivos[0].texto}`);
+  else if (p.error) l.push(`Lo que falló: ${p.error}`);
+  if (e.rinde?.busquedas) l.push(`En ${e.rinde.dias} días llevo ${e.rinde.nuevos} eventos nuevos.`);
+  if (e.encargos?.length) l.push(`Tengo pendiente: ${e.encargos.map((t) => `«${t}»`).join(", ")}.`);
+  l.push(`Trabajo: ${String(e.horario || "").toLowerCase()}.`);
+  if (e.ordenes) l.push("Si quieres que busque algo, dime «busca …».");
+  return l.join(" ");
+}
+
+// Devuelve { respuesta, orden? }
+export async function hablarConEmpleado(id, texto) {
+  const e = EMPLEADOS.find((x) => x.id === id);
+  if (!e) return { respuesta: "No encuentro a ese empleado." };
+  const limpio = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  if (!limpio) return { respuesta: "Dime." };
+  await apuntarCharla([{ de: TU, a: id, tipo: "chat", texto: limpio }]).catch(() => null);
+  let respuesta, orden = null;
+  if ((id === "verificador" || id === "repesca") && PIDE_TRABAJAR.test(limpio)) {
+    const r = id === "verificador" ? await segundaComprobacion() : await turnoDeRepesca();
+    respuesta = `Hecho. ${r.texto}.`;
+    orden = { empleado: id, accion: "trabajar", exito: true };
+  } else if (EMPLEADOS_BUSCADORES.includes(id) && PIDE_BUSCAR.test(limpio)) {
+    const r = await ordenar({ empleado: id, accion: "encargo", texto: limpio, ya: false });
+    respuesta = r.exito ? `Apuntado: lo busco en mi próximo turno (0 €). ${String(e.horario || "")}.` : `No puedo: ${r.mensaje}`;
+    orden = { empleado: id, accion: "encargo", exito: !!r.exito };
+  } else if (id === EMPLEADO_DESPENSA && PIDE_BUSCAR.test(limpio)) {
+    const r = await ordenarDespensa({ accion: "encargo", texto: limpio, ya: false, zona: "leon" });
+    respuesta = r.exito ? "Apuntado: lo busco esta noche (0 €)." : `No puedo: ${r.mensaje}`;
+    orden = { empleado: id, accion: "encargo", exito: !!r.exito };
+  } else if (EMPLEADOS_BUSCADORES.includes(id) && PIDE_TRABAJAR.test(limpio)) {
+    const r = await ordenar({ empleado: id, accion: "trabajar" });
+    respuesta = r.exito ? `Hecho: ${r.parte?.nuevos || 0} eventos nuevos en ${r.parte?.busquedas || 0} búsquedas.` : `No puedo: ${r.mensaje}`;
+    orden = { empleado: id, accion: "trabajar", exito: !!r.exito };
+  } else {
+    const ofi = await datosOficina();
+    const yo = ofi.departamentos.flatMap((d) => d.empleados).find((x) => x.id === id);
+    respuesta = yo ? estadoEnPalabras(yo) : "Ahora no puedo mirar mis datos.";
+  }
+  await apuntarCharla([{ de: id, a: TU, tipo: "chat", texto: respuesta.slice(0, 220) }]).catch(() => null);
+  return { respuesta, orden };
+}
+
+// Las decisiones de la reunión: { tipo: "descanso" | "volver", empleado, dias } · { tipo: "guardia", que }
+export async function decidirReunion(accion = {}) {
+  if (accion.tipo === "descanso" || accion.tipo === "volver") {
+    const r = await pausar(accion.empleado, accion.tipo === "descanso" ? accion.dias || 7 : 0);
+    if (!r.exito) return r;
+    await apuntarCharla([
+      { de: TU, a: accion.empleado, tipo: "orden", texto: accion.tipo === "descanso" ? "Vale, descansa unos días." : "Vuelve a tu turno." },
+      { de: accion.empleado, a: TU, tipo: "chat", texto: accion.tipo === "descanso" ? `Gracias. Vuelvo el ${r.hasta}.` : "Mañana estoy en mi mesa." },
+    ]).catch(() => null);
+    return { exito: true, mensaje: accion.tipo === "descanso" ? `${nombreDe(accion.empleado)} descansa hasta el ${r.hasta}.` : `${nombreDe(accion.empleado)} vuelve a su turno.` };
+  }
+  if (accion.tipo === "guardia") {
+    const r = accion.que === "verificador" ? await segundaComprobacion() : await turnoDeRepesca();
+    return { exito: true, mensaje: r.texto };
+  }
+  return { exito: false, mensaje: "Esa propuesta no se puede aplicar desde aquí" };
 }
 
 // ---------- Hablar con el jefe ----------

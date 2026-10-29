@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { claveConFreno, respuestaClave } from "../../../../lib/freno";
 import { claveDePanelValida } from "../../../../lib/lugares";
-import { decidirDudoso, ordenar } from "../../../../lib/eventos";
+import { decidirDudoso, decidirSinConfirmar, ordenar } from "../../../../lib/eventos";
+import { descartarPropuesta } from "../../../../lib/reunion";
 import { EMPLEADO_DESPENSA, ordenarDespensa } from "../../../../lib/despensa";
 import { datosOficina } from "../../../../lib/oficinaDatos";
-import { hablarConJefe, pulsarBoton, reescribirMensaje } from "../../../../lib/jefe";
+import { decidirReunion, hablarConEmpleado, hablarConJefe, pulsarBoton, reescribirMensaje } from "../../../../lib/jefe";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // una orden de "trabajar ya" es un turno entero
@@ -16,6 +17,9 @@ export const maxDuration = 60; // una orden de "trabajar ya" es un turno entero
 //  · POST { empleado, accion: "encargo", texto, ya } → encargo para su próximo turno, o al momento si ya = true
 //    (a "despensa-productos" el encargo lleva también la comarca: { zona })
 //  · POST { chat: "texto" } → le escribes al jefe: responde o lo convierte en una orden (~0,0001 $)
+//  · POST { chat: "texto", para: "musica" } → le escribes a un empleado: te cuenta cómo va o apunta el encargo (0 €)
+//  · POST { aviso: id, accion: "vale" | "quitar" } → un evento subido sin fuente segura: se queda o fuera de la web
+//  · POST { reunion: id, accion: "si" | "no", propuesta } → tu respuesta a una propuesta de la reunión del equipo
 //  · POST { local, accion: "enviado" | "recordado" | "no" } → «Hoy te toca»: le has escrito (o no se le escribe)
 //  · POST { local, accion: "cambiar", texto } → la IA reescribe su mensaje con tu indicación (~0,0001 $)
 async function acceso(request) {
@@ -42,10 +46,29 @@ export async function POST(request) {
   const cuerpo = await request.json().catch(() => ({}));
   if (typeof cuerpo.chat === "string") {
     try {
+      if (typeof cuerpo.para === "string" && cuerpo.para !== "jefe") return NextResponse.json({ exito: true, ...(await hablarConEmpleado(cuerpo.para, cuerpo.chat)) });
       return NextResponse.json({ exito: true, ...(await hablarConJefe(cuerpo.chat, { desde: "panel" })) });
     } catch (e) {
       console.error("[oficina] chat", e);
       return NextResponse.json({ exito: false, mensaje: "El jefe no contesta ahora mismo. Prueba en un minuto." }, { status: 500 });
+    }
+  }
+  if (typeof cuerpo.aviso === "string") {
+    if (!["vale", "quitar"].includes(cuerpo.accion)) return NextResponse.json({ exito: false }, { status: 400 });
+    try {
+      return NextResponse.json(await decidirSinConfirmar(cuerpo.aviso, cuerpo.accion));
+    } catch (e) {
+      return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    }
+  }
+  if (typeof cuerpo.reunion === "string") {
+    try {
+      if (cuerpo.accion === "no") { await descartarPropuesta(cuerpo.reunion); return NextResponse.json({ exito: true, mensaje: "Apuntado: no vuelve a salir en 7 días." }); }
+      const a = cuerpo.propuesta || {};
+      return NextResponse.json(await decidirReunion({ tipo: a.tipo, empleado: a.empleado, dias: a.dias, que: a.que }));
+    } catch (e) {
+      console.error("[oficina] reunión", e);
+      return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
     }
   }
   if (typeof cuerpo.local === "string") {

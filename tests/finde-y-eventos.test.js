@@ -152,7 +152,7 @@ describe("oficina: parte del jefe", () => {
     expect(mesa("pueblos").estado).toBe("error");
     expect(mesa("teatros").estado).toBe("nuevo");
     expect(o.jefe.lineas.join(" ")).toMatch(/Van con retraso: Noche/);
-    expect(o.jefe.lineas.join(" ")).toMatch(/2 en tu bandeja/);
-    expect(o.jefe.cifras.equipo).toBe(23);
+    expect(o.jefe.lineas.join(" ")).toMatch(/2 eventos esperan la segunda comprobación del Verificador/);
+    expect(o.jefe.cifras.equipo).toBe(25);
   });
 });

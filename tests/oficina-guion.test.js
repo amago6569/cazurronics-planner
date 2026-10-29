@@ -1,6 +1,6 @@
 // npm test — El edificio de la oficina 3D: salas, rutas, dónde está cada uno y «Anoche en 1 minuto»
 import { describe, expect, it } from "vitest";
-import { DEPARTAMENTOS } from "../src/lib/oficina";
+import { DEPARTAMENTOS, RUTAS_EMPLEADOS } from "../src/lib/oficina";
 import { dondeEsta, enTurno, leerCron, proximoTurno, quienesDeRuta, turnosDeCrons } from "../src/lib/turnos";
 import { CAFE_SITIOS, SALAS, colocar, entrega, largo, planta, puertaJefe, puntoEn, ruta } from "../src/app/panel/oficina/guion";
 import { contadores, horaReal, montarRepeticion, poseEn } from "../src/app/panel/oficina/repeticion";
@@ -60,12 +60,15 @@ describe("edificio", () => {
 
 describe("turnos", () => {
   const deTramo = { t0: ["musica", "escena", "junta"], m3: ["pueblos"] };
-  const turnos = turnosDeCrons(vercel.crons, deTramo);
+  const turnos = turnosDeCrons(vercel.crons, deTramo, RUTAS_EMPLEADOS);
 
   it("lee los crons de vercel.json y sabe quién trabaja en cada uno", () => {
     expect(leerCron("30 3 * * 0,3")).toEqual({ hora: 3, min: 30, dias: [0, 3] });
     expect(quienesDeRuta("/api/barrido?jefe=1")).toEqual(["jefe"]);
-    expect(quienesDeRuta("/api/despensa/tiendas?pasada=2")).toEqual(["despensa-tiendas"]);
+    expect(quienesDeRuta("/api/despensa/tiendas?pasada=2", {}, RUTAS_EMPLEADOS)).toEqual(["despensa-tiendas"]);
+    expect(quienesDeRuta("/api/barrido?guardia=verificador", {}, RUTAS_EMPLEADOS)).toEqual(["verificador"]);
+    expect(turnos.verificador).toHaveLength(3);
+    expect(turnos.repesca).toHaveLength(2);
     expect(turnos.musica).toEqual([{ hora: 2, min: 15, dias: null, tramo: "t0" }]);
     expect(turnos["despensa-productos"]).toHaveLength(3);
     expect(turnos.pueblos[0].dias).toEqual([0, 3]);

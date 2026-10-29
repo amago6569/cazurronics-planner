@@ -18,8 +18,8 @@ export const SALAS = {
   negocio: { rotulo: [2.5, 10.6], x0: 0, x1: 5, z0: 1.2, z1: 11, puerta: [2.5, 1.2], nombre: "Negocio", corto: "Negocio", emoji: "📣", suelo: "#d8d4e3" },
   escaparate: { rotulo: [10.5, 10.6], x0: 5, x1: 16, z0: 1.2, z1: 11, puerta: [7.5, 1.2], nombre: "Escaparate", corto: "Escaparate", emoji: "🪟", suelo: "#d9dbe0" },
 };
-// Cada departamento trabaja en su sala
-export const SALA_DE = { agenda: "busqueda", territorio: "busqueda", despensa: "despensa", negocio: "negocio" };
+// Cada departamento trabaja en su sala. Uno nuevo (o una sala llena) va al anexo, en el escaparate
+export const SALA_DE = { agenda: "busqueda", territorio: "busqueda", despensa: "despensa", negocio: "negocio", control: "control" };
 
 // Sala de búsqueda: 3 filas de 6 mesas con un pasillo en medio (agenda delante… detrás, territorio en la última)
 const COLS_BUSQUEDA = [-14.2, -12, -9.8, -7, -4.8, -2.6], FILAS_BUSQUEDA = [-8.6, -5.6, -2.6], EJE_BUSQUEDA = -8.4;
@@ -30,31 +30,74 @@ function mesa(id, sala, x, z, salida) {
   return { id, sala, mesa: [x, z], silla, pos: silla, giro: 0, salida: [silla, ...salida, SALAS[sala].puerta] };
 }
 
+// El hueco n de cada sala (null si está llena). Cada uno: [x, z de la mesa, camino de la silla a la puerta]
+const HUECOS = {
+  busqueda: (n) => {
+    if (n >= 18) return null;
+    const x = COLS_BUSQUEDA[n % 6], z = FILAS_BUSQUEDA[Math.floor(n / 6)];
+    return [x, z, [[x, z - DETRAS], [EJE_BUSQUEDA, z - DETRAS]]];
+  },
+  despensa: (n) => (n < 3 ? [[-4.6, -3, -1.4][n], 4.6, [[[-4.6, -3, -1.4][n], 2.6], [-3, 2.6]]] : null),
+  negocio: (n) => (n < 2 ? [[1.4, 3.6][n], 4.6, [[[1.4, 3.6][n], 2.6], [2.5, 2.6]]] : null),
+  // Control de fuentes: dos mesas al fondo; se sale rodeando el mostrador
+  control: (n) => {
+    if (n >= 2) return null;
+    const x = [0.9, 4.1][n], fuera = [-0.4, 5.4][n];
+    return [x, -9, [[x, -10.4], [fuera, -10.4], [fuera, -3.2], [2.5, -3.2]]];
+  },
+  // Anexo (en el escaparate): para departamentos nuevos o salas llenas
+  anexo: (n) => {
+    if (n < 3) { const x = [7.2, 9.6, 11.8][n]; return [x, 3.4, [[x, 2.0], [7.5, 2.0]]]; }
+    if (n < 5) { const x = [7.2, 9.2][n - 3]; return [x, 10.2, [[10.4, 10.2 - SILLA], [10.4, 2.6], [7.5, 2.6]]]; }
+    return null;
+  },
+};
+
 export function planta(departamentos = []) {
   const sitios = {};
+  const usados = {};
+  const coger = (sala) => {
+    const n = usados[sala] || 0;
+    const h = HUECOS[sala]?.(n);
+    if (!h) return null;
+    usados[sala] = n + 1;
+    return h;
+  };
   for (const d of departamentos) {
-    d.empleados.forEach((e, i) => {
-      if (d.id === "agenda" || d.id === "territorio") {
-        const n = d.id === "agenda" ? i : 12 + i;
-        const x = COLS_BUSQUEDA[n % 6], z = FILAS_BUSQUEDA[Math.min(2, Math.floor(n / 6))];
-        sitios[e.id] = mesa(e.id, "busqueda", x, z, [[x, z - DETRAS], [EJE_BUSQUEDA, z - DETRAS]]);
-      } else if (d.id === "despensa") {
-        const x = [-4.6, -3, -1.4][i % 3];
-        sitios[e.id] = mesa(e.id, "despensa", x, 4.6, [[x, 2.6], [-3, 2.6]]);
-      } else if (d.id === "negocio") {
-        const x = [1.4, 3.6][i % 2];
-        sitios[e.id] = mesa(e.id, "negocio", x, 4.6, [[x, 2.6], [2.5, 2.6]]);
-      }
-    });
+    for (const e of d.empleados) {
+      let sala = SALA_DE[d.id] || "anexo";
+      let h = coger(sala);
+      if (!h && sala !== "anexo") { sala = "anexo"; h = coger(sala); }
+      if (!h) continue; // no cabe: sale en la lista y en el chat, pero sin mesa en el 3D
+      const [x, z, camino] = h;
+      sitios[e.id] = mesa(e.id, sala === "anexo" ? "escaparate" : sala, x, z, camino);
+    }
   }
   sitios.jefe = mesa("jefe", "despacho", 13.5, -6.2, [[12.2, -6.95], [12.2, -2.2], [13.5, -2.2]]);
   return sitios;
+}
+
+// ---------- Sala de reuniones (en el escaparate): mesa redonda con 8 sillas ----------
+export const MESA_REUNION = [12.6, 8.6];
+export function sitioReunion(i = 0) {
+  const a = (i % 8) * (Math.PI / 4) + Math.PI / 8;
+  const [cx, cz] = MESA_REUNION;
+  const pos = [cx + Math.sin(a) * 1.55, cz + Math.cos(a) * 1.55];
+  const lado = pos[1] > cz ? 10.55 : 6.6;
+  return { id: `reunion-${i % 8}`, sala: "escaparate", pos, giro: Math.atan2(cx - pos[0], cz - pos[1]), salida: [pos, [pos[0], lado], [10.4, lado], [10.4, 2.6], [7.5, 2.6], SALAS.escaparate.puerta] };
+}
+
+// Ir a hablar con alguien: un paso al lado de donde está (su silla, su sitio en la cafetería o la puerta del jefe)
+export function visita(sitio) {
+  const pos = [sitio.pos[0] + 0.75, sitio.pos[1] + 0.25];
+  return { id: `visita-${sitio.id}`, sala: sitio.sala, pos, giro: -Math.PI / 2, salida: [pos, ...sitio.salida.slice(1)] };
 }
 
 // ---------- Cafetería: mesas redondas, barra y sofás ----------
 export const CAFE_MESAS = [[-12.2, 5.6], [-9.2, 5.6], [-12.2, 8.8], [-9.2, 8.8]];
 export const CAFE_SOFAS = [[-15.15, 6.0], [-15.15, 9.0]];
 export const BARRA = { x0: -15.7, x1: -9.9, z: 1.85 };
+export const TABURETES = Array.from({ length: 8 }, (_, i) => -15.35 + i * 0.72);
 const A_CAFE = [-7, 3.6]; // nada más entrar
 
 function sitioCafe(tipo, pos, giro, camino) {
@@ -72,8 +115,7 @@ export const CAFE_SITIOS = (() => {
       sitioCafe("mesa", [tx + 0.85, tz], -Math.PI / 2, [[tx + 0.85, zc], ...calle]),
     ];
   });
-  const barra = Array.from({ length: 6 }, (_, i) => {
-    const x = -15.2 + i * 0.95;
+  const barra = TABURETES.map((x) => {
     return sitioCafe("barra", [x, 2.6], Math.PI, [[x, 3.6]]);
   });
   const sofas = CAFE_SOFAS.flatMap(([sx, sz]) => [-0.7, 0, 0.7].map((dz) => sitioCafe("sofa", [sx + 0.1, sz + dz], Math.PI / 2, [[-14.2, sz + dz], [-14.2, 3.6]])));

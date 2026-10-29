@@ -41,8 +41,8 @@ export function charlaDeTurno(porEmpleado = {}) {
   for (const [id, r] of Object.entries(porEmpleado)) {
     if (r.encargo) lineas.push({ de: JEFE, a: id, tipo: "orden", texto: `Alejandro te pide: «${String(r.encargo).slice(0, 80)}». Míralo en este turno.` });
     if (r.error) {
-      lineas.push({ de: id, a: JEFE, tipo: "fallo", texto: `No he podido terminar: ${String(r.error).slice(0, 80)}` });
-      lineas.push({ de: JEFE, a: id, tipo: "fallo", texto: una(["Tranquilo, lo repites en mi próxima ronda.", "Vale, te lo vuelvo a mandar luego."], id) });
+      lineas.push({ de: id, a: JEFE, tipo: "fallo", texto: `No he podido terminar: ${String(r.error).slice(0, 120)}` });
+      lineas.push({ de: JEFE, a: id, tipo: "fallo", texto: una(["Tranquilo, se lo paso a la Repesca.", "Vale, la Repesca lo repite en unas horas."], id) });
       continue;
     }
     const entran = r.entran || [];
@@ -56,8 +56,8 @@ export function charlaDeTurno(porEmpleado = {}) {
       lineas.push({ de: JEFE, a: id, tipo: "repetido", texto: repetidos.length === 1 ? "Sí, ya estaba en la agenda. Busca lo que no tengamos." : `Sí, y ${plural(repetidos.length - 1, "otro", "otros")} más que traes también. Busca lo que no tengamos.` });
     }
     if (r.dudosos?.length) {
-      lineas.push({ de: id, a: JEFE, tipo: "duda", texto: `${titulos(r.dudosos, 1)} no lo puedo comprobar en ninguna web. ¿Lo miras?` });
-      lineas.push({ de: JEFE, a: TU, tipo: "duda", texto: `Te dejo ${plural(r.dudosos.length, "evento", "eventos")} en la bandeja para que decidas.` });
+      lineas.push({ de: id, a: JEFE, tipo: "duda", texto: `${titulos(r.dudosos, 1)} no lo puedo comprobar en ninguna web.` });
+      lineas.push({ de: JEFE, a: "verificador", tipo: "duda", texto: `Verificador, mira ${r.dudosos.length === 1 ? "ese" : `esos ${r.dudosos.length}`} antes de subirlo${r.dudosos.length === 1 ? "" : "s"}.` });
     }
     if (!entran.length && !repetidos.length && !r.dudosos?.length && r.busquedas) {
       lineas.push({ de: JEFE, a: id, tipo: "nada", texto: "¿Cómo vas?" });

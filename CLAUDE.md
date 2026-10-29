@@ -23,8 +23,13 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 
 - No toques el contrato de `/api/plan`, `/api/retocar` ni el envío a Google Apps Script (`NEXT_PUBLIC_GAS_BUSINESS_URL`) salvo que se pida.
 - Los rediseños cambian la parte visual. Los estados de React y las llamadas al servidor se quedan como estaban.
-- Solo se publican eventos con fuente comprobada, y los bares y restaurantes sin ficha real en Google Places se descartan. Mantén esos filtros.
+- Eventos: lo de fuente comprobada se publica; lo dudoso pasa por el Verificador (`lib/guardia.js`): confirmado → web, desmentido o enlace roto → fuera, sin confirmar → web marcado «por confirmar» y aviso a Alejandro (panel y Telegram) para que lo quite si no cuadra. Regla suya del 29-10-2026: «que los suba pero que me deje un mensaje». Los bares y restaurantes sin ficha real en Google Places se descartan. Mantén esos filtros.
 - Los crons de `vercel.json` llevan horas escalonadas para no saturar la cuota. Si añades uno, ponlo en una hora libre.
+
+## Oficina (/panel/oficina)
+
+- Cada tarea automática es un empleado. Para meter uno nuevo basta una entrada en `DEPARTAMENTOS` de `src/lib/oficina.js` (con `rutas` de su cron) y que su tarea guarde `oficina:turno:<id>`: sale solo su monigote, su mesa (o el anexo), su ficha y su chat.
+- Los fallos se guardan con su motivo en cristiano (`motivoClaro` en `lib/gemini.js`) y la Repesca los repite. No vuelvas a guardar solo «Error en la IA».
 
 ## Diseño
 

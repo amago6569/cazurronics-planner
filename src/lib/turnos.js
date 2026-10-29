@@ -12,23 +12,29 @@ export function leerCron(s) {
   return { hora: Number(hora), min: Number(min), dias: dias === "*" || dias == null ? null : dias.split(",").map(Number) };
 }
 
+// Rutas que no son de un empleado de la lista (el resto las declara cada empleado en lib/oficina.js → rutas)
+const RUTAS_FIJAS = [["/api/telegram/diario", "jefe"], ["/api/barrido?jefe=1", "jefe"], ["/api/barrido?jefe=2", "jefe"]];
+// Una ruta de cron casa con la de un empleado si el camino es el mismo y lleva sus mismos parámetros
+function casa(u, patron) {
+  const p = new URL(patron, "http://x");
+  return p.pathname === u.pathname && [...p.searchParams].every(([k, v]) => u.searchParams.get(k) === v);
+}
+
 // Qué empleados trabajan en cada ruta de cron. deTramo = { t0: ["musica", "escena", "junta"], ... }
-export function quienesDeRuta(ruta, deTramo = {}) {
+// rutas = [["/api/despensa/barrido", "despensa-productos"], ...] (RUTAS_EMPLEADOS de lib/oficina.js)
+export function quienesDeRuta(ruta, deTramo = {}, rutas = []) {
   const u = new URL(ruta, "http://x");
-  if (u.pathname === "/api/barrido") return u.searchParams.has("jefe") ? ["jefe"] : deTramo[u.searchParams.get("tramo")] || [];
-  return {
-    "/api/despensa/barrido": ["despensa-productos"], "/api/despensa/tiendas": ["despensa-tiendas"], "/api/despensa/fichas": ["despensa-fichas"],
-    "/api/captacion/aviso": ["captacion"], "/api/finde/aviso": ["finde"], "/api/telegram/diario": ["jefe"],
-  }[u.pathname] || [];
+  if (u.pathname === "/api/barrido" && u.searchParams.has("tramo")) return deTramo[u.searchParams.get("tramo")] || [];
+  return [...new Set([...RUTAS_FIJAS, ...rutas].filter(([p]) => casa(u, p)).map(([, id]) => id))];
 }
 
 // crons = vercel.json → crons. Devuelve { empleado: [{ hora, min, dias, tramo }] } ordenado por hora
-export function turnosDeCrons(crons = [], deTramo = {}) {
+export function turnosDeCrons(crons = [], deTramo = {}, rutas = []) {
   const t = {};
   for (const c of crons) {
     const cron = leerCron(c.schedule);
     const tramo = new URL(c.path, "http://x").searchParams.get("tramo");
-    for (const id of quienesDeRuta(c.path, deTramo)) (t[id] ||= []).push({ ...cron, ...(tramo ? { tramo } : {}) });
+    for (const id of quienesDeRuta(c.path, deTramo, rutas)) (t[id] ||= []).push({ ...cron, ...(tramo ? { tramo } : {}) });
   }
   for (const l of Object.values(t)) l.sort((a, b) => a.hora * 60 + a.min - (b.hora * 60 + b.min));
   return t;
@@ -55,7 +61,10 @@ export const proximoTurno = (turnos, ahora) => inicios(turnos, ahora + 1, ahora 
 export const turnosAlDia = (turnos = []) => turnos.filter((t) => !t.dias).length;
 
 // "mesa" | "puerta" (ha fallado: espera al jefe) | "sofa" (se ha saltado el turno) | "cafe"
+// enCurso: está trabajando ahora mismo de verdad (la tarea lo apunta al empezar) · descanso: la reunión le dio días libres
 export function dondeEsta(e, ahora) {
+  if (e.enCurso) return "mesa";
+  if (e.descanso) return "cafe";
   if (enTurno(e.turnos, ahora)) return "mesa";
   if (e.estado === "error") return "puerta";
   if (e.estado === "tarde") return "sofa";

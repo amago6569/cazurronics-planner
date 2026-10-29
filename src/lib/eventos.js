@@ -12,7 +12,7 @@ import { haversineKm } from "./planUtils";
 import { hoyEnLeon } from "./estadisticas";
 import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
-import { llamarGemini as llamarGeminiConPlanB, extraerJSON } from "./gemini";
+import { llamarGemini as llamarGeminiConPlanB, extraerJSON, motivoClaro } from "./gemini";
 import { fuentesPara } from "./intencion";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeTurno } from "./charla";
@@ -131,8 +131,9 @@ const diaDeLaSemana = (fecha) => new Date(`${fecha}T12:00:00Z`).getUTCDay();
 // Las búsquedas del barrido usan modelos "lite" con su propia cuota (ver lib/gemini.js),
 // para no quitarle cuota a los planes de la gente
 // maxSalida: tope de texto por búsqueda (lo que más se paga). Si se corta, extraerListaJSON salva lo completo.
-async function llamarGemini(prompt, msMax = 50000, tarea = "barrido-eventos") {
-  return llamarGeminiConPlanB(prompt, { para: "barrido", tarea, temperatura: 0.1, msMax, maxSalida: 8192 });
+// msPorModelo: si el primer modelo se cuelga, el segundo aún tiene tiempo (antes el primero se comía los 42 s)
+async function llamarGemini(prompt, msMax = 50000, tarea = "barrido-eventos", msPorModelo = 0) {
+  return llamarGeminiConPlanB(prompt, { para: "barrido", tarea, temperatura: 0.1, msMax, msPorModelo, maxSalida: 8192 });
 }
 
 // La lista de eventos de la respuesta (aunque venga con ```json, frases o citas "[1]" alrededor).
@@ -367,7 +368,7 @@ export function yaConocidos(agenda, { desde, hasta, zona, municipio }, max = 60)
   return lineas;
 }
 
-async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta, extra, conocidos = [] }, msMax = 42000) {
+async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta, extra, conocidos = [] }, msMax = 44000) {
   const prompt = `
     Eres el documentalista de Cazurronics Planner. Busca en Internet ${tema} en ${donde || "León capital y en la provincia de León (España)"}
     que se celebren entre el ${desde} y el ${hasta}, ambos incluidos.
@@ -382,7 +383,7 @@ async function fuenteBusqueda({ tema, pistas, donde, zona, desde, hasta, extra, 
     Devuelve SOLO un array JSON (máximo 30 elementos) con este formato:
     ${FORMATO_EVENTO}
   `;
-  const { texto, dominios } = await llamarGemini(prompt, msMax);
+  const { texto, dominios } = await llamarGemini(prompt, msMax, "barrido-eventos", Math.min(30000, msMax));
   const eventos = extraerListaJSON(texto).map((e) => validarEventoIA(e, desde, hasta)).filter(Boolean)
     .map((e) => (zona ? { ...e, zonaBusqueda: zona } : e)); // pista de zona por si el evento no trae municipio
   return { eventos, dominios };
@@ -398,11 +399,12 @@ export function dominioConsultado(url, dominios) {
 }
 
 // "ok" (la página existe) · "mal" (404, 410 o dominio inexistente) · "duda" (no se pudo saber a tiempo)
-export async function comprobarUrl(url, ms = 3500) {
+// sinRango: la segunda comprobación pide la página entera (hay webs que contestan mal a "Range")
+export async function comprobarUrl(url, ms = 3500, { sinRango = false } = {}) {
   try {
     const r = await fetch(url, {
       method: "GET", redirect: "follow", cache: "no-store", signal: AbortSignal.timeout(ms),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; CazurronicsBot/1.0; +https://cazurronics.es)", Range: "bytes=0-4096" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; CazurronicsBot/1.0; +https://cazurronics.es)", ...(sinRango ? {} : { Range: "bytes=0-4096" }) },
     });
     try { await r.body?.cancel(); } catch {}
     if (r.status === 404 || r.status === 410) return "mal";
@@ -450,7 +452,7 @@ async function enTandas(tareas, maximo = 6) {
 }
 
 // ---------- Fusión ----------
-function claveEvento(e) {
+export function claveEvento(e) {
   return `${e.fecha}|${normalizar(e.titulo).replace(/[^a-z0-9]/g, "").slice(0, 32)}`;
 }
 
@@ -474,10 +476,11 @@ export function fusionarPorDia(listas, desde, hasta) {
 }
 
 // Ejecuta UN tramo del barrido (o los diarios, uno detrás de otro, si no se dice cuál)
-export async function barrerEventos({ tramo } = {}) {
+// respetarPausas: los crons se saltan a quien la reunión haya mandado a descansar (las órdenes tuyas, no)
+export async function barrerEventos({ tramo, respetarPausas = false } = {}) {
   if (tramo == null) {
     let ultimo = null;
-    for (const id of TRAMOS_DIARIOS) ultimo = await barrerEventos({ tramo: id });
+    for (const id of TRAMOS_DIARIOS) ultimo = await barrerEventos({ tramo: id, respetarPausas });
     return ultimo;
   }
   const id = idTramo(tramo);
@@ -488,8 +491,10 @@ export async function barrerEventos({ tramo } = {}) {
   if (!def) throw new Error(`El tramo ${id} no existe`);
   const informe = { tramo: id, nombre: def.nombre, desde, hasta, inicio: new Date(inicio).toISOString(), fuentes: {} };
 
-  const encargos = await leerEncargos().catch(() => ({}));
-  Object.assign(informe, await trabajarEn(def, { desde, hasta, inicio, encargos }));
+  const [encargos, pausas] = await Promise.all([leerEncargos().catch(() => ({})), respetarPausas ? leerPausas().catch(() => ({})) : {}]);
+  const descansan = def.busquedas.filter((b) => pausas[b.empleado]);
+  if (descansan.length) informe.descansan = [...new Set(descansan.map((b) => b.empleado))];
+  Object.assign(informe, await trabajarEn({ ...def, busquedas: def.busquedas.filter((b) => !pausas[b.empleado]) }, { desde, hasta, inicio, encargos }));
   await guardarJSON(`eventos:tramo:${id}`, informe, 10 * 24 * 3600);
   // Los encargos que iban en este turno ya están hechos
   const usados = [...new Set(def.busquedas.map((b) => b.empleado))].filter((e) => encargos[e]?.length);
@@ -499,8 +504,13 @@ export async function barrerEventos({ tramo } = {}) {
 }
 
 // Hace un grupo de búsquedas (un tramo o una orden tuya): busca, comprueba fuentes, suma a la agenda
-// lo bueno y deja en la bandeja lo dudoso. Devuelve el parte con el mismo formato que un tramo.
-async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos = {} }) {
+// lo bueno y deja en la bandeja lo dudoso (el Verificador lo vuelve a mirar y lo sube). Lo que falla va a la cola
+// de la Repesca con el motivo en cristiano. Devuelve el parte con el mismo formato que un tramo.
+// firma: quién sale trabajando en la oficina (la Repesca hace búsquedas de otros)
+export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos = {}, firma = null }) {
+  // Quién está trabajando ahora mismo (la oficina lo enseña en directo)
+  const enMarcha = firma ? [firma] : [...new Set([...busquedas.map((b) => b.empleado), ...(jcyl ? ["junta"] : [])].filter(Boolean))];
+  if (enMarcha.length) await sinRomper(varios([["HSET", EN_CURSO, ...enMarcha.flatMap((e) => [e, new Date(inicio).toISOString()])], ["EXPIRE", EN_CURSO, 180]]), "en curso");
   const agenda = await eventosProximos().catch(() => []);
   const conEncargo = (b) => (encargos[b.empleado]?.length
     ? `${b.extra || ""}\n    ENCARGO DEL JEFE (búscalo también, si encaja en esta búsqueda): ${encargos[b.empleado].map((x) => x.texto).join("; ")}.`
@@ -513,7 +523,7 @@ async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos 
 
   const fuentes = {};
   let encontrados = 0, descartados = 0, errores = 0;
-  const nuevos = [], dudosos = [], deQuien = new Map();
+  const nuevos = [], dudosos = [], deQuien = new Map(), aRepescar = [], repescadas = [];
   // Para lo que se dicen en la oficina: qué ha traído cada uno
   const porEmpleado = {};
   const de = (emp) => (porEmpleado[emp] ||= { busquedas: 0, buenos: [], entran: [], repetidos: [], dudosos: [], encargo: encargos[emp]?.map((x) => x.texto).join("; ") || null });
@@ -521,7 +531,16 @@ async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos 
   await Promise.all(resultados.map(async (r, i) => {
     const [nombre, , empleado = "junta"] = tareas[i];
     de(empleado).busquedas++;
-    if (r.status !== "fulfilled") { errores++; fuentes[nombre] = { ok: false, empleado, error: String(r.reason?.message || r.reason).slice(0, 200) }; de(empleado).error = fuentes[nombre].error; return; }
+    if (r.status !== "fulfilled") {
+      errores++;
+      const m = motivoClaro(r.reason);
+      fuentes[nombre] = { ok: false, empleado, error: m.texto, tipo: m.tipo, detalle: m.detalle.slice(0, 300) };
+      de(empleado).error = m.texto;
+      const b = busquedas.find((x) => x.nombre === nombre);
+      if (b) aRepescar.push({ b, motivo: m });
+      return;
+    }
+    if (busquedas.some((x) => x.nombre === nombre)) repescadas.push(nombre);
     const { buenos, descartados: malos } = await verificarFuentes(r.value.eventos, r.value.dominios, { limite });
     encontrados += r.value.eventos.length; descartados += malos.length;
     fuentes[nombre] = { ok: true, empleado, eventos: buenos.length, ...(malos.length ? { descartados: malos.length } : {}) };
@@ -539,6 +558,8 @@ async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos 
   let entraron = [];
   const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta, (e) => deQuien.get(claveEvento(e)) || null, (lista) => { entraron = lista; }) : 0;
   if (dudosos.length) await sinRomper(guardarDudosos(dudosos), "bandeja del jefe");
+  await sinRomper(apuntarRepesca(aRepescar, repescadas), "repesca");
+  if (enMarcha.length) await sinRomper(comando(["HDEL", EN_CURSO, ...enMarcha]), "en curso");
   const claveEntro = new Set(entraron.map(claveEvento));
   for (const r of Object.values(porEmpleado)) {
     // Si un error tumbó solo una de sus búsquedas pero otras trajeron cosas, cuenta lo que trajo
@@ -577,7 +598,7 @@ async function conCerrojo(tarea) {
 }
 
 // quien = (evento) => nombre del empleado que lo encontró, para la lista de novedades de la oficina
-async function sumarALaAgenda(eventos, desde, hasta, quien = () => null, avisar = () => {}) {
+export async function sumarALaAgenda(eventos, desde, hasta, quien = () => null, avisar = () => {}) {
   const entran = [];
   const nuevos = await conCerrojo(async () => {
     const porDia = fusionarPorDia([eventos], desde, hasta);
@@ -610,6 +631,58 @@ async function sumarALaAgenda(eventos, desde, hasta, quien = () => null, avisar 
   return nuevos;
 }
 
+// ============ COLA DE LA REPESCA, PAUSAS Y QUIÉN TRABAJA AHORA ============
+// · Repesca: cada búsqueda que falla (Google lento o saturado) se apunta con su motivo. El empleado 🚑 Repesca
+//   las repite en horas tranquilas (lib/guardia.js). Si una sale bien (en su turno o en la repesca), se borra.
+//   Tras 3 intentos se deja: su próximo turno normal la hará igual.
+// · Pausas: la reunión del equipo puede mandar a descansar a quien lleva días sin traer nada (ahorra búsquedas).
+const REPESCA = "oficina:repesca", PAUSAS = "oficina:pausas", MAX_INTENTOS = 3;
+export const EN_CURSO = "oficina:enCurso";
+
+async function apuntarRepesca(fallidas, bien = []) {
+  const comandos = [];
+  if (bien.length) comandos.push(["HDEL", REPESCA, ...bien]);
+  if (fallidas.length) {
+    const previas = aObjeto(await comando(["HGETALL", REPESCA]).catch(() => [])) || {};
+    const campos = [];
+    for (const { b, motivo } of fallidas) {
+      let antes = null;
+      try { antes = JSON.parse(previas[b.nombre] || "null"); } catch {}
+      const intentos = (antes?.intentos || 0) + 1;
+      if (intentos > MAX_INTENTOS) { comandos.push(["HDEL", REPESCA, b.nombre]); continue; }
+      campos.push(b.nombre, JSON.stringify({ b, motivo: motivo.texto, tipo: motivo.tipo, intentos, cuando: new Date().toISOString() }));
+    }
+    if (campos.length) comandos.push(["HSET", REPESCA, ...campos], ["EXPIRE", REPESCA, 4 * 24 * 3600]);
+  }
+  if (comandos.length) await varios(comandos);
+}
+
+export async function leerRepesca() {
+  return Object.entries(aObjeto(await comando(["HGETALL", REPESCA])) || {})
+    .map(([nombre, v]) => { try { return { nombre, ...JSON.parse(v) }; } catch { return null; } })
+    .filter(Boolean)
+    .sort((a, b) => (a.intentos - b.intentos) || a.cuando.localeCompare(b.cuando));
+}
+
+// { empleado: "AAAA-MM-DD hasta el que descansa" } (solo los que siguen de descanso)
+export async function leerPausas() {
+  const hoy = hoyEnLeon();
+  const todas = aObjeto(await comando(["HGETALL", PAUSAS])) || {};
+  return Object.fromEntries(Object.entries(todas).filter(([, hasta]) => hasta >= hoy));
+}
+export async function pausar(empleado, dias) {
+  if (!EMPLEADOS_BUSCADORES.includes(empleado)) return { exito: false, mensaje: "Ese empleado no descansa" };
+  if (!dias) { await comando(["HDEL", PAUSAS, empleado]); return { exito: true, hasta: null }; }
+  const hasta = sumarDias(hoyEnLeon(), Math.min(14, Math.max(1, Number(dias) || 7)));
+  await varios([["HSET", PAUSAS, empleado, hasta], ["EXPIRE", PAUSAS, 15 * 24 * 3600]]);
+  return { exito: true, hasta };
+}
+
+// { empleado: "desde cuándo" } de los que están trabajando ahora mismo
+export async function leerEnCurso() {
+  return aObjeto(await comando(["HGETALL", EN_CURSO])) || {};
+}
+
 // ============ BANDEJA DEL JEFE ============
 // Eventos que un empleado encontró pero cuya fuente no se pudo comprobar a tiempo (Facebook que pide sesión,
 // una web lenta...). No se publican solos: esperan aquí a que los apruebes o los tires desde /panel/oficina.
@@ -618,8 +691,9 @@ const BANDEJA = "eventos:bandeja", TIRADOS = "eventos:tirados", MAX_BANDEJA = 30
 export const idDudoso = (e) => huella(`${claveEvento(e)}|${normalizar(e.localidad)}`);
 
 async function guardarDudosos(lista) {
-  const [enBandeja, tirados] = await varios([["HLEN", BANDEJA], ["HKEYS", TIRADOS]]);
-  const fuera = new Set(tirados || []);
+  // Lo que ya tiraste o ya está subido «por confirmar» no vuelve a la bandeja
+  const [enBandeja, tirados, subidos] = await varios([["HLEN", BANDEJA], ["HKEYS", TIRADOS], ["HKEYS", SIN_CONFIRMAR]]);
+  const fuera = new Set([...(tirados || []), ...(subidos || [])]);
   let hueco = MAX_BANDEJA - (Number(enBandeja) || 0);
   const campos = [];
   for (const { motivo: _, ...e } of lista) {
@@ -655,6 +729,70 @@ export async function decidirDudoso(id, decision) {
   }
   await comando(["HDEL", BANDEJA, id]);
   return { exito: true };
+}
+
+// ============ SUBIDOS SIN FUENTE SEGURA ============
+// Lo que el Verificador no pudo confirmar ni desmentir se publica igual (marcado "por confirmar") y queda apuntado
+// aquí para avisarte: un mensaje en «Hoy te toca» y en el parte de Telegram, con «Vale» o «Quitar».
+const SIN_CONFIRMAR = "eventos:sinConfirmar";
+export const DIAS_AGENDA = DIAS_VENTANA;
+export const sacarDeBandeja = (ids) => (ids.length ? comando(["HDEL", BANDEJA, ...ids]) : null);
+export async function marcarRevisados(lista) {
+  if (!lista.length) return;
+  await varios([["HSET", BANDEJA, ...lista.flatMap((e) => { const { id, ...resto } = e; return [id, JSON.stringify({ ...resto, revisadoEn: new Date().toISOString() })]; })]]);
+}
+export async function tirarParaSiempre(ids) {
+  if (ids.length) await varios([["HSET", TIRADOS, ...ids.flatMap((id) => [id, hoyEnLeon()])], ["EXPIRE", TIRADOS, 30 * 24 * 3600]]);
+}
+
+export async function apuntarSinConfirmar(lista) {
+  if (!lista.length) return;
+  const campos = lista.flatMap((e) => [idDudoso(e), JSON.stringify({ ...e, subido: new Date().toISOString() })]);
+  await varios([["HSET", SIN_CONFIRMAR, ...campos], ["EXPIRE", SIN_CONFIRMAR, 21 * 24 * 3600]]);
+}
+
+export async function leerSinConfirmar() {
+  const hoy = hoyEnLeon();
+  const todos = Object.entries(aObjeto(await comando(["HGETALL", SIN_CONFIRMAR])) || {}).map(([id, v]) => {
+    try { return { id, ...JSON.parse(v) }; } catch { return { id, roto: true }; }
+  });
+  const caducados = todos.filter((e) => e.roto || (e.fechaFin || e.fecha) < hoy).map((e) => e.id);
+  if (caducados.length) await comando(["HDEL", SIN_CONFIRMAR, ...caducados]);
+  return todos.filter((e) => !caducados.includes(e.id)).sort((a, b) => b.subido.localeCompare(a.subido));
+}
+
+// "vale" → se queda en la web y deja de avisarte · "quitar" → fuera de la agenda (y no vuelve en 30 días)
+export async function decidirSinConfirmar(id, decision) {
+  const crudo = await comando(["HGET", SIN_CONFIRMAR, id]);
+  if (!crudo) return { exito: false, mensaje: "Ya no está en la lista" };
+  if (decision === "quitar") {
+    const e = JSON.parse(crudo);
+    await quitarDeLaAgenda(e);
+    await tirarParaSiempre([id]);
+  }
+  await comando(["HDEL", SIN_CONFIRMAR, id]);
+  return { exito: true };
+}
+
+// Saca un evento de todos los días de la agenda en que sale
+export async function quitarDeLaAgenda(e) {
+  const desde = hoyEnLeon();
+  const fechas = Object.keys(fusionarPorDia([e], desde, sumarDias(desde, DIAS_VENTANA - 1)));
+  if (!fechas.length) return 0;
+  const k = claveEvento(e), titulo = normalizar(e.titulo);
+  let quitados = 0;
+  await conCerrojo(async () => {
+    const actuales = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
+    const comandos = [];
+    fechas.forEach((f, i) => {
+      let lista = [];
+      try { lista = JSON.parse(actuales[i] || "[]"); } catch {}
+      const quedan = lista.filter((x) => !(claveEvento(x) === k || (normalizar(x.titulo) === titulo && x.fecha === e.fecha)));
+      if (quedan.length !== lista.length) { quitados += lista.length - quedan.length; comandos.push(["SET", `eventos:${f}`, JSON.stringify(quedan), "EX", 21 * 24 * 3600]); }
+    });
+    if (comandos.length) await varios(comandos);
+  });
+  return quitados;
 }
 
 // Resumen para el panel: cada tramo con su última pasada, y el total de la agenda
@@ -759,7 +897,7 @@ export function eventosParaPrompt(eventos, max = 30) {
     elegidos = ordenarPorHora(elegidos);
   }
   const lineas = elegidos.map((e) =>
-    `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""} · fuente: ${e.fuente}`
+    `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""}${e.porConfirmar ? " (por confirmar: dilo así si lo propones)" : ""} · fuente: ${e.fuente}`
   );
   return `AGENDA VERIFICADA DE ESE DÍA (barrido de fuentes locales: eventos, mercadillos, ferias, exposiciones y fiestas).
 OBLIGATORIO: si alguno encaja con lo que pide el usuario, el plan DEBE incluirlo (con su hora real y su campo "fuente"). Si hay varios compatibles, mezcla eventos con sitios para comer o tomar algo.
