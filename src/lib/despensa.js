@@ -29,6 +29,7 @@ import { ZONAS, zonaDe } from "./zonas";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { comprobarUrl, dominioConsultado } from "./eventos";
 import { apuntarNovedades } from "./novedades";
+import { apuntarCharla } from "./charla";
 
 const PRODUCTO = Object.fromEntries(PRODUCTOS.map((p) => [p.id, p]));
 
@@ -239,6 +240,10 @@ async function apuntarTiendasNuevas(buenas, antes = [], producto, quien = "despe
   const nuevas = buenas.filter((t) => !ya.has(t.placeId));
   if (nuevas.length) {
     await apuntarNovedades(nuevas.map((t) => ({ tipo: "tienda", titulo: t.nombre, localidad: t.localidad, producto, quien }))).catch(() => null);
+    await apuntarCharla([
+      { de: quien, a: "jefe", tipo: "nuevos", texto: `${nuevas.length === 1 ? "Una tienda nueva" : `${nuevas.length} tiendas nuevas`} para «${String(producto).slice(0, 40)}»: ${nuevas.slice(0, 2).map((t) => t.nombre).join(" y ")}.` },
+      { de: "jefe", a: quien, tipo: "nuevos", texto: "Genial, a la Despensa." },
+    ]).catch(() => null);
   }
   return nuevas.length;
 }

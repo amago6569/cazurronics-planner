@@ -9,6 +9,8 @@ export const METRICAS = [
 ];
 
 const DIAS_GUARDADOS = 120 * 24 * 3600;
+// Peticiones con búsqueda de Google gratis al día en los modelos Gemini 2.x
+export const BUSQUEDAS_GRATIS_DIA = 1500;
 
 // Fecha de hoy en León (no en UTC), formato AAAA-MM-DD
 export function hoyEnLeon(desplazamientoDias = 0) {
@@ -70,12 +72,19 @@ const mesEnLeon = (desplazamientoMeses = 0) => {
 export async function registrarGastoIA(tarea, uso) {
   const t = limpiarFuente(tarea) || "otra";
   const clave = `ia:${mesEnLeon()}`;
+  // Búsqueda de un 2.x: gratis mientras el día no pase de 1.500 peticiones con búsqueda (cuota de Google)
+  let extra = 0;
+  if (uso?.peticionGratis) {
+    const dia = `ia:gratis:${hoyEnLeon()}`;
+    const [n] = await varios([["INCRBY", dia, 1], ["EXPIRE", dia, 3 * 24 * 3600]]);
+    if (Number(n) > BUSQUEDAS_GRATIS_DIA) extra = Number(uso.precioPeticion) || 0;
+  }
   await varios([
     ["HINCRBY", clave, `${t}:llamadas`, 1],
     ["HINCRBY", clave, `${t}:entrada`, Math.round(Number(uso?.entrada) || 0)],
     ["HINCRBY", clave, `${t}:salida`, Math.round(Number(uso?.salida) || 0)],
     ["HINCRBY", clave, `${t}:busquedas`, Math.round(Number(uso?.consultas) || 0)],
-    ["HINCRBY", clave, `${t}:microdolares`, Math.round((Number(uso?.dolares) || 0) * 1e6)],
+    ["HINCRBY", clave, `${t}:microdolares`, Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6)],
     ["EXPIRE", clave, MESES_GASTO],
   ]);
 }

@@ -77,6 +77,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
       INSTRUCCIONES:
       ${instruccionBusqueda}
       2. No inventes nada. No te salgas del radio ni de la provincia de León: nada de Zamora, Asturias, Palencia, Galicia ni otras provincias, aunque estén cerca. Si lo que pide es en otra provincia, devuelve []. No repitas el mismo sitio o evento con otro nombre. Ordena las paradas por hora.
+      BARES Y RESTAURANTES: si no conoces con seguridad uno real en esa zona (pasa mucho en los pueblos), no te inventes el nombre: pon de título el tipo y el pueblo (por ejemplo "Restaurante en Boñar") y lo buscamos en Google Maps. En su descripción no inventes especialidades, platos, premios ni historia.
       3. Devuelve SOLO JSON estricto con este formato:
       [{"hora": "12:00", "titulo": "Nombre Oficial", "descripcion": "Descripción del sitio.", "precio": "10€", "resenas": "4.5/5", "transporte": "5 min andando", "lat": 42.59, "lon": -5.56, "tipo": "bar", "lugar": null, "telefono": "No disponible", "web": "No disponible", "horario": "12:00 - 16:00", "fuente": "URL del evento o null"}]
       "lugar": si la parada es un evento, ruta, mercadillo, concierto o similar, el local, plaza o recinto CONCRETO donde se celebra o empieza (por ejemplo "Bar Rebote", "Plaza de San Martín"); para un bar, restaurante o negocio normal, null.

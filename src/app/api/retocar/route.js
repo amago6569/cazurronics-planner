@@ -57,6 +57,7 @@ export async function POST(request) {
       El usuario pide: "${instruccion}".
       RESTRICCIONES: Solo provincia de León (España). Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
       ${bloqueSitios}
+      Si es un bar o restaurante y no conoces uno real con seguridad, no inventes el nombre: pon el tipo y el pueblo ("Bar en Boñar") y lo buscamos en Google Maps. No inventes especialidades ni historia.
       Devuelve SOLO un JSON así:
       "lugar": solo si es un evento o ruta: el local, plaza o recinto concreto donde es; si es un negocio normal, null.
       {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
@@ -67,7 +68,8 @@ export async function POST(request) {
     if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
     const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });
 
-    if (!parada || !enProvinciaLeon(parada.lat, parada.lon)) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
+    // Si Google ha cambiado el nombre inventado por el de un sitio que ya está en el plan, no vale
+    if (!parada || !enProvinciaLeon(parada.lat, parada.lon) || nombresYa.includes(parada.titulo)) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });
 
     // NUEVO: identificador del lugar + actualizar el plan guardado (el enlace compartido ve el cambio)
     parada.lugarId = esNegocio(parada) ? claveLugar(parada) : null; // un evento no cuenta como local

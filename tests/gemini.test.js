@@ -60,7 +60,9 @@ describe("medirUso", () => {
 
   it("en los 2.x se cobra una vez por petición con búsqueda", () => {
     const u = medirUso("gemini-2.5-flash-lite", { usageMetadata: { promptTokenCount: 0 }, candidates: [{ groundingMetadata: { webSearchQueries: ["a", "b"] } }] });
-    expect(u.dolares).toBeCloseTo(0.035, 5);
+    expect(u.dolares).toBe(0); // dentro de las 1.500 gratis al día: se cobra solo si se pasan (registrarGastoIA)
+    expect(u.peticionGratis).toBe(1);
+    expect(u.precioPeticion).toBeCloseTo(0.035, 5);
   });
 });
 

@@ -55,7 +55,7 @@ export function estadoEmpleado(emp, parte, ahora = Date.now()) {
 }
 
 // partes = { idEmpleado: { fin, busquedas?, eventos?, descartados?, errores?, texto?, error? } }
-export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {} } = {}, ahora = Date.now()) {
+export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy = 0, gastoMes = null, jefe = null, encargos = {}, rendimiento = {} } = {}, ahora = Date.now()) {
   const departamentos = DEPARTAMENTOS.map((d) => ({
     ...d,
     empleados: d.empleados.map((e) => ({
@@ -63,6 +63,8 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
       // Los que buscan con la IA aceptan órdenes desde su ficha: trabajar ya o un encargo
       ordenes: EMPLEADOS_BUSCADORES.includes(e.id) || e.id === "despensa-productos", encargos: (encargos[e.id] || []).map((x) => x.texto),
       ...(e.id === "despensa-productos" ? { conComarca: true } : {}),
+      // Lo que ha rendido en los últimos 14 días: búsquedas hechas y eventos que de verdad entraron nuevos
+      rinde: rendimiento[e.id] || null,
     })),
   }));
   const todos = departamentos.flatMap((d) => d.empleados);
@@ -81,6 +83,9 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
   if (error.length) lineas.push(`Con fallos: ${error.map((e) => e.nombre).join(", ")}.`);
   if (tarde.length) lineas.push(`Van con retraso: ${tarde.map((e) => e.nombre).join(", ")}.${jefe?.repetido ? " Ya he mandado repetir uno." : " Los mando repetir en mi próxima ronda."}`);
   if (!error.length && !tarde.length) lineas.push("Todo el mundo ha cumplido su turno.");
+  // Con una semana de datos ya se ve quién busca mucho para nada
+  const flojos = todos.filter((e) => e.rinde?.dias >= 7 && e.rinde.busquedas >= 10 && e.rinde.nuevos === 0);
+  if (flojos.length) lineas.push(`En ${Math.max(...flojos.map((e) => e.rinde.dias))} días no han traído nada nuevo: ${flojos.map((e) => e.nombre).join(", ")}. Se les puede bajar el ritmo.`);
 
   return {
     departamentos,
