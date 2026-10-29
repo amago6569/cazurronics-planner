@@ -282,7 +282,7 @@ function Persona({ e, sitio, estado, camisa, piel, pelo, jefe, poses, bocadillo,
       {(bocadillo || encima) && (
         <Etiqueta position={[0, 2.35, 0]} center zIndexRange={[40, 20]}>
           {bocadillo ? (
-            <div className="cz-fade relative w-[200px] sm:w-[240px] -translate-y-1/2 rounded-2xl rounded-bl-md bg-white px-3 py-2 text-[13px] leading-snug text-slate-800 shadow-[0_12px_30px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/5 select-none">
+            <div className="cz-fade relative w-[170px] sm:w-[240px] -translate-y-1/2 rounded-2xl rounded-bl-md bg-white px-3 py-2 text-[13px] leading-snug text-slate-800 shadow-[0_12px_30px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/5 select-none">
               <p className="text-[11px] font-bold text-rose-500 mb-0.5">{bocadillo.titulo}</p>
               {bocadillo.texto}
             </div>
@@ -355,7 +355,7 @@ function Camara({ vista, controles, tocando }) {
     // En una pantalla estrecha (móvil en vertical) la cámara se aleja para que quepa la sala entera
     const k = Math.min(2.1, Math.max(1, 1.3 / (size.width / size.height)));
     // …y mira un poco más cerca, para que la oficina no quede baja con el cielo vacío arriba
-    const o = { x: v.objetivo[0], y: v.objetivo[1], z: v.objetivo[2] + (k - 1) * 2.5 };
+    const o = { x: v.objetivo[0] + (k - 1) * 3, y: v.objetivo[1], z: v.objetivo[2] + (k - 1) * 4 };
     const destino = { x: o.x + (v.camara[0] - v.objetivo[0]) * k, y: o.y + (v.camara[1] - v.objetivo[1]) * k, z: o.z + (v.camara[2] - v.objetivo[2]) * k };
     camera.position.lerp(destino, 0.06);
     c.target.lerp(o, 0.08);
