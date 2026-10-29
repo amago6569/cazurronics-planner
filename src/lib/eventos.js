@@ -17,6 +17,7 @@ import { fuentesPara } from "./intencion";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera } from "./provincia";
+import { esOficial } from "./fiables";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
 
@@ -429,7 +430,8 @@ export async function verificarFuentes(eventos, dominios, { limite = Date.now() 
   }));
   const buenos = [], descartados = [];
   for (const e of eventos) {
-    const ok = e.origen === "jcyl" || dominioConsultado(e.fuente, dominios) || estado.get(e.fuente) === "ok";
+    // Una web oficial o de la prensa local que no contesta a tiempo entra igual (lib/fiables.js); si no existe (404), fuera
+    const ok = e.origen === "jcyl" || dominioConsultado(e.fuente, dominios) || estado.get(e.fuente) === "ok" || (estado.get(e.fuente) === "duda" && esOficial(e.fuente));
     if (ok) buenos.push(e);
     else descartados.push({ ...e, motivo: estado.get(e.fuente) || "duda" }); // "mal" = la página no existe
   }
@@ -554,6 +556,8 @@ export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, en
 
   const hechas = {};
   for (const [, , empleado = "junta"] of tareas) (hechas[empleado] ||= { busquedas: 0 }).busquedas++;
+  // Los fallos del día, por empleado: el jefe solo te avisa si alguien falla dos días seguidos
+  for (const f of Object.values(fuentes)) if (!f.ok) (hechas[f.empleado] ||= { busquedas: 0 }).fallos = (hechas[f.empleado].fallos || 0) + 1;
   await sinRomper(apuntarRendimiento(hechas), "rendimiento");
   let entraron = [];
   const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta, (e) => deQuien.get(claveEvento(e)) || null, (lista) => { entraron = lista; }) : 0;
@@ -690,18 +694,42 @@ export async function leerEnCurso() {
 const BANDEJA = "eventos:bandeja", TIRADOS = "eventos:tirados", MAX_BANDEJA = 300;
 export const idDudoso = (e) => huella(`${claveEvento(e)}|${normalizar(e.localidad)}`);
 
-async function guardarDudosos(lista) {
+// Si el mismo evento llega de otra web (otro empleado, otro turno), se apunta en fuentesVistas: con dos webs distintas
+// el Verificador lo da por confirmado sin preguntar a Google
+const sumarFuente = (e, url) => {
+  if (!url || dominioDe(url) === dominioDe(e.fuente) || (e.fuentesVistas || []).some((u) => dominioDe(u) === dominioDe(url))) return e;
+  return { ...e, fuentesVistas: [...(e.fuentesVistas || []), url].slice(0, 4) };
+};
+export async function guardarDudosos(lista) {
   // Lo que ya tiraste o ya está subido «por confirmar» no vuelve a la bandeja
   const [enBandeja, tirados, subidos] = await varios([["HLEN", BANDEJA], ["HKEYS", TIRADOS], ["HKEYS", SIN_CONFIRMAR]]);
   const fuera = new Set([...(tirados || []), ...(subidos || [])]);
-  let hueco = MAX_BANDEJA - (Number(enBandeja) || 0);
-  const campos = [];
+  const porId = new Map();
   for (const { motivo: _, ...e } of lista) {
     const id = idDudoso(e);
-    if (hueco <= 0 || fuera.has(id)) continue;
-    campos.push(id, JSON.stringify({ ...e, encontrado: new Date().toISOString() }));
-    hueco--;
+    if (fuera.has(id)) continue;
+    porId.set(id, porId.has(id) ? sumarFuente(porId.get(id), e.fuente) : e);
   }
+  if (!porId.size) return;
+  const ids = [...porId.keys()];
+  const [previos] = await varios([["HMGET", BANDEJA, ...ids]]);
+  let hueco = MAX_BANDEJA - (Number(enBandeja) || 0);
+  const campos = [];
+  ids.forEach((id, i) => {
+    let antes = null;
+    try { antes = JSON.parse(previos?.[i] || "null"); } catch {}
+    let e = porId.get(id);
+    if (antes) {
+      // Ya estaba: se queda como estaba (vueltas del Verificador incluidas) y suma la web nueva
+      e = [e.fuente, ...(e.fuentesVistas || [])].reduce(sumarFuente, antes);
+      if (e === antes) return;
+    } else {
+      if (hueco <= 0) return;
+      hueco--;
+      e = { ...e, encontrado: new Date().toISOString() };
+    }
+    campos.push(id, JSON.stringify(e));
+  });
   if (campos.length) await varios([["HSET", BANDEJA, ...campos], ["EXPIRE", BANDEJA, 30 * 24 * 3600]]);
 }
 
@@ -765,13 +793,37 @@ export async function leerSinConfirmar() {
 export async function decidirSinConfirmar(id, decision) {
   const crudo = await comando(["HGET", SIN_CONFIRMAR, id]);
   if (!crudo) return { exito: false, mensaje: "Ya no está en la lista" };
+  const e = JSON.parse(crudo);
   if (decision === "quitar") {
-    const e = JSON.parse(crudo);
     await quitarDeLaAgenda(e);
     await tirarParaSiempre([id]);
+  } else {
+    await cambiarEnLaAgenda(e, ({ porConfirmar: _, ...x }) => ({ ...x, revisado: true })); // lo has mirado tú: fuera la marca
   }
   await comando(["HDEL", SIN_CONFIRMAR, id]);
   return { exito: true };
+}
+
+// Cambia un evento en todos los días de la agenda en que sale (cambio = (evento) => evento nuevo)
+export async function cambiarEnLaAgenda(e, cambio) {
+  const desde = hoyEnLeon();
+  const fechas = Object.keys(fusionarPorDia([e], desde, sumarDias(desde, DIAS_VENTANA - 1)));
+  if (!fechas.length) return 0;
+  const k = claveEvento(e), titulo = normalizar(e.titulo);
+  let cambiados = 0;
+  await conCerrojo(async () => {
+    const actuales = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
+    const comandos = [];
+    fechas.forEach((f, i) => {
+      let lista = [];
+      try { lista = JSON.parse(actuales[i] || "[]"); } catch {}
+      let tocado = false;
+      const nueva = lista.map((x) => ((claveEvento(x) === k || (normalizar(x.titulo) === titulo && x.fecha === e.fecha)) ? ((tocado = true), cambio(x)) : x));
+      if (tocado) { cambiados++; comandos.push(["SET", `eventos:${f}`, JSON.stringify(nueva), "EX", 21 * 24 * 3600]); }
+    });
+    if (comandos.length) await varios(comandos);
+  });
+  return cambiados;
 }
 
 // Saca un evento de todos los días de la agenda en que sale

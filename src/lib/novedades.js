@@ -35,7 +35,7 @@ export async function apuntarRendimiento(cuentas, ahora = Date.now()) {
   const clave = `${RINDE}:${diaDe(ahora)}`;
   const cmds = [];
   for (const [quien, c] of Object.entries(cuentas || {})) {
-    for (const dato of ["busquedas", "nuevos"]) if (c?.[dato]) cmds.push(["HINCRBY", clave, `${quien}:${dato}`, c[dato]]);
+    for (const dato of ["busquedas", "nuevos", "fallos"]) if (c?.[dato]) cmds.push(["HINCRBY", clave, `${quien}:${dato}`, c[dato]]);
   }
   if (!cmds.length) return;
   await varios([...cmds, ["EXPIRE", clave, DIAS_RINDE * 86400]]);
@@ -59,4 +59,13 @@ export async function leerRendimiento(dias = 14, ahora = Date.now()) {
   });
   for (const t of Object.values(total)) t.porBusqueda = t.busquedas ? Math.round((t.nuevos / t.busquedas) * 100) / 100 : null;
   return total;
+}
+
+// Empleados que han fallado alguna búsqueda hoy Y ayer. Un fallo suelto lo arregla la Repesca y no merece aviso
+export async function fallanSeguido(ahora = Date.now()) {
+  const [hoy, ayer] = await varios([diaDe(ahora), diaDe(ahora - 86400000)].map((f) => ["HGETALL", `${RINDE}:${f}`]));
+  const conFallos = (r) => new Set(Object.entries(Array.isArray(r) ? aObjeto(r) : r || {})
+    .filter(([campo, v]) => campo.endsWith(":fallos") && Number(v) > 0).map(([campo]) => campo.slice(0, -":fallos".length)));
+  const deAyer = conFallos(ayer);
+  return [...conFallos(hoy)].filter((q) => deAyer.has(q));
 }

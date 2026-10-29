@@ -28,6 +28,7 @@ export default function TarjetaEvento({ e, mostrarCuando = false }) {
         {e.descripcion && <p className="text-[13px] text-slate-500 mt-1 line-clamp-2">{e.descripcion}</p>}
         <div className="flex flex-wrap items-center gap-2 mt-2">
           {cuando && <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 ring-1 ring-indigo-100 rounded-full px-2.5 py-1">{cuando}</span>}
+          {e.porConfirmar && <span className="text-xs font-semibold text-amber-800 bg-amber-50 ring-1 ring-amber-200 rounded-full px-2.5 py-1" title="Lo hemos visto en una sola web y aún no hemos podido confirmarlo">⏳ Por confirmar</span>}
           {e.precio && <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 ring-1 ring-emerald-100 rounded-full px-2.5 py-1">{e.precio}</span>}
           {e.fuente && <a href={e.fuente} target="_blank" rel="noopener noreferrer nofollow" className="text-xs font-medium text-slate-500 hover:text-rose-600 underline underline-offset-2">Ver fuente</a>}
         </div>

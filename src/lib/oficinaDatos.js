@@ -2,12 +2,12 @@
 // Reúne lo que deja apuntado cada tarea (barrido, Despensa, avisos, órdenes, encargos, novedades, charla) y lo
 // ordena con montarOficina. Lo usan el panel (/api/panel/oficina) y el parte diario del jefe por Telegram.
 import { leerJSON } from "./almacen";
-import { hoyEnLeon, leerGastoIA, leerResumen } from "./estadisticas";
+import { hoyEnLeon, leerGastoDias, leerGastoIA, leerResumen } from "./estadisticas";
 import { definirTramos, eventosProximos, leerBandeja, leerEncargos, leerEnCurso, leerPausas, leerRepesca, leerSinConfirmar, partesDeOrdenes } from "./eventos";
 import { montarOficina, RUTAS_EMPLEADOS } from "./oficina";
 import { leerDescartadas, montarReunion } from "./reunion";
 import { EMPLEADO_DESPENSA, encargosDespensa } from "./despensa";
-import { leerNovedades, leerRendimiento } from "./novedades";
+import { fallanSeguido, leerNovedades, leerRendimiento } from "./novedades";
 import { leerCharla } from "./charla";
 import { listarCaptacion } from "./captacion";
 import { tarjetasPanel } from "./mensajeCaptacion";
@@ -42,7 +42,7 @@ function partesDeOtros({ productos, tiendas, fichas, captacion, finde, verificad
 }
 
 export async function datosOficina({ ahora = Date.now() } = {}) {
-  const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades, rendimiento, charla, resumen, locales, verificador, repesca, colaRepesca, pausas, enCurso, sinConfirmar, descartadas] = await Promise.all([
+  const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades, rendimiento, charla, resumen, locales, verificador, repesca, colaRepesca, pausas, enCurso, sinConfirmar, descartadas, seguidos] = await Promise.all([
     leerJSON("eventos:ultimoBarrido"), leerBandeja(), eventosProximos(), leerGastoIA().catch(() => null), leerJSON("oficina:jefe"),
     leerJSON("despensa:ultimoBarrido"), leerJSON("despensa:g:ultimo"), leerJSON("despensa:fichas:ultimo"),
     leerJSON("oficina:turno:captacion"), leerJSON("oficina:turno:finde"),
@@ -51,6 +51,7 @@ export async function datosOficina({ ahora = Date.now() } = {}) {
     leerResumen(2).catch(() => null), listarCaptacion().catch(() => null),
     leerJSON("oficina:turno:verificador"), leerJSON("oficina:turno:repesca"), leerRepesca().catch(() => []),
     leerPausas().catch(() => ({})), leerEnCurso().catch(() => ({})), leerSinConfirmar().catch(() => []), leerDescartadas().catch(() => []),
+    fallanSeguido(ahora).catch(() => []),
   ]);
   const hoy = hoyEnLeon();
   const nuevosHoy = (barrido?.tramos || []).filter((t) => t.fin && new Date(t.fin).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) === hoy).reduce((s, t) => s + (t.nuevos || 0), 0);
@@ -60,11 +61,13 @@ export async function datosOficina({ ahora = Date.now() } = {}) {
     const p = partes[f.empleado || "junta"];
     if (p && !f.ok && f.error) p.motivos = [...(p.motivos || []), { busqueda: nombre, texto: f.error, tipo: f.tipo || null }].slice(0, 4);
   }
+  const gastoMes = gasto?.[0]?.tareas?.reduce((s, t) => s + t.dolares, 0) ?? null;
+  const gastoEuros = await leerGastoDias(gastoMes || 0).catch(() => null);
   const oficina = montarOficina(partes, {
     bandeja: bandeja.length,
     agenda: agenda.reduce((s, d) => s + d.eventos.length, 0),
     nuevosHoy,
-    gastoMes: gasto?.[0]?.tareas?.reduce((s, t) => s + t.dolares, 0) ?? null,
+    gastoMes, gasto: gastoEuros, fallanSeguido: seguidos,
     jefe,
     encargos: { ...encargos, [EMPLEADO_DESPENSA]: encargosDesp.map((texto) => ({ texto })) },
     rendimiento, pausas, enCurso, sinConfirmar: sinConfirmar.length,
@@ -81,7 +84,8 @@ export async function datosOficina({ ahora = Date.now() } = {}) {
     .sort((a, b) => a.fin.localeCompare(b.fin));
   const suma = (k) => golpes.reduce((s, g) => s + g[k], 0);
   const tarjetas = locales ? await tarjetasPanel(locales).catch(() => []) : [];
-  const conFallo = oficina.departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error");
+  // Solo cuenta como «tuyo» quien falla dos días seguidos: un fallo suelto lo arregla la Repesca
+  const conFallo = oficina.departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error" && seguidos.includes(e.id));
   const flujo = {
     buscan: suma("busquedas"), encontrados: suma("eventos"), entran: suma("nuevos"), sinFuente: suma("descartados"), fallos: suma("errores"),
     agenda: oficina.jefe.cifras.agenda,
@@ -94,6 +98,6 @@ export async function datosOficina({ ahora = Date.now() } = {}) {
   const reunion = montarReunion({ departamentos: oficina.departamentos, flujo, sinConfirmar: sinConfirmar.length, repesca: colaRepesca.length, captacion: tarjetas.length, descartadas, ahora });
   return {
     ...oficina, bandeja, novedades, charla, turnosJefe: turnos.jefe || [], golpes, flujo, captacion: tarjetas,
-    sinConfirmar: sinConfirmar.slice(0, 30), repesca: repescaResumen, reunion, enCurso: Object.keys(enCurso),
+    sinConfirmar: sinConfirmar.slice(0, 30), repesca: repescaResumen, reunion, enCurso: Object.keys(enCurso), fallanSeguido: seguidos,
   };
 }

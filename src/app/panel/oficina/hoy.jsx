@@ -3,7 +3,7 @@
 //  · «Hoy te toca»: lo que espera tu OK, con sus botones (eventos subidos sin fuente segura, locales listos para
 //    escribirles y empleados que han fallado, con el porqué en cristiano). Funciona sin el 3D.
 //  · La tira del flujo: el trabajo de anoche paso a paso, con números reales. Tocar un paso lleva a su sala.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GLASS, GLASS_SOFT, PRESS } from "../../../lib/estilos";
 import { diaCorto, fmt } from "./monigotes";
 
@@ -90,14 +90,16 @@ async function mandar(clave, cuerpo) {
 }
 
 // Un evento que el Verificador subió sin poder confirmarlo: ya está en la web, tú dices si se queda
-function SinConfirmar({ e, clave, alQuitar }) {
+// «Quitar» no se manda al momento: tienes 10 segundos para deshacerlo (lo quitado no vuelve en 30 días)
+function SinConfirmar({ e, clave, alQuitar, alQuitarConDeshacer }) {
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState("");
   const decidir = async (accion) => {
+    if (accion === "quitar") return alQuitarConDeshacer(e);
     setOcupado(true);
     const d = await mandar(clave, { aviso: e.id, accion });
     setOcupado(false);
-    if (d.exito || d.mensaje === "Ya no está en la lista") alQuitar(accion === "quitar" ? `«${e.titulo}» quitado de la web.` : `«${e.titulo}» se queda.`);
+    if (d.exito || d.mensaje === "Ya no está en la lista") alQuitar(`«${e.titulo}» se queda.`);
     else setAviso(d.mensaje || "No ha podido ser");
   };
   return (
@@ -165,31 +167,80 @@ function Fallo({ e, clave, alTerminar }) {
   );
 }
 
-export function HoyTeToca({ bandeja, sinConfirmar = [], captacion = [], departamentos, flujo, clave, alTerminar, alVerBandeja }) {
+const DESHACER_MS = 10000;
+
+// Quién ha fallado y merece tu atención: solo quien falla dos días seguidos (un fallo suelto lo arregla la Repesca)
+export function fallosQueTeTocan(departamentos, fallanSeguido = []) {
+  const conError = departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error");
+  return { fallos: conError.filter((e) => fallanSeguido.includes(e.id)), sueltos: conError.filter((e) => !fallanSeguido.includes(e.id)) };
+}
+
+export function HoyTeToca({ bandeja, sinConfirmar = [], captacion = [], departamentos, fallanSeguido = [], flujo, clave, alTerminar, alVerBandeja }) {
   const [quitados, setQuitados] = useState([]);
   const [aviso, setAviso] = useState("");
+  const [porQuitar, setPorQuitar] = useState(null); // el evento que se quitará cuando pasen los 10 s
+  const espera = useRef(null); // { e, temporizador }
   const locales = captacion.filter((l) => !quitados.includes(l.clave));
   const subidos = sinConfirmar.filter((e) => !quitados.includes(e.id));
-  const fallos = departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error");
+  const { fallos, sueltos } = fallosQueTeTocan(departamentos, fallanSeguido);
   const total = subidos.length + locales.length + fallos.length; // lo de la bandeja no te toca a ti: lo hace el Verificador
   const quitar = (id) => (t) => { setQuitados((q) => [...q, id]); setAviso(t); };
+
+  // Manda el «Quitar» que estaba esperando (al pasar los 10 s, al quitar otro o al salir de la página)
+  const mandarQuitar = (pendiente) => {
+    if (!pendiente) return;
+    clearTimeout(pendiente.temporizador);
+    if (espera.current === pendiente) { espera.current = null; setPorQuitar(null); }
+    mandar(clave, { aviso: pendiente.e.id, accion: "quitar" }).then((d) => {
+      if (d.exito || d.mensaje === "Ya no está en la lista") setAviso(`«${pendiente.e.titulo}» quitado de la web.`);
+      else { setQuitados((q) => q.filter((x) => x !== pendiente.e.id)); setAviso(`No se ha podido quitar «${pendiente.e.titulo}»: ${d.mensaje || "inténtalo otra vez"}.`); }
+    });
+  };
+  const quitarConDeshacer = (e) => {
+    mandarQuitar(espera.current);
+    const pendiente = { e };
+    pendiente.temporizador = setTimeout(() => mandarQuitar(pendiente), DESHACER_MS);
+    espera.current = pendiente;
+    setQuitados((q) => [...q, e.id]); setAviso(""); setPorQuitar(e);
+  };
+  const deshacer = () => {
+    const pendiente = espera.current;
+    if (!pendiente) return;
+    clearTimeout(pendiente.temporizador);
+    espera.current = null;
+    setQuitados((q) => q.filter((x) => x !== pendiente.e.id)); setPorQuitar(null); setAviso(`«${pendiente.e.titulo}» se queda donde estaba.`);
+  };
+  // Si cierras la página con un «Quitar» esperando, se manda igual
+  useEffect(() => () => {
+    const pendiente = espera.current;
+    if (!pendiente) return;
+    clearTimeout(pendiente.temporizador);
+    mandar(clave, { aviso: pendiente.e.id, accion: "quitar" });
+  }, [clave]);
   return (
     <section id="hoy" className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up scroll-mt-4`}>
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-bold text-slate-900 text-lg">✋ Hoy te toca {total > 0 && <span className="text-slate-400 font-medium">· {total}</span>}</h2>
         {total > 1 && <span className="md:hidden text-[11px] text-slate-400">Desliza →</span>}
       </div>
+      {porQuitar && (
+        <div className="mt-2 rounded-xl bg-slate-900 text-white px-3 py-2 flex items-center gap-3" role="status">
+          <span className="text-sm flex-1 min-w-0">🗑 «{porQuitar.titulo}» se quita de la web en 10 segundos.</span>
+          <button onClick={deshacer} className={`${PRESS} shrink-0 h-11 px-4 rounded-full bg-white text-slate-900 text-sm font-semibold`}>Deshacer</button>
+        </div>
+      )}
       {aviso && <p className="mt-2 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-800" role="status">{aviso}</p>}
       {total === 0 && !bandeja.length ? (
         <p className="mt-2 text-[15px] text-slate-700">✅ Nada pendiente. {flujo.entran ? `Anoche entraron ${fmt(flujo.entran)} eventos nuevos` : "Anoche no entró nada nuevo"} y hay {fmt(flujo.agenda)} en la agenda.</p>
       ) : (
         <ul className="mt-3 -mx-4 px-4 flex items-stretch gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory md:mx-0 md:px-0 md:grid md:grid-cols-2 xl:grid-cols-3 md:overflow-visible">
-          {subidos.slice(0, MAX_BANDEJA * 2).map((e) => <SinConfirmar key={e.id} e={e} clave={clave} alQuitar={quitar(e.id)} />)}
+          {subidos.slice(0, MAX_BANDEJA * 2).map((e) => <SinConfirmar key={e.id} e={e} clave={clave} alQuitar={quitar(e.id)} alQuitarConDeshacer={quitarConDeshacer} />)}
           {bandeja.length > 0 && <EnCola n={bandeja.length} clave={clave} alTerminar={alTerminar} alVerBandeja={alVerBandeja} />}
           {locales.map((l) => <Local key={l.clave} l={l} clave={clave} alQuitar={(t) => { setQuitados((q) => [...q, l.clave]); setAviso(t); }} />)}
           {fallos.map((e) => <Fallo key={e.id} e={e} clave={clave} alTerminar={alTerminar} />)}
         </ul>
       )}
+      {sueltos.length > 0 && <p className="mt-3 text-sm text-slate-600">🚑 {sueltos.map((e) => e.nombre).join(", ")} {sueltos.length === 1 ? "ha tenido" : "han tenido"} algún fallo suelto. La Repesca lo repite; solo te aviso si se repite mañana.</p>}
       {subidos.length > MAX_BANDEJA * 2 && <p className="mt-3 text-sm text-slate-600">…y {subidos.length - MAX_BANDEJA * 2} más subidos sin fuente segura (te los vuelvo a enseñar cuando decidas estos).</p>}
     </section>
   );

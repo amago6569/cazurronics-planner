@@ -17,6 +17,7 @@ import { leerLugares } from "./lugares";
 import { haversineKm } from "./planUtils";
 import { apuntarCharla, JEFE, TU } from "./charla";
 import { DEPARTAMENTOS } from "./oficina";
+import { euros } from "./euros";
 import { responderPregunta } from "./asesor";
 import { ZONAS } from "./zonas";
 
@@ -33,7 +34,9 @@ export async function parteDiario({ conCaptacion = true } = {}) {
   const nuevasHoy = ofi.novedades.filter((n) => new Date(n.cuando).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) === hoy);
   const lineas = [...ofi.jefe.lineas];
   if (nuevasHoy.length) lineas.push(`Novedades de hoy: ${nuevasHoy.filter((n) => n.tipo === "evento").length} eventos y ${nuevasHoy.filter((n) => n.tipo === "tienda").length} tiendas.`);
-  if (ofi.jefe.cifras.gastoMes != null) lineas.push(`IA este mes: ${ofi.jefe.cifras.gastoMes.toFixed(2).replace(".", ",")} $.`);
+  const g = ofi.jefe.cifras.gasto;
+  if (g) lineas.push(`IA: ayer ${euros(g.ayer)}, este mes ${euros(g.mes)} (previsión ${euros(g.prevision)}).`);
+  else if (ofi.jefe.cifras.gastoMes != null) lineas.push(`IA este mes: ${ofi.jefe.cifras.gastoMes.toFixed(2).replace(".", ",")} $.`);
   const mensajes = [{ texto: `👔 Parte del jefe\n\n${lineas.map((l) => `· ${l}`).join("\n")}\n\nPanel: ${DOMINIO}/panel/oficina` }];
 
   // Lo que el Verificador subió sin poder confirmarlo: ya está en la web; tú solo dices si se queda

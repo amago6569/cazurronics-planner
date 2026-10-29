@@ -14,6 +14,7 @@ import { comando, guardarJSON, sinRomper } from "./almacen";
 import { hoyEnLeon } from "./estadisticas";
 import { extraerJSON, llamarGemini, motivoClaro } from "./gemini";
 import { apuntarCharla, JEFE, TU } from "./charla";
+import { esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
 import {
   DIAS_AGENDA, apuntarSinConfirmar, comprobarUrl, dominioConsultado, leerBandeja, leerRepesca, marcarRevisados,
   sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
@@ -21,8 +22,6 @@ import {
 
 const CUPO_SEGURO = 1300; // de las 1.500 peticiones gratis al día, dejamos margen para los planes y el barrido
 export const POR_PREGUNTA = 8, PREGUNTAS_POR_TURNO = 2, REPESCA_POR_TURNO = 6, VUELTAS_ANTES_DE_SUBIR = 2;
-const SOCIALES = /(^|\.)(facebook|fb|instagram|tiktok|twitter|x)\.com$/;
-const dominio = (url) => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
 const sumarDias = (f, n) => { const d = new Date(`${f}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const trozos = (l, n) => Array.from({ length: Math.ceil(l.length / n) }, (_, i) => l.slice(i * n, i * n + n));
 const titulos = (l, max = 2) => l.slice(0, max).map((e) => `«${String(e.titulo).slice(0, 45)}»`).join(", ") + (l.length > max ? ` y ${l.length - max} más` : "");
@@ -58,17 +57,26 @@ export async function leerVeredictos(texto, dominios, grupo, comprobar = (u) => 
   }));
 }
 
-export async function segundaComprobacion({ inicio = Date.now() } = {}) {
+// leer: cómo se descarga cada página (las pruebas lo cambian)
+export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000) } = {}) {
   const limite = inicio + 50000;
   const bandeja = await leerBandeja();
   const confirmados = [], porConfirmar = [], falsos = [], quedan = [];
   let preguntas = 0, fallo = null;
   if (bandeja.length) {
-    // 1. El enlace otra vez, con calma (Facebook o Instagram piden sesión: esos van directos a Google)
+    // 1. Sin Google (0 €): dos webs distintas con el mismo evento, o el enlace otra vez, con calma, leyendo la página.
+    //    Confirma si es una web oficial o si la página dice la fecha, el pueblo y el año. Si la página carga pero no
+    //    nombra el evento, no se tira: pasa a Google. Facebook o Instagram piden sesión: esos van directos a Google.
     const lote = bandeja.slice(0, 40);
-    const estados = await Promise.all(lote.map((e) => (!e.fuente || SOCIALES.test(dominio(e.fuente)) ? "duda" : comprobarUrl(e.fuente, 8000, { sinRango: true }))));
+    const paginas = await Promise.all(lote.map((e) => (websDistintas(e) >= 2 || !e.fuente || esSocial(e.fuente) ? { estado: "duda", texto: "" } : leer(e.fuente))));
     const dudan = [];
-    lote.forEach((e, i) => (estados[i] === "ok" ? confirmados : estados[i] === "mal" ? falsos : dudan).push(estados[i] === "mal" ? { ...e, nota: "la página ya no existe" } : e));
+    lote.forEach((e, i) => {
+      const p = paginas[i];
+      if (websDistintas(e) >= 2) confirmados.push({ ...e, porque: "dos webs" });
+      else if (p.estado === "mal") falsos.push({ ...e, nota: "la página ya no existe" });
+      else if (esOficial(e.fuente) || (p.estado === "ok" && paginaLoNombra(p.texto, e))) confirmados.push({ ...e, porque: esOficial(e.fuente) ? "web oficial" : "la página lo dice" });
+      else dudan.push(e);
+    });
     quedan.push(...bandeja.slice(40));
 
     // 2. Google, de 8 en 8
@@ -94,7 +102,7 @@ export async function segundaComprobacion({ inicio = Date.now() } = {}) {
     for (const e of sinPreguntar) ((e.vueltas || 0) + 1 >= VUELTAS_ANTES_DE_SUBIR ? porConfirmar : quedan).push(e);
   }
 
-  const limpio = ({ id: _, encontrado: __, revisadoEn: ___, vueltas: ____, nota: _____, ...e }) => e;
+  const limpio = ({ id: _, encontrado: __, revisadoEn: ___, vueltas: ____, nota: _____, porque: ______, fuentesVistas: _______, ...e }) => e;
   const desde = hoyEnLeon(), hasta = sumarDias(desde, DIAS_AGENDA - 1);
   const subir = [...confirmados.map((e) => ({ ...limpio(e), verificado: true, segundaComprobacion: true })), ...porConfirmar.map((e) => ({ ...limpio(e), verificado: true, porConfirmar: true }))];
   if (subir.length) await sumarALaAgenda(subir, desde, hasta, (e) => e.empleado || "verificador");
@@ -106,7 +114,7 @@ export async function segundaComprobacion({ inicio = Date.now() } = {}) {
   const revisados = confirmados.length + porConfirmar.length + falsos.length;
   const parte = {
     fin: new Date().toISOString(), revisados, confirmados: confirmados.length, porConfirmar: porConfirmar.length, falsos: falsos.length,
-    pendientes: quedan.length, preguntas, error: fallo && !revisados ? fallo.texto : null,
+    pendientes: quedan.length, preguntas, sinGoogle: confirmados.filter((e) => e.porque).length, error: fallo && !revisados ? fallo.texto : null,
     texto: !bandeja.length ? "Bandeja vacía: nada que revisar" : `${revisados} revisados: ${confirmados.length} confirmados, ${porConfirmar.length} subidos por confirmar, ${falsos.length} falsos`,
     descartes: falsos.slice(0, 5).map((e) => ({ titulo: e.titulo, nota: e.nota })),
   };
@@ -121,6 +129,14 @@ export async function segundaComprobacion({ inicio = Date.now() } = {}) {
 }
 
 // ---------- Repesca ----------
+// Primero lo que cubre este fin de semana (es lo que más se busca en los planes); dentro de eso, como venía (menos intentos antes)
+export function ordenarRepesca(cola, hoy = hoyEnLeon()) {
+  const dia = new Date(`${hoy}T12:00:00Z`).getUTCDay(); // 0 domingo … 6 sábado
+  const domingo = sumarDias(hoy, dia === 0 ? 0 : 7 - dia);
+  const cubreFinde = (r) => !r.b?.desde || r.b.desde <= domingo;
+  return [...cola.filter(cubreFinde), ...cola.filter((r) => !cubreFinde(r))];
+}
+
 export async function turnoDeRepesca({ inicio = Date.now(), max = REPESCA_POR_TURNO } = {}) {
   const cola = await leerRepesca();
   const guardar = async (p) => { await guardarJSON("oficina:turno:repesca", p, 14 * 24 * 3600); return p; };
@@ -128,7 +144,7 @@ export async function turnoDeRepesca({ inicio = Date.now(), max = REPESCA_POR_TU
   if (!(await quedaCupo())) return guardar({ fin: new Date().toISOString(), busquedas: 0, nuevos: 0, errores: 0, quedan: cola.length, texto: `Hoy ya va cerca del tope gratis de Google: ${cola.length} en cola para mañana` });
   const desde = hoyEnLeon(), hasta = sumarDias(desde, DIAS_AGENDA - 1);
   // Las fechas de la búsqueda guardada se ajustan a hoy si ya han pasado
-  const busquedas = cola.slice(0, max).map(({ b }) => ({ ...b, desde: b.desde < desde ? desde : b.desde, hasta: b.hasta < desde ? hasta : b.hasta }));
+  const busquedas = ordenarRepesca(cola, desde).slice(0, max).map(({ b }) => ({ ...b, desde: b.desde < desde ? desde : b.desde, hasta: b.hasta < desde ? hasta : b.hasta }));
   const r = await trabajarEn({ busquedas }, { desde, hasta, inicio, firma: "repesca" });
   const quedan = (await leerRepesca().catch(() => [])).length;
   const motivo = Object.values(r.fuentes || {}).find((f) => !f.ok)?.error;
