@@ -11,6 +11,7 @@ import { datosOficina } from "./oficinaDatos";
 import { decidirDudoso, eventosProximos, ordenar, EMPLEADOS_BUSCADORES } from "./eventos";
 import { EMPLEADO_DESPENSA, ordenarDespensa } from "./despensa";
 import { guardarSeguimiento, listarCaptacion, marcarAvisados, DOMINIO } from "./captacion";
+import { BORRADOR, canal, enlaceEnviar, textoBase } from "./mensajeCaptacion";
 import { leerLugares } from "./lugares";
 import { haversineKm } from "./planUtils";
 import { apuntarCharla, JEFE, TU } from "./charla";
@@ -57,15 +58,6 @@ async function cercaDe(ficha) {
   return null;
 }
 
-const BORRADOR = (clave) => `captacion:borrador:${clave}`;
-const canal = (l) => (l.instagram ? "instagram" : l.email ? "correo" : null);
-
-function textoBase(l, recordar) {
-  const m = l.mensajes;
-  if (recordar) return canal(l) === "correo" ? m.recordatorioCorreo : m.recordatorioChat;
-  return canal(l) === "correo" ? m.correoCorto : m.chat;
-}
-
 async function tarjeta(l, { recordar = false } = {}) {
   const [borrador, [ficha]] = await Promise.all([comando(["GET", BORRADOR(l.clave)]).catch(() => null), leerLugares([l.clave]).catch(() => [null])]);
   let texto = borrador || textoBase(l, recordar);
@@ -103,17 +95,6 @@ export async function tarjetasCaptacion({ marcar = true } = {}) {
     ])).catch(() => null);
   }
   return tarjetas;
-}
-
-// Enlace que abre el mensaje ya escrito para que lo mandes tú
-function enlaceEnviar(l, texto, recordar) {
-  if (canal(l) === "instagram") return { url: `https://ig.me/m/${l.instagram}`, nota: "Copia el mensaje de arriba y pégalo en el chat de Instagram que se abre." };
-  if (canal(l) === "correo") {
-    const asunto = recordar ? l.mensajes.asuntoRecordatorio : l.mensajes.asuntoCorto;
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(l.email)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`;
-    return url.length < 1900 ? { url, nota: "Se abre Gmail con el correo escrito: revisa y pulsa Enviar." } : { url: `${DOMINIO}/panel#captacion`, nota: "El correo es largo para un enlace: ábrelo desde el panel." };
-  }
-  return null;
 }
 
 // ---------- Botones ----------
@@ -159,17 +140,25 @@ export async function cambiarMensaje(chatId, instruccion) {
   const id = await comando(["GET", `telegram:editando:${chatId}`]);
   if (!id) return null;
   await comando(["DEL", `telegram:editando:${chatId}`]);
+  const r = await reescribirMensaje(id, instruccion);
+  return r.exito ? tarjeta(r.local, { recordar: r.recordar }) : { texto: r.mensaje };
+}
+
+// Reescribe el mensaje de un local con la indicación de Alejandro (flash-lite, sin Google, ~0,0001 $).
+// Lo usan Telegram (✏️ Cambiar) y «Hoy te toca» del panel. Devuelve { exito, texto, local, recordar } o { exito: false, mensaje }
+export async function reescribirMensaje(id, instruccion) {
   const g = await listarCaptacion();
   const l = [...g.listos, ...g.seguimiento].find((x) => x.clave === id);
-  if (!l) return { texto: "Ese local ya no está en la lista." };
-  const actual = (await comando(["GET", BORRADOR(id)])) || textoBase(l, l.estado === "contactado");
+  if (!l) return { exito: false, mensaje: "Ese local ya no está en la lista." };
+  const recordar = l.estado === "contactado";
+  const actual = (await comando(["GET", BORRADOR(id)])) || textoBase(l, recordar);
   const prompt = `Reescribe este mensaje para un negocio de León siguiendo la indicación de Alejandro. Mantén las cifras y el enlace EXACTOS, no inventes datos nuevos, español de España, sin comillas ni explicaciones: devuelve solo el mensaje.\n\nINDICACIÓN: ${String(instruccion).slice(0, 300)}\n\nMENSAJE:\n${actual}`;
   const { texto } = await llamarGemini(prompt, { para: "asesor", tarea: "captacion", google: false, temperatura: 0.4, msMax: 20000 });
   const nuevo = texto.replace(/\*\*?/g, "").trim();
   // Si la IA se ha comido el enlace al panel del local, no vale
-  if (l.mensajes.enlace && !nuevo.includes(l.mensajes.enlace)) return { texto: "La IA ha quitado el enlace a su panel y así no vale. Pídemelo de otra forma." };
+  if (l.mensajes.enlace && !nuevo.includes(l.mensajes.enlace)) return { exito: false, mensaje: "La IA ha quitado el enlace a su panel y así no vale. Pídemelo de otra forma." };
   await comando(["SET", BORRADOR(id), nuevo, "EX", 14 * 24 * 3600]);
-  return tarjeta(l, { recordar: l.estado === "contactado" });
+  return { exito: true, texto: nuevo, local: l, recordar };
 }
 
 // ---------- Hablar con el jefe ----------

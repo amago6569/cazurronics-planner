@@ -2,12 +2,23 @@
 // Reúne lo que deja apuntado cada tarea (barrido, Despensa, avisos, órdenes, encargos, novedades, charla) y lo
 // ordena con montarOficina. Lo usan el panel (/api/panel/oficina) y el parte diario del jefe por Telegram.
 import { leerJSON } from "./almacen";
-import { hoyEnLeon, leerGastoIA } from "./estadisticas";
-import { eventosProximos, leerBandeja, leerEncargos, partesDeOrdenes } from "./eventos";
+import { hoyEnLeon, leerGastoIA, leerResumen } from "./estadisticas";
+import { definirTramos, eventosProximos, leerBandeja, leerEncargos, partesDeOrdenes } from "./eventos";
 import { montarOficina } from "./oficina";
 import { EMPLEADO_DESPENSA, encargosDespensa } from "./despensa";
 import { leerNovedades, leerRendimiento } from "./novedades";
 import { leerCharla } from "./charla";
+import { listarCaptacion } from "./captacion";
+import { tarjetasPanel } from "./mensajeCaptacion";
+import { turnosDeCrons } from "./turnos";
+import vercel from "../../vercel.json";
+
+const DIA = 864e5;
+
+// Qué empleados firman las búsquedas de cada tramo del barrido (t0 → música, teatro y la Junta…)
+function empleadosDeTramo() {
+  return Object.fromEntries(definirTramos().map((t) => [t.id, [...new Set([...t.busquedas.map((b) => b.empleado || "junta"), ...(t.jcyl ? ["junta"] : [])])]]));
+}
 
 // Si le mandaste trabajar a mano después de su último turno, cuenta lo más reciente
 function masReciente(a = {}, b = {}) {
@@ -27,13 +38,14 @@ function partesDeOtros({ productos, tiendas, fichas, captacion, finde }) {
   return p;
 }
 
-export async function datosOficina() {
-  const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades, rendimiento, charla] = await Promise.all([
+export async function datosOficina({ ahora = Date.now() } = {}) {
+  const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades, rendimiento, charla, resumen, locales] = await Promise.all([
     leerJSON("eventos:ultimoBarrido"), leerBandeja(), eventosProximos(), leerGastoIA().catch(() => null), leerJSON("oficina:jefe"),
     leerJSON("despensa:ultimoBarrido"), leerJSON("despensa:g:ultimo"), leerJSON("despensa:fichas:ultimo"),
     leerJSON("oficina:turno:captacion"), leerJSON("oficina:turno:finde"),
     partesDeOrdenes().catch(() => ({})), leerEncargos().catch(() => ({})),
     encargosDespensa().catch(() => []), leerNovedades().catch(() => []), leerRendimiento().catch(() => ({})), leerCharla().catch(() => []),
+    leerResumen(2).catch(() => null), listarCaptacion().catch(() => null),
   ]);
   const hoy = hoyEnLeon();
   const nuevosHoy = (barrido?.tramos || []).filter((t) => t.fin && new Date(t.fin).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) === hoy).reduce((s, t) => s + (t.nuevos || 0), 0);
@@ -46,5 +58,25 @@ export async function datosOficina() {
     encargos: { ...encargos, [EMPLEADO_DESPENSA]: encargosDesp.map((texto) => ({ texto })) },
     rendimiento,
   });
-  return { ...oficina, bandeja, novedades, charla };
+  // Cuándo trabaja cada uno (para saber si está en su mesa, en la cafetería…)
+  const deTramo = empleadosDeTramo();
+  const turnos = turnosDeCrons(vercel.crons, deTramo);
+  for (const d of oficina.departamentos) for (const e of d.empleados) e.turnos = turnos[e.id] || [];
+
+  // Lo de las últimas 24 h, tramo a tramo: lo que se ve en «Anoche en 1 minuto» y en la tira del flujo
+  const golpes = (barrido?.tramos || [])
+    .filter((t) => t.fin && ahora - Date.parse(t.fin) < DIA && ahora >= Date.parse(t.fin))
+    .map((t) => ({ tramo: t.tramo, empleados: deTramo[t.tramo] || [], fin: t.fin, busquedas: t.busquedas || 0, eventos: t.eventos || 0, nuevos: t.nuevos || 0, descartados: t.descartados || 0, errores: t.errores || 0 }))
+    .sort((a, b) => a.fin.localeCompare(b.fin));
+  const suma = (k) => golpes.reduce((s, g) => s + g[k], 0);
+  const tarjetas = locales ? await tarjetasPanel(locales).catch(() => []) : [];
+  const conFallo = oficina.departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error");
+  const flujo = {
+    buscan: suma("busquedas"), encontrados: suma("eventos"), entran: suma("nuevos"), sinFuente: suma("descartados"), fallos: suma("errores"),
+    agenda: oficina.jefe.cifras.agenda,
+    planesAyer: resumen?.porDia?.[1]?.plan ?? null, planesHoy: resumen?.porDia?.[0]?.plan ?? null,
+    captacion: locales?.listos?.length ?? 0,
+    pendientes: bandeja.length + tarjetas.length + conFallo.length,
+  };
+  return { ...oficina, bandeja, novedades, charla, turnosJefe: turnos.jefe || [], golpes, flujo, captacion: tarjetas };
 }

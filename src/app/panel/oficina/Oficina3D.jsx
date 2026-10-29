@@ -1,74 +1,160 @@
 "use client";
-// La oficina en 3D de verdad (three.js con @react-three/fiber), en una planta abierta tipo maqueta:
-// cada empleado tiene su mesa en la zona de su departamento y el jefe su despacho de cristal.
-// Lo que hacen sale de datos reales:
-//  · sentado: teclea si ha cumplido su turno, se duerme si va con retraso y le sale humo si ha fallado;
-//  · la charla del día (lib/charla) se reproduce en orden: quien habla se levanta, va andando por los pasillos
-//    a la mesa del otro, se lo dice en un bocadillo, el otro contesta y vuelve a su sitio.
-// Arrastra para girar, pellizca o usa la rueda para acercar, toca a alguien para ver su ficha.
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+// La oficina en 3D (three.js con @react-three/fiber): un edificio visto en isométrico, con una sala por cada paso
+// del trabajo (ver guion.js). Cada empleado está donde toca según su horario real (vercel.json) y su estado:
+// en su mesa durante su turno, en la cafetería si ya lo ha hecho, dormido en el sofá si se lo ha saltado y
+// esperando en la puerta del jefe si ha fallado. «Anoche en 1 minuto» repite las últimas 24 h con sus cifras.
+// Un dedo mueve la planta, dos dedos (o la rueda) acercan, y tocar a alguien abre su ficha. Ver esto no gasta IA.
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html, OrbitControls, RoundedBox } from "@react-three/drei";
+import { Html, MapControls } from "@react-three/drei";
 import { PRESS } from "../../../lib/estilos";
-import { CAMISAS, PELOS, PIELES, hace } from "./monigotes";
-import { CAFE, DESPACHO, ZONAS, episodios, largo, planta, puntoEn, ruta } from "./guion";
+import { dondeEsta, proximoTurno } from "../../../lib/turnos";
+import { CAMISAS, PELOS, PIELES, fmt } from "./monigotes";
+import { BARRA, CAFE_MESAS, CAFE_SITIOS, CAFE_SOFAS, DESTINOS, EDIFICIO, MOSTRADOR, SALAS, colocar, planta } from "./guion";
+import { bocadillosEn, contadores, enVuelo, horaReal, montarRepeticion, poseEn } from "./repeticion";
 
+// ---------- Materiales y piezas compartidas (low-poly, sin sombras en tiempo real) ----------
+const MATS = new Map();
+function mat(color, extra) {
+  const k = extra ? `${color}|${JSON.stringify(extra)}` : color;
+  if (!MATS.has(k)) MATS.set(k, new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra }));
+  return MATS.get(k);
+}
+const CRISTAL = new THREE.MeshLambertMaterial({ color: "#cfe3f0", transparent: true, opacity: 0.22, depthWrite: false });
+const CRISTAL_VENTANA = new THREE.MeshLambertMaterial({ color: "#b9d7ea", emissive: "#dbeafe", emissiveIntensity: 0.35 });
+const CAJA = new THREE.BoxGeometry(1, 1, 1);
+const CIL = new THREE.CylinderGeometry(1, 1, 1, 10);
+const BOLA = new THREE.IcosahedronGeometry(1, 1);
+const DISCO = new THREE.CircleGeometry(1, 24);
+
+const C = {
+  suelo: "#c9cdd3", pasillo: "#e3e5e8", pared: "#f3f2ef", marco: "#2b2f36", madera: "#b98552", maderaOscura: "#8a5a35",
+  negro: "#23262d", pantalla: "#1d2026", verde: "#4f8f4a", verdeClaro: "#6aa85c", maceta: "#e7e2da", acera: "#d4d6d9", asfalto: "#8f949b",
+};
 const LUZ = { ok: "#22c55e", tarde: "#f59e0b", error: "#ef4444", nuevo: "#38bdf8" };
-const VISTAS = [
-  { id: "todo", texto: "Toda", objetivo: [-0.5, 0, 1.6], camara: [16.5, 23, 27] },
-  { id: "agenda", texto: "Agenda", objetivo: [-7.2, 0, -3.8], camara: [-1, 9, 6] },
-  { id: "territorio", texto: "Territorio", objetivo: [2.7, 0, -4.5], camara: [8, 8, 4] },
-  { id: "despensa", texto: "Despensa", objetivo: [2.7, 0, -0.6], camara: [7.5, 6.5, 7] },
-  { id: "negocio", texto: "Negocio y café", objetivo: [-6.5, 0, 3.5], camara: [-2, 7, 11] },
-  { id: "jefe", texto: "Jefe", objetivo: [10, 0, 2.5], camara: [14, 7, 10] },
-];
-const HABLA = 3800, PAUSA = 700;
+const OFFSET = new THREE.Vector3(30, 33, 30);
+const ALTO = 2.8; // paredes exteriores
 
-// Las etiquetas HTML van a una capa nuestra encima del lienzo: si colgaran del propio lienzo, al cambiar de
-// pestaña React lo quita antes que a ellas y salta un error al limpiarlas.
+function Caja({ p, s, c, m, ...r }) {
+  return <mesh geometry={CAJA} material={m || mat(c)} position={p} scale={s} {...r} />;
+}
+function Cil({ p, r = 0.5, h = 1, c, m, ...x }) {
+  return <mesh geometry={CIL} material={m || mat(c)} position={p} scale={[r, h, r]} {...x} />;
+}
+
+// Las etiquetas HTML van a una capa nuestra encima del lienzo (si colgaran del lienzo, al cambiar de pestaña
+// React lo quitaría antes que a ellas y saltaría un error al limpiarlas)
 const Capa = createContext(null);
 function Etiqueta(props) {
   const capa = useContext(Capa);
   return <Html portal={capa} zIndexRange={[30, 10]} pointerEvents="none" {...props} />;
-} // ms que dura cada bocadillo y el respiro entre escenas
+}
+
+// ---------- Reloj de la repetición: lo leen solo las piezas que cambian con él (8 veces por segundo) ----------
+function crearReloj() {
+  let s = 0, paso = -1;
+  const subs = new Set();
+  return {
+    get: () => s,
+    set(v) { s = v; const p = Math.floor(v * 8); if (p !== paso) { paso = p; subs.forEach((f) => f()); } },
+    subscribe(f) { subs.add(f); return () => subs.delete(f); },
+  };
+}
+const useSegundo = (reloj) => useSyncExternalStore(reloj.subscribe, () => Math.floor(reloj.get() * 8) / 8, () => 0);
+
+// ---------- El edificio ----------
+function Ventana({ x, z, ancho, giro = 0 }) {
+  return (
+    <group position={[x, 1.55, z]} rotation={[0, giro, 0]}>
+      <Caja p={[0, 0, 0]} s={[ancho, 1.5, 0.04]} m={CRISTAL_VENTANA} />
+      <Caja p={[0, 0.78, 0.03]} s={[ancho + 0.1, 0.08, 0.06]} c={C.marco} />
+      <Caja p={[0, -0.78, 0.03]} s={[ancho + 0.1, 0.08, 0.06]} c={C.marco} />
+      {[-0.5, 0, 0.5].map((f) => <Caja key={f} p={[f * ancho, 0, 0.03]} s={[0.07, 1.5, 0.06]} c={C.marco} />)}
+    </group>
+  );
+}
+
+// Tabique de media altura con cristal encima y huecos para las puertas. eje "x": va a lo largo de x (en z fijo)
+function Tabique({ eje, fijo, desde, hasta, puertas = [], bajo = 1, alto = 2.3 }) {
+  const tramos = [];
+  let a = desde;
+  for (const p of [...puertas].sort((m, n) => m - n)) { tramos.push([a, p - 0.7]); a = p + 0.7; }
+  tramos.push([a, hasta]);
+  return tramos.filter(([m, n]) => n - m > 0.05).map(([m, n]) => {
+    const c = (m + n) / 2, l = n - m;
+    const pos = (y) => (eje === "x" ? [c, y, fijo] : [fijo, y, c]);
+    const tam = (h, g) => (eje === "x" ? [l, h, g] : [g, h, l]);
+    const postes = [m, n, ...Array.from({ length: Math.floor(l / 2.6) }, (_, i) => m + (i + 1) * (l / (Math.floor(l / 2.6) + 1)))];
+    return (
+      <group key={m}>
+        <Caja p={pos(bajo / 2)} s={tam(bajo, 0.14)} c={C.pared} />
+        <Caja p={pos(bajo + (alto - bajo) / 2)} s={tam(alto - bajo, 0.03)} m={CRISTAL} />
+        <Caja p={pos(alto)} s={tam(0.07, 0.08)} c={C.marco} />
+        {postes.map((q) => <Caja key={q} p={eje === "x" ? [q, (alto + bajo) / 2, fijo] : [fijo, (alto + bajo) / 2, q]} s={[0.06, alto - bajo, 0.06]} c={C.marco} />)}
+      </group>
+    );
+  });
+}
+
+function Edificio() {
+  const { x0, x1, z0, z1 } = EDIFICIO;
+  const ancho = x1 - x0, fondo = z1 - z0;
+  const puertasAtras = ["busqueda", "control", "archivo", "despacho"].map((s) => SALAS[s].puerta[0]);
+  const puertasDelante = ["cafe", "despensa", "negocio", "escaparate"].map((s) => SALAS[s].puerta[0]);
+  return (
+    <group>
+      {/* Losa, calle y acera */}
+      <Caja p={[0, -0.22, 1]} s={[ancho + 0.6, 0.4, fondo + 0.6 + 2]} c="#b9bec6" />
+      <Caja p={[0, -0.05, z1 + 1.2]} s={[ancho + 3, 0.1, 2.2]} c={C.acera} />
+      <Caja p={[0, -0.12, z1 + 3.6]} s={[ancho + 3, 0.1, 2.6]} c={C.asfalto} />
+      {[-12, -6, 0, 6, 12].map((x) => <Caja key={x} p={[x, -0.06, z1 + 3.6]} s={[2, 0.01, 0.16]} c="#f8fafc" />)}
+      {/* Suelos de cada sala y el pasillo */}
+      {Object.entries(SALAS).map(([id, s]) => <Caja key={id} p={[(s.x0 + s.x1) / 2, 0.005, (s.z0 + s.z1) / 2]} s={[s.x1 - s.x0, 0.01, s.z1 - s.z0]} c={s.suelo} />)}
+      <Caja p={[0, 0.005, 0]} s={[ancho, 0.01, 2.4]} c={C.pasillo} />
+      {/* Paredes exteriores de atrás y de la izquierda, altas y con ventanales */}
+      <Caja p={[0, ALTO / 2, z0 - 0.12]} s={[ancho + 0.25, ALTO, 0.25]} c={C.pared} />
+      <Caja p={[x0 - 0.12, ALTO / 2, 0]} s={[0.25, ALTO, fondo]} c={C.pared} />
+      <Caja p={[0, ALTO + 0.04, z0 - 0.12]} s={[ancho + 0.3, 0.08, 0.3]} c={C.marco} />
+      <Caja p={[x0 - 0.12, ALTO + 0.04, 0]} s={[0.3, 0.08, fondo]} c={C.marco} />
+      {[-13.5, -4.5, 2.5, 14.5].map((x) => <Ventana key={x} x={x} z={z0 + 0.02} ancho={x === 14.5 ? 1.8 : 3} />)}
+      {[-6, 6.5, 9.4].map((z) => <Ventana key={z} x={x0 + 0.02} z={z} ancho={z === -6 ? 3.6 : 2.2} giro={Math.PI / 2} />)}
+      {/* Pasillo: tabiques bajos hacia la cámara, más altos al fondo; tabiques entre salas */}
+      <Tabique eje="x" fijo={-1.2} desde={x0} hasta={x1} puertas={puertasAtras} bajo={0.45} alto={2} />
+      <Tabique eje="x" fijo={1.2} desde={x0} hasta={x1} puertas={puertasDelante} bajo={1} alto={2.3} />
+      {[-1, 6, 11].map((x) => <Tabique key={x} eje="z" fijo={x} desde={z0} hasta={-1.2} bajo={0.9} />)}
+      {[-6, 0, 5].map((x) => <Tabique key={x} eje="z" fijo={x} desde={1.2} hasta={z1} bajo={0.9} />)}
+      {/* Delante y a la derecha, un bordillo (para ver dentro); el escaparate, de cristal hasta arriba */}
+      <Caja p={[(x0 + 5) / 2, 0.15, z1]} s={[5 - x0, 0.3, 0.14]} c={C.pared} />
+      <Caja p={[x1, 0.15, 0]} s={[0.14, 0.3, fondo]} c={C.pared} />
+      <Tabique eje="x" fijo={z1} desde={5} hasta={x1} bajo={0.35} alto={2.5} />
+    </group>
+  );
+}
 
 // ---------- Muebles ----------
-function Mesa({ x, z, luz, grande = false }) {
-  const w = grande ? 2.2 : 1.4;
+function Escritorio({ x, z, luz, grande = false }) {
+  const w = grande ? 2.2 : 1.4, d = grande ? 0.95 : 0.75;
   return (
     <group position={[x, 0, z]}>
-      <RoundedBox args={[w, 0.07, grande ? 1 : 0.75]} radius={0.03} position={[0, 0.74, 0]} castShadow receiveShadow>
-        <meshStandardMaterial color={grande ? "#7c4a2d" : "#f5efe6"} roughness={0.55} />
-      </RoundedBox>
-      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => (
-        <mesh key={`${a}${b}`} position={[a * (w / 2 - 0.08), 0.36, b * 0.28]} castShadow>
-          <boxGeometry args={[0.05, 0.72, 0.05]} />
-          <meshStandardMaterial color="#94a3b8" metalness={0.4} roughness={0.4} />
-        </mesh>
+      <Caja p={[0, 0.74, 0]} s={[w, 0.06, d]} c={grande ? C.maderaOscura : C.madera} />
+      <Caja p={[-w / 2 + 0.05, 0.36, 0]} s={[0.06, 0.72, d - 0.1]} c={C.maderaOscura} />
+      <Caja p={[w / 2 - 0.05, 0.36, 0]} s={[0.06, 0.72, d - 0.1]} c={C.maderaOscura} />
+      {/* Dos pantallas negras; por detrás, el piloto del color de su estado */}
+      {(grande ? [0] : [-0.33, 0.33]).map((dx) => (
+        <group key={dx} position={[dx, 0.77, 0.16]}>
+          <Caja p={[0, 0.08, 0]} s={[0.06, 0.16, 0.06]} c={C.negro} />
+          <Caja p={[0, 0.34, 0]} s={[0.6, 0.36, 0.04]} c={C.pantalla} />
+          <Caja p={[0, 0.34, -0.022]} s={[0.52, 0.29, 0.005]} m={mat(luz, { emissive: luz, emissiveIntensity: 0.55 })} />
+        </group>
       ))}
-      {/* Pantalla: de cara a quien se sienta; por detrás, el logo encendido del color de su estado */}
-      <group position={[0, 0.78, 0.12]}>
-        <mesh position={[0, 0.06, 0]}><boxGeometry args={[0.08, 0.12, 0.08]} /><meshStandardMaterial color="#334155" /></mesh>
-        <RoundedBox args={[0.62, 0.38, 0.04]} radius={0.015} position={[0, 0.32, 0]} castShadow>
-          <meshStandardMaterial color="#1e293b" roughness={0.3} />
-        </RoundedBox>
-        <mesh position={[0, 0.32, -0.022]} rotation={[0, Math.PI, 0]}>
-          <planeGeometry args={[0.56, 0.32]} />
-          <meshStandardMaterial color={luz} emissive={luz} emissiveIntensity={0.9} />
-        </mesh>
-        <mesh position={[0, 0.32, 0.022]}>
-          <circleGeometry args={[0.04, 20]} />
-          <meshStandardMaterial color={luz} emissive={luz} emissiveIntensity={1.4} />
-        </mesh>
-      </group>
-      <mesh position={[0, 0.79, -0.18]}><boxGeometry args={[0.42, 0.02, 0.13]} /><meshStandardMaterial color="#e2e8f0" /></mesh>
-      <mesh position={[w / 2 - 0.2, 0.83, -0.1]} castShadow><cylinderGeometry args={[0.05, 0.045, 0.1, 14]} /><meshStandardMaterial color={grande ? "#0f172a" : "#fb7185"} /></mesh>
-      {/* Silla */}
+      <Caja p={[0, 0.78, -0.15]} s={[0.45, 0.02, 0.14]} c="#e5e7eb" />
+      {/* Silla negra */}
       <group position={[0, 0, -0.78]}>
-        <RoundedBox args={[0.5, 0.08, 0.48]} radius={0.03} position={[0, 0.46, 0]} castShadow><meshStandardMaterial color="#334155" roughness={0.7} /></RoundedBox>
-        <RoundedBox args={[0.5, 0.55, 0.07]} radius={0.03} position={[0, 0.78, -0.24]} castShadow><meshStandardMaterial color="#334155" roughness={0.7} /></RoundedBox>
-        <mesh position={[0, 0.22, 0]}><cylinderGeometry args={[0.03, 0.03, 0.44, 8]} /><meshStandardMaterial color="#64748b" /></mesh>
-        <mesh position={[0, 0.03, 0]}><cylinderGeometry args={[0.24, 0.24, 0.04, 16]} /><meshStandardMaterial color="#475569" /></mesh>
+        <Caja p={[0, 0.46, 0]} s={[0.5, 0.08, 0.46]} c={C.negro} />
+        <Caja p={[0, 0.8, -0.23]} s={[0.48, 0.6, 0.07]} c={C.negro} />
+        <Cil p={[0, 0.22, 0]} r={0.03} h={0.44} c="#4b5563" />
+        <Cil p={[0, 0.03, 0]} r={0.24} h={0.04} c="#374151" />
       </group>
     </group>
   );
@@ -77,372 +163,663 @@ function Mesa({ x, z, luz, grande = false }) {
 function Planta({ x, z, alta = 1 }) {
   return (
     <group position={[x, 0, z]}>
-      <mesh position={[0, 0.22, 0]} castShadow><cylinderGeometry args={[0.24, 0.18, 0.44, 16]} /><meshStandardMaterial color="#e7d3bd" roughness={0.8} /></mesh>
-      <mesh position={[0, 0.62 * alta + 0.25, 0]} castShadow scale={[1, alta, 1]}><icosahedronGeometry args={[0.42, 1]} /><meshStandardMaterial color="#4d9a5b" roughness={0.8} flatShading /></mesh>
-      <mesh position={[0.15, 1.05 * alta + 0.2, 0.05]} castShadow scale={[1, alta, 1]}><icosahedronGeometry args={[0.28, 1]} /><meshStandardMaterial color="#5fb36c" roughness={0.8} flatShading /></mesh>
+      <Cil p={[0, 0.22, 0]} r={0.22} h={0.44} c={C.maceta} />
+      <mesh geometry={BOLA} material={mat(C.verde)} position={[0, 0.55 + 0.3 * alta, 0]} scale={[0.4, 0.5 * alta, 0.4]} />
+      <mesh geometry={BOLA} material={mat(C.verdeClaro)} position={[0.12, 0.9 + 0.45 * alta, 0.05]} scale={[0.28, 0.38 * alta, 0.28]} />
     </group>
   );
 }
 
-function Cafe() {
-  const cx = (CAFE.x0 + CAFE.x1) / 2, cz = (CAFE.z0 + CAFE.z1) / 2;
+function Lampara({ x, z }) {
   return (
-    <group>
-      <RoundedBox args={[CAFE.x1 - CAFE.x0, 0.02, CAFE.z1 - CAFE.z0]} radius={0.01} position={[cx, 0.011, cz]} receiveShadow><meshStandardMaterial color="#e2e8f0" /></RoundedBox>
-      {/* Sofá */}
-      <group position={[cx, 0, CAFE.z1 - 0.7]}>
-        <RoundedBox args={[2.6, 0.4, 0.8]} radius={0.12} position={[0, 0.3, 0]} castShadow><meshStandardMaterial color="#f43f5e" roughness={0.8} /></RoundedBox>
-        <RoundedBox args={[2.6, 0.6, 0.25]} radius={0.1} position={[0, 0.6, 0.3]} castShadow><meshStandardMaterial color="#e11d48" roughness={0.8} /></RoundedBox>
-      </group>
-      {/* Mesa baja y cafetera */}
-      <mesh position={[cx, 0.25, cz + 0.6]} castShadow><cylinderGeometry args={[0.5, 0.5, 0.06, 24]} /><meshStandardMaterial color="#f5efe6" /></mesh>
-      <mesh position={[cx, 0.12, cz + 0.6]}><cylinderGeometry args={[0.06, 0.06, 0.24, 8]} /><meshStandardMaterial color="#94a3b8" /></mesh>
-      <group position={[CAFE.x0 + 0.5, 0, CAFE.z0 + 0.6]}>
-        <RoundedBox args={[0.9, 0.9, 0.6]} radius={0.05} position={[0, 0.45, 0]} castShadow><meshStandardMaterial color="#cbd5e1" /></RoundedBox>
-        <RoundedBox args={[0.4, 0.45, 0.35]} radius={0.05} position={[0, 1.12, 0]} castShadow><meshStandardMaterial color="#0f172a" /></RoundedBox>
-        <mesh position={[0, 1.2, 0.18]}><circleGeometry args={[0.05, 16]} /><meshStandardMaterial color="#f59e0b" emissive="#f59e0b" emissiveIntensity={1.2} /></mesh>
-      </group>
-      <Planta x={CAFE.x1 - 0.4} z={CAFE.z0 + 0.5} alta={1.3} />
+    <group position={[x, 0, z]}>
+      <Cil p={[0, 0.02, 0]} r={0.18} h={0.04} c={C.marco} />
+      <Cil p={[0, 0.8, 0]} r={0.025} h={1.6} c={C.marco} />
+      <Cil p={[0, 1.65, 0]} r={0.22} h={0.3} m={mat("#f3e6c8", { emissive: "#fde68a", emissiveIntensity: 0.6 })} />
     </group>
   );
 }
 
-function Despacho() {
-  const { x0, x1, z0, z1, puertaZ } = DESPACHO;
-  const cristal = <meshStandardMaterial color="#bfdbfe" transparent opacity={0.28} roughness={0.1} metalness={0.2} />;
-  const alto = 1.9;
-  // La pared oeste tiene un hueco (la puerta) en el pasillo
-  const tramos = [[z0, puertaZ - 0.8], [puertaZ + 0.8, z1]];
+// Sofá mirando hacia +x (largo en z)
+function Sofa({ x, z, largo = 2.2, color = "#6b7f99" }) {
   return (
-    <group>
-      <RoundedBox args={[x1 - x0, 0.02, z1 - z0]} radius={0.01} position={[(x0 + x1) / 2, 0.011, (z0 + z1) / 2]} receiveShadow><meshStandardMaterial color="#cbd5e1" /></RoundedBox>
-      <mesh position={[(x0 + x1) / 2, alto / 2, z0]}><boxGeometry args={[x1 - x0, alto, 0.05]} />{cristal}</mesh>
-      {tramos.map(([a, b]) => (
-        <mesh key={a} position={[x0, alto / 2, (a + b) / 2]}><boxGeometry args={[0.05, alto, b - a]} />{cristal}</mesh>
-      ))}
-      {[[x0, z0], [x0, puertaZ - 0.8], [x0, puertaZ + 0.8], [x0, z1], [x1, z0]].map(([x, z]) => (
-        <mesh key={`${x}${z}`} position={[x, alto / 2, z]} castShadow><boxGeometry args={[0.09, alto, 0.09]} /><meshStandardMaterial color="#334155" /></mesh>
-      ))}
-      <mesh position={[(x0 + x1) / 2, alto, z0]}><boxGeometry args={[x1 - x0, 0.08, 0.09]} /><meshStandardMaterial color="#334155" /></mesh>
-      {/* Alfombra, estantería y planta del despacho */}
-      <mesh position={[DESPACHO.mesa[0], 0.025, DESPACHO.mesa[1] + 0.2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow><circleGeometry args={[1.8, 40]} /><meshStandardMaterial color="#fda4af" /></mesh>
-      <group position={[x1 - 0.35, 0, z0 + 1.6]}>
-        <RoundedBox args={[0.4, 1.8, 1.6]} radius={0.03} position={[0, 0.9, 0]} castShadow><meshStandardMaterial color="#7c4a2d" /></RoundedBox>
-        {[0.5, 0.95, 1.4].map((y, i) => <mesh key={y} position={[-0.21, y, 0]}><boxGeometry args={[0.02, 0.32, 1.3]} /><meshStandardMaterial color={["#f43f5e", "#0ea5e9", "#f59e0b"][i]} /></mesh>)}
-      </group>
-      <Planta x={x1 - 0.5} z={z1 - 0.6} alta={1.4} />
+    <group position={[x, 0, z]}>
+      <Caja p={[0, 0.25, 0]} s={[0.85, 0.3, largo]} c={color} />
+      <Caja p={[0.05, 0.43, 0]} s={[0.7, 0.1, largo - 0.3]} c={color} />
+      <Caja p={[-0.33, 0.62, 0]} s={[0.22, 0.6, largo]} c={color} />
+      {[-1, 1].map((k) => <Caja key={k} p={[0, 0.5, k * (largo / 2 - 0.08)]} s={[0.85, 0.32, 0.16]} c={color} />)}
     </group>
   );
 }
 
-function Edificio() {
+function Estanteria({ x, z, ancho, alto = 2, fondo = 0.42, baldas = 4, color = C.maderaOscura }) {
+  return (
+    <group position={[x, 0, z]}>
+      <Caja p={[-ancho / 2, alto / 2, 0]} s={[0.05, alto, fondo]} c={color} />
+      <Caja p={[ancho / 2, alto / 2, 0]} s={[0.05, alto, fondo]} c={color} />
+      <Caja p={[0, alto / 2, -fondo / 2]} s={[ancho, alto, 0.03]} c={color} />
+      {Array.from({ length: baldas + 1 }, (_, i) => <Caja key={i} p={[0, 0.06 + (i * (alto - 0.1)) / baldas, 0]} s={[ancho, 0.04, fondo]} c={color} />)}
+    </group>
+  );
+}
+
+// Archivadores (instanciados): se llenan según los eventos que hay en la agenda
+const ESTANTES_ARCHIVO = [
+  { x: 8.5, z: -10.55, ancho: 4.2, alto: 2.2, baldas: 4 },
+  { x: 8.5, z: -8, ancho: 3.4, alto: 1.5, baldas: 3 },
+  { x: 8.5, z: -5.8, ancho: 3.4, alto: 1.5, baldas: 3 },
+];
+const COLORES_ARCHIVO = ["#f43f5e", "#0ea5e9", "#f59e0b", "#10b981", "#8b5cf6", "#64748b"].map((c) => new THREE.Color(c));
+function Archivadores({ agenda }) {
+  const ref = useRef();
+  const huecos = useMemo(() => ESTANTES_ARCHIVO.flatMap((e) => Array.from({ length: e.baldas }, (_, b) => {
+    const n = Math.floor((e.ancho - 0.2) / 0.13);
+    return Array.from({ length: n }, (_, i) => [e.x - e.ancho / 2 + 0.16 + i * 0.13, 0.08 + (b * (e.alto - 0.1)) / e.baldas + 0.17, e.z + 0.02]);
+  }).flat()), []);
+  const llenos = Math.min(huecos.length, Math.round((Math.min(agenda, 500) / 500) * huecos.length) + (agenda > 0 ? 3 : 0));
+  useEffect(() => {
+    const m = ref.current;
+    if (!m) return;
+    const o = new THREE.Object3D();
+    for (let i = 0; i < huecos.length; i++) {
+      o.position.set(...huecos[i]);
+      o.scale.set(i < llenos ? 0.1 : 0.0001, 0.32, 0.3);
+      o.updateMatrix();
+      m.setMatrixAt(i, o.matrix);
+      m.setColorAt(i, COLORES_ARCHIVO[(i * 7) % COLORES_ARCHIVO.length]);
+    }
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  }, [huecos, llenos]);
   return (
     <group>
-      {/* Losa de la maqueta */}
-      <RoundedBox args={[27, 0.6, 20.5]} radius={0.2} position={[-0.4, -0.3, -1.2]} receiveShadow><meshStandardMaterial color="#e8d5bf" roughness={0.9} /></RoundedBox>
-      {/* Pared del fondo y la izquierda, con ventanales */}
-      <mesh position={[-0.4, 1.6, -11.3]} receiveShadow castShadow><boxGeometry args={[27, 3.2, 0.3]} /><meshStandardMaterial color="#f8fafc" /></mesh>
-      <mesh position={[-13.75, 1.6, -1.2]} receiveShadow castShadow><boxGeometry args={[0.3, 3.2, 20.5]} /><meshStandardMaterial color="#f1f5f9" /></mesh>
-      {[-9, -3, 3, 9].map((x) => (
-        <mesh key={x} position={[x, 1.75, -11.14]}><planeGeometry args={[3.8, 1.7]} /><meshStandardMaterial color="#bae6fd" emissive="#e0f2fe" emissiveIntensity={0.5} /></mesh>
+      {ESTANTES_ARCHIVO.map((e) => <Estanteria key={e.z} {...e} />)}
+      <instancedMesh ref={ref} args={[CAJA, mat("#ffffff"), huecos.length]} />
+    </group>
+  );
+}
+
+// Tarros y quesos de la Despensa (instanciados)
+function Productos() {
+  const ref = useRef();
+  const lista = useMemo(() => Array.from({ length: 3 }, (_, b) => Array.from({ length: 14 }, (_, i) => [-5.25 + i * 0.34, 0.12 + b * 0.42, 9.62])).flat(), []);
+  useEffect(() => {
+    const m = ref.current, o = new THREE.Object3D();
+    const col = ["#b45309", "#dc2626", "#facc15", "#65a30d", "#7c2d12", "#f5f5f4"].map((c) => new THREE.Color(c));
+    lista.forEach((p, i) => {
+      o.position.set(p[0], p[1] + 0.1, p[2]);
+      o.scale.set(0.12, i % 3 === 0 ? 0.12 : 0.2, 0.12);
+      o.updateMatrix();
+      m.setMatrixAt(i, o.matrix);
+      m.setColorAt(i, col[(i * 5) % col.length]);
+    });
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  }, [lista]);
+  return <instancedMesh ref={ref} args={[CIL, mat("#ffffff"), lista.length]} />;
+}
+
+function Cafeteria() {
+  return (
+    <group>
+      {/* Barra con cafetera y taburetes */}
+      <Caja p={[(BARRA.x0 + BARRA.x1) / 2, 0.52, BARRA.z]} s={[BARRA.x1 - BARRA.x0, 1.04, 0.6]} c={C.maderaOscura} />
+      <Caja p={[(BARRA.x0 + BARRA.x1) / 2, 1.07, BARRA.z]} s={[BARRA.x1 - BARRA.x0 + 0.1, 0.06, 0.7]} c="#e5e7eb" />
+      <group position={[-10.6, 1.1, BARRA.z]}>
+        <Caja p={[0, 0.25, 0]} s={[0.5, 0.5, 0.4]} c="#94a3b8" />
+        <Caja p={[0, 0.55, 0]} s={[0.5, 0.1, 0.42]} c={C.negro} />
+        <Cil p={[0, 0.3, 0.2]} r={0.04} h={0.03} m={mat("#f59e0b", { emissive: "#f59e0b", emissiveIntensity: 1 })} rotation={[Math.PI / 2, 0, 0]} />
+      </group>
+      {Array.from({ length: 6 }, (_, i) => (
+        <group key={i} position={[-15.2 + i * 0.95, 0, 2.6]}>
+          <Cil p={[0, 0.36, 0]} r={0.03} h={0.72} c={C.marco} />
+          <Cil p={[0, 0.74, 0]} r={0.2} h={0.06} c={C.negro} />
+        </group>
       ))}
-      {[-7, 0, 6].map((z) => (
-        <mesh key={z} position={[-13.59, 1.75, z]} rotation={[0, Math.PI / 2, 0]}><planeGeometry args={[3.6, 1.7]} /><meshStandardMaterial color="#bae6fd" emissive="#e0f2fe" emissiveIntensity={0.5} /></mesh>
+      {/* Mesas redondas con tres sillas */}
+      {CAFE_MESAS.map(([x, z]) => (
+        <group key={`${x}${z}`}>
+          <Cil p={[x, 0.74, z]} r={0.55} h={0.05} c={C.madera} />
+          <Cil p={[x, 0.37, z]} r={0.05} h={0.74} c={C.marco} />
+          {[[0, -0.8], [-0.85, 0], [0.85, 0]].map(([dx, dz]) => (
+            <group key={`${dx}${dz}`} position={[x + dx, 0, z + dz]}>
+              <Caja p={[0, 0.45, 0]} s={[0.42, 0.06, 0.42]} c={C.madera} />
+              {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => <Caja key={`${a}${b}`} p={[a * 0.17, 0.22, b * 0.17]} s={[0.04, 0.44, 0.04]} c={C.marco} />)}
+            </group>
+          ))}
+          <Cil p={[x + 0.15, 0.81, z + 0.1]} r={0.05} h={0.09} c="#f8fafc" />
+        </group>
       ))}
+      {/* Sofás para echarse, con lámparas de pie */}
+      {CAFE_SOFAS.map(([x, z], i) => <Sofa key={z} x={x} z={z} color={i ? "#b45309" : "#6b7f99"} />)}
+      <Lampara x={-15.5} z={4.6} />
+      <Lampara x={-15.5} z={10.5} />
+      <Caja p={[-14.6, 0.2, 7.5]} s={[0.5, 0.4, 0.5]} c={C.madera} />
+      <Planta x={-6.6} z={10.4} alta={1.4} />
+      <Planta x={-6.6} z={6.2} />
+      {/* Fuente de agua */}
+      <group position={[-6.55, 0, 2.2]}>
+        <Caja p={[0, 0.5, 0]} s={[0.4, 1, 0.4]} c="#e5e7eb" />
+        <Cil p={[0, 1.2, 0]} r={0.16} h={0.4} m={mat("#7dd3fc", { transparent: true, opacity: 0.7 })} />
+      </group>
+    </group>
+  );
+}
+
+function Despacho({ luz }) {
+  return (
+    <group>
+      <mesh geometry={DISCO} material={mat("#9f1239")} position={[13.5, 0.02, -5.8]} rotation={[-Math.PI / 2, 0, 0]} scale={1.9} />
+      <Escritorio x={13.5} z={-6.2} luz={luz} grande />
+      <Estanteria x={13.5} z={-10.55} ancho={3} alto={2.1} />
+      {[0.35, 0.87, 1.39].map((y, i) => <Caja key={y} p={[13.5 - 0.3 * i, y + 0.12, -10.5]} s={[2.2, 0.28, 0.25]} c={["#f43f5e", "#0ea5e9", "#f59e0b"][i]} />)}
+      {/* Globo terráqueo encima */}
+      <Cil p={[12.5, 2.2, -10.5]} r={0.1} h={0.08} c={C.marco} />
+      <mesh geometry={BOLA} material={mat("#3b82f6")} position={[12.5, 2.48, -10.5]} scale={0.24} />
+      {/* Telescopio junto a la ventana */}
+      <group position={[15.1, 0, -9.6]}>
+        {[0, 2.1, 4.2].map((a) => <Caja key={a} p={[Math.sin(a) * 0.2, 0.5, Math.cos(a) * 0.2]} s={[0.04, 1, 0.04]} c={C.marco} rotation={[Math.cos(a) * 0.2, 0, -Math.sin(a) * 0.2]} />)}
+        <Cil p={[0, 1.15, 0.1]} r={0.08} h={0.9} c="#e5e7eb" rotation={[1.1, 0, 0]} />
+      </group>
+      <Sofa x={11.55} z={-8.4} largo={1.8} color="#334155" />
+      <Lampara x={11.5} z={-10.4} />
+      <Planta x={11.6} z={-2} alta={1.3} />
+      {/* Tu buzón, junto a la puerta */}
+      <group position={[DESTINOS.buzon[0], 0, DESTINOS.buzon[2]]}>
+        <Caja p={[0, 0.45, 0]} s={[0.08, 0.9, 0.08]} c={C.marco} />
+        <Caja p={[0, 1, 0]} s={[0.5, 0.35, 0.35]} c="#dc2626" />
+      </group>
+    </group>
+  );
+}
+
+function Control({ sinFuente }) {
+  const [mx, mz] = MOSTRADOR;
+  const lleno = Math.min(1, sinFuente / 40);
+  return (
+    <group>
+      <Caja p={[mx, 0.52, mz]} s={[3.4, 1.04, 0.8]} c={C.maderaOscura} />
+      <Caja p={[mx, 1.07, mz]} s={[3.5, 0.06, 0.9]} c="#f1f5f9" />
+      <Caja p={[mx - 1.2, 0.52, mz - 0.9]} s={[0.8, 1.04, 1.2]} c={C.maderaOscura} />
+      {/* Flexo y lupa: aquí se comprueba que cada evento tiene fuente */}
+      <group position={[mx + 1.1, 1.1, mz]}>
+        <Cil p={[0, 0.02, 0]} r={0.12} h={0.04} c={C.marco} />
+        <Caja p={[0, 0.25, 0]} s={[0.03, 0.5, 0.03]} c={C.marco} />
+        <Cil p={[0.1, 0.5, 0]} r={0.12} h={0.12} m={mat("#fde68a", { emissive: "#fde68a", emissiveIntensity: 0.8 })} />
+      </group>
+      <Cil p={[mx - 0.4, 1.12, mz + 0.05]} r={0.13} h={0.02} m={mat("#bae6fd", { emissive: "#bae6fd", emissiveIntensity: 0.3 })} rotation={[Math.PI / 2, 0, 0]} />
+      {[0, 1, 2].map((i) => <Caja key={i} p={[mx - 0.9 + i * 0.05, 1.12 + i * 0.03, mz]} s={[0.32, 0.03, 0.24]} c={["#fde68a", "#fecaca", "#bbf7d0"][i]} />)}
+      {/* Papelera de lo que no tenía fuente (se llena) */}
+      <group position={[DESTINOS.papelera[0], 0, DESTINOS.papelera[2]]}>
+        <Cil p={[0, 0.4, 0]} r={0.42} h={0.8} c="#475569" />
+        <Cil p={[0, 0.06 + 0.72 * lleno, 0]} r={0.38} h={0.12 + 1.44 * lleno * 0.5} c="#f8fafc" />
+      </group>
+      {/* Mesa de entrada del archivo */}
+      <Caja p={[DESTINOS.archivo[0], 0.42, DESTINOS.archivo[2]]} s={[1.4, 0.84, 0.6]} c={C.madera} />
+      <Planta x={-0.5} z={-10.4} alta={1.2} />
+      <Planta x={5.5} z={-10.4} />
+    </group>
+  );
+}
+
+function Busqueda() {
+  return (
+    <group>
+      {/* Alfombras: agenda (rosa) delante… y territorio (azul) en la última fila */}
+      <Caja p={[-8.4, 0.015, -7.1]} s={[14, 0.01, 5.7]} c="#f6d4d8" />
+      <Caja p={[-8.4, 0.015, -3.1]} s={[14, 0.01, 2.6]} c="#cfe6f3" />
       {/* Pizarra con el logo */}
-      <mesh position={[-0.4, 1.85, -11.12]}><planeGeometry args={[2.6, 1.3]} /><meshStandardMaterial color="#0f172a" /></mesh>
-      {["#f43f5e", "#fb923c", "#facc15"].map((c, i) => (
-        <mesh key={c} position={[-1.2 + i * 0.8, 1.85, -11.1]}><circleGeometry args={[0.28, 24]} /><meshStandardMaterial color={c} emissive={c} emissiveIntensity={0.35} /></mesh>
-      ))}
-      <Planta x={-12.9} z={-10.4} alta={1.5} />
-      <Planta x={6.8} z={-10.4} alta={1.2} />
-      <Planta x={-12.9} z={8.3} />
+      <Caja p={[-8.4, 1.7, -10.84]} s={[2.8, 1.3, 0.05]} c="#0f172a" />
+      {["#f43f5e", "#fb923c", "#facc15"].map((c, i) => <Cil key={c} p={[-9.2 + i * 0.8, 1.7, -10.8]} r={0.28} h={0.02} m={mat(c, { emissive: c, emissiveIntensity: 0.3 })} rotation={[Math.PI / 2, 0, 0]} />)}
+      <Planta x={-15.4} z={-10.4} alta={1.5} />
+      <Planta x={-1.6} z={-10.4} alta={1.2} />
+      <Planta x={-15.4} z={-1.9} />
     </group>
   );
 }
 
-function Alfombras({ sitios }) {
-  const zonas = Object.entries(ZONAS).map(([id, z]) => {
-    const suyos = Object.values(sitios).filter((s) => s.dep === id);
-    if (!suyos.length) return null;
-    const xs = suyos.map((s) => s.mesa[0]), zs = suyos.map((s) => s.mesa[1]);
-    const x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, z0 = Math.min(...zs) - 1.25, z1 = Math.max(...zs) + 0.65;
-    return { id, ...z, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, cartel: [x0 + 0.2, z0] };
-  }).filter(Boolean);
-  return zonas.map((z) => (
-    <group key={z.id}>
-      <RoundedBox args={[z.w, 0.025, z.d]} radius={0.012} position={[z.x, 0.013, z.z]} receiveShadow><meshStandardMaterial color={z.color} roughness={0.95} /></RoundedBox>
-      <Etiqueta position={[z.x, 2.7, z.cartel[1]]} center>
-        <span className="select-none whitespace-nowrap rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 shadow-sm">{z.nombre}</span>
-      </Etiqueta>
+function Escaparate({ planes }) {
+  const tarjetas = Math.min(8, planes || 0);
+  return (
+    <group>
+      {/* Mesa con los planes de ayer y una pantalla con la cifra */}
+      <Caja p={[8.5, 0.4, 7]} s={[2.6, 0.8, 1.2]} c={C.madera} />
+      {Array.from({ length: tarjetas }, (_, i) => (
+        <Caja key={i} p={[7.6 + (i % 4) * 0.6, 0.86, 6.75 + Math.floor(i / 4) * 0.5]} s={[0.42, 0.02, 0.3]} c={["#fecdd3", "#fed7aa", "#fef08a", "#bae6fd"][i % 4]} rotation={[0, (i % 3) * 0.12 - 0.12, 0]} />
+      ))}
+      <group position={[12.5, 0, 5]}>
+        <Caja p={[0, 0.6, 0]} s={[0.1, 1.2, 0.1]} c={C.marco} />
+        <Caja p={[0, 1.55, 0]} s={[2, 1.1, 0.08]} c={C.pantalla} />
+        <Caja p={[0, 1.55, 0.045]} s={[1.85, 0.95, 0.01]} m={mat("#fb7185", { emissive: "#fb7185", emissiveIntensity: 0.5 })} />
+      </group>
+      <Sofa x={5.6} z={8.5} largo={2} color="#e11d48" />
+      <Planta x={15.4} z={2} alta={1.3} />
+      <Planta x={15.4} z={10.3} />
+      {/* En la calle: gente mirando el escaparate (más cuantos más planes) y árboles */}
+      {Array.from({ length: Math.min(7, Math.ceil((planes || 0) / 6)) }, (_, i) => (
+        <group key={i} position={[6.5 + i * 1.3, 0, 12.1 + (i % 2) * 0.4]} rotation={[0, Math.PI, 0]}>
+          <Caja p={[0, 0.45, 0]} s={[0.3, 0.9, 0.2]} c="#334155" />
+          <Caja p={[0, 1.15, 0]} s={[0.42, 0.55, 0.26]} c={["#0ea5e9", "#f59e0b", "#10b981", "#8b5cf6"][i % 4]} />
+          <mesh geometry={BOLA} material={mat(PIELES[i % PIELES.length])} position={[0, 1.6, 0]} scale={0.17} />
+        </group>
+      ))}
+      {[-13, -3, 3.5, 15].map((x) => (
+        <group key={x} position={[x, 0, 12.1]}>
+          <Cil p={[0, 0.6, 0]} r={0.07} h={1.2} c={C.maderaOscura} />
+          <mesh geometry={BOLA} material={mat(C.verde)} position={[0, 1.6, 0]} scale={[0.65, 0.75, 0.65]} />
+        </group>
+      ))}
     </group>
-  ));
+  );
+}
+
+function Despensa() {
+  return (
+    <group>
+      <Estanteria x={-3} z={9.7} ancho={5} alto={1.3} fondo={0.4} baldas={3} />
+      <Productos />
+      {[[-5.4, 6.4], [-5.4, 7.1]].map(([x, z]) => <Caja key={z} p={[x, 0.25, z]} s={[0.6, 0.5, 0.5]} c="#c08a4e" />)}
+      <Planta x={-0.5} z={10.4} />
+    </group>
+  );
+}
+
+function Negocio() {
+  return (
+    <group>
+      {/* Corcho con notas */}
+      <group position={[2.5, 0, 9.7]}>
+        {[-0.9, 0.9].map((x) => <Caja key={x} p={[x, 0.7, 0]} s={[0.06, 1.4, 0.06]} c={C.marco} />)}
+        <Caja p={[0, 1.25, 0]} s={[2, 1, 0.05]} c="#c69c6d" />
+        {Array.from({ length: 7 }, (_, i) => <Caja key={i} p={[-0.7 + (i % 4) * 0.45, 1.05 + Math.floor(i / 4) * 0.4, 0.04]} s={[0.3, 0.25, 0.01]} c={["#fde68a", "#fecdd3", "#bbf7d0", "#bae6fd"][i % 4]} />)}
+      </group>
+      <Planta x={4.5} z={10.4} alta={1.2} />
+    </group>
+  );
 }
 
 // ---------- Personas ----------
-function Persona({ e, sitio, estado, camisa, piel, pelo, jefe, poses, bocadillo, alTocar, semilla, fuera }) {
-  const g = useRef(), cuerpo = useRef(), cabeza = useRef(), brazoI = useRef(), brazoD = useRef(), piernaI = useRef(), piernaD = useRef(), humo = useRef();
-  const [encima, setEncima] = useState(false);
+// La pose la escribe el director en cada fotograma: { x, z, giro, modo, lleva }
+// modo: anda · teclea · sentado · duerme · espera · entrega · jefe
+function Persona({ e, poses, piel, pelo, camisa, alTocar, semilla, jefe, rotulo }) {
+  const g = useRef(), cuerpo = useRef(), cabeza = useRef(), brazoI = useRef(), brazoD = useRef(), piernaI = useRef(), piernaD = useRef(), humo = useRef(), carpeta = useRef(), taza = useRef();
+  const [humos] = useState(() => [0, 1, 2].map(() => new THREE.MeshLambertMaterial({ color: "#64748b", transparent: true, opacity: 0.4, depthWrite: false })));
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime + semilla;
     const p = poses.get(e.id);
     if (!g.current) return;
-    if (p) {
-      // De pie: andando o hablando en la mesa de otro
-      g.current.position.set(p.x, 0, p.z);
-      g.current.rotation.y = p.giro;
-      cuerpo.current.position.y = p.andando ? Math.abs(Math.sin(t * 9)) * 0.05 : 0;
-      const paso = p.andando ? Math.sin(t * 9) * 0.6 : 0;
-      piernaI.current.rotation.x = paso; piernaD.current.rotation.x = -paso;
-      brazoI.current.rotation.x = -paso * 0.8; brazoD.current.rotation.x = p.hablando ? -1.1 + Math.sin(t * 6) * 0.25 : paso * 0.8;
-      cabeza.current.rotation.x = 0; cabeza.current.rotation.z = p.hablando ? Math.sin(t * 2.5) * 0.08 : 0;
-      cuerpo.current.rotation.x = 0;
-      if (humo.current) humo.current.visible = false;
-      return;
-    }
-    // Sentado en su silla, mirando a la cámara
-    g.current.position.set(sitio.silla[0], 0, sitio.silla[1] - 0.05);
-    g.current.rotation.y = 0;
-    cuerpo.current.position.y = -0.3;
-    piernaI.current.rotation.x = piernaD.current.rotation.x = -1.45;
-    if (estado === "tarde") {
-      cabeza.current.rotation.x = 0.55 + Math.sin(t * 1.2) * 0.05;
-      cuerpo.current.rotation.x = 0.18;
-      brazoI.current.rotation.x = brazoD.current.rotation.x = -0.9;
-    } else if (estado === "error") {
-      cabeza.current.rotation.z = Math.sin(t * 7) * 0.12;
-      brazoI.current.rotation.x = -2.6 + Math.sin(t * 8) * 0.2; brazoD.current.rotation.x = -2.6 + Math.cos(t * 8) * 0.2;
-      cuerpo.current.rotation.x = 0;
-    } else if (jefe) {
-      cabeza.current.rotation.y = Math.sin(t * 0.5) * 0.4;
-      brazoI.current.rotation.x = -1.2; brazoD.current.rotation.x = -1.2;
-      cuerpo.current.rotation.x = 0;
-    } else {
-      // Teclea: brazos adelante y manos que van y vienen
-      cabeza.current.rotation.x = 0.12 + Math.sin(t * 1.3) * 0.04;
-      cabeza.current.rotation.y = estado === "nuevo" ? Math.sin(t * 0.8) * 0.5 : Math.sin(t * 0.4) * 0.1;
+    g.current.visible = !!p;
+    if (!p) return;
+    const t = clock.elapsedTime + semilla;
+    g.current.position.set(p.x, 0, p.z);
+    g.current.rotation.y = p.giro || 0;
+    const sentado = ["teclea", "sentado", "duerme", "jefe"].includes(p.modo);
+    const anda = p.modo === "anda";
+    cuerpo.current.position.y = sentado ? (p.modo === "duerme" ? -0.38 : -0.32) : anda ? Math.abs(Math.sin(t * 10)) * 0.05 : 0;
+    cuerpo.current.rotation.x = p.modo === "duerme" ? -0.25 : p.modo === "teclea" ? 0.06 : 0;
+    const paso = anda ? Math.sin(t * 10) * 0.6 : 0;
+    piernaI.current.rotation.x = sentado ? -1.45 : paso;
+    piernaD.current.rotation.x = sentado ? -1.45 : -paso;
+    cabeza.current.rotation.set(0, 0, 0);
+    if (p.modo === "teclea") {
       brazoI.current.rotation.x = -1.25 + Math.sin(t * 14) * 0.12; brazoD.current.rotation.x = -1.25 + Math.cos(t * 14) * 0.12;
-      cuerpo.current.rotation.x = 0.05;
+      cabeza.current.rotation.x = 0.12 + Math.sin(t * 1.3) * 0.04;
+    } else if (p.modo === "jefe") {
+      brazoI.current.rotation.x = brazoD.current.rotation.x = -1.2;
+      cabeza.current.rotation.y = Math.sin(t * 0.5) * 0.4;
+    } else if (p.modo === "duerme") {
+      brazoI.current.rotation.x = brazoD.current.rotation.x = -0.3;
+      cabeza.current.rotation.z = 0.45 + Math.sin(t * 1.1) * 0.04;
+    } else if (p.modo === "sentado") {
+      // Con un café: de vez en cuando se lo lleva a la boca
+      const sorbo = Math.max(0, Math.sin(t * 0.7) - 0.6) * 4;
+      brazoI.current.rotation.x = -0.9; brazoD.current.rotation.x = -0.9 - sorbo * 0.9;
+      cabeza.current.rotation.y = Math.sin(t * 0.4) * 0.3;
+    } else if (p.modo === "espera") {
+      brazoI.current.rotation.x = brazoD.current.rotation.x = 0;
+      brazoI.current.rotation.z = 0.5; brazoD.current.rotation.z = -0.5;
+      cabeza.current.rotation.z = Math.sin(t * 6) * 0.1;
+      piernaD.current.rotation.x = Math.max(0, Math.sin(t * 8)) * -0.3;
+    } else if (p.modo === "entrega") {
+      brazoI.current.rotation.x = brazoD.current.rotation.x = -1.4;
+    } else {
+      brazoI.current.rotation.x = p.lleva ? -1.3 : -paso * 0.8; brazoD.current.rotation.x = p.lleva ? -1.3 : paso * 0.8;
     }
+    if (p.modo !== "espera") { brazoI.current.rotation.z = 0; brazoD.current.rotation.z = 0; }
+    if (carpeta.current) carpeta.current.visible = !!p.lleva;
+    if (taza.current) taza.current.visible = p.modo === "sentado";
     if (humo.current) {
-      humo.current.visible = estado === "error";
-      humo.current.children.forEach((b, i) => {
+      humo.current.visible = p.modo === "espera";
+      if (humo.current.visible) humo.current.children.forEach((b, i) => {
         const f = (t * 0.6 + i / 3) % 1;
-        b.position.set(Math.sin(f * 6 + i) * 0.15, 1.6 + f * 1.1, 0);
-        b.scale.setScalar(0.12 + f * 0.25);
-        b.material.opacity = 0.55 * (1 - f);
+        b.position.set(Math.sin(f * 6 + i) * 0.15, 1.9 + f * 0.9, 0);
+        b.scale.setScalar(0.1 + f * 0.22);
+        b.material.opacity = 0.5 * (1 - f);
       });
     }
   });
   const traje = jefe ? "#0f172a" : camisa;
   return (
-    <group ref={g} onPointerOver={(ev) => { ev.stopPropagation(); setEncima(true); }} onPointerOut={() => setEncima(false)}
-      onClick={(ev) => { ev.stopPropagation(); if (ev.delta > 8) return; alTocar(); }}>
+    <group ref={g} onClick={(ev) => { ev.stopPropagation(); if (ev.delta > 8) return; alTocar(); }}>
       <group ref={cuerpo}>
-        {/* Piernas (giran desde la cadera) */}
         {[[-0.11, piernaI], [0.11, piernaD]].map(([x, r]) => (
           <group key={x} ref={r} position={[x, 0.82, 0]}>
-            <mesh position={[0, -0.38, 0]} castShadow><boxGeometry args={[0.16, 0.76, 0.18]} /><meshStandardMaterial color={jefe ? "#1e293b" : "#334155"} /></mesh>
-            <mesh position={[0, -0.75, 0.06]} castShadow><boxGeometry args={[0.17, 0.08, 0.3]} /><meshStandardMaterial color="#0f172a" /></mesh>
+            <Caja p={[0, -0.38, 0]} s={[0.16, 0.76, 0.18]} c={jefe ? "#1e293b" : "#334155"} />
+            <Caja p={[0, -0.76, 0.06]} s={[0.17, 0.08, 0.3]} c="#0f172a" />
           </group>
         ))}
-        <RoundedBox args={[0.5, 0.62, 0.3]} radius={0.1} position={[0, 1.12, 0]} castShadow><meshStandardMaterial color={traje} roughness={0.6} /></RoundedBox>
-        {jefe && <mesh position={[0, 1.2, 0.155]}><boxGeometry args={[0.08, 0.36, 0.02]} /><meshStandardMaterial color="#f43f5e" /></mesh>}
-        {/* Brazos (giran desde el hombro) */}
-        {[[-0.32, brazoI], [0.32, brazoD]].map(([x, r]) => (
+        <Caja p={[0, 1.12, 0]} s={[0.48, 0.6, 0.28]} c={traje} />
+        {jefe && <Caja p={[0, 1.2, 0.145]} s={[0.08, 0.36, 0.02]} c="#f43f5e" />}
+        {[[-0.31, brazoI], [0.31, brazoD]].map(([x, r]) => (
           <group key={x} ref={r} position={[x, 1.38, 0]}>
-            <mesh position={[0, -0.24, 0]} castShadow><boxGeometry args={[0.13, 0.5, 0.14]} /><meshStandardMaterial color={traje} roughness={0.6} /></mesh>
-            <mesh position={[0, -0.52, 0]}><sphereGeometry args={[0.07, 12, 10]} /><meshStandardMaterial color={piel} /></mesh>
+            <Caja p={[0, -0.24, 0]} s={[0.13, 0.5, 0.14]} c={traje} />
+            <mesh geometry={BOLA} material={mat(piel)} position={[0, -0.52, 0]} scale={0.07} />
           </group>
         ))}
-        <group ref={cabeza} position={[0, 1.66, 0]}>
-          <mesh castShadow><sphereGeometry args={[0.24, 24, 18]} /><meshStandardMaterial color={piel} roughness={0.7} /></mesh>
-          <mesh position={[0, 0.07, -0.02]} scale={[1.06, 0.75, 1.06]}><sphereGeometry args={[0.24, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={jefe ? "#9ca3af" : pelo} roughness={0.9} /></mesh>
-          {estado === "tarde" && !fuera ? (
-            [-0.08, 0.08].map((x) => <mesh key={x} position={[x, 0.01, 0.225]}><boxGeometry args={[0.07, 0.012, 0.01]} /><meshStandardMaterial color="#1e293b" /></mesh>)
-          ) : (
-            [-0.08, 0.08].map((x) => <mesh key={x} position={[x, 0.02, 0.215]}><sphereGeometry args={[0.03, 10, 8]} /><meshStandardMaterial color="#0f172a" /></mesh>)
-          )}
-          <mesh position={[0, -0.08, 0.22]} rotation={[0, 0, Math.PI]}><torusGeometry args={[0.05, 0.012, 6, 12, Math.PI]} /><meshStandardMaterial color="#9f1239" /></mesh>
+        <group ref={carpeta} visible={false} position={[0, 1.05, 0.42]}>
+          <Caja p={[0, 0, 0]} s={[0.36, 0.05, 0.28]} c="#facc15" />
         </group>
-        {e.emoji && !jefe && (
-          <Etiqueta position={[0, 1.13, 0.17]} center distanceFactor={9}>
-            <span className="select-none text-[22px] leading-none">{e.emoji}</span>
-          </Etiqueta>
-        )}
+        <group ref={taza} visible={false} position={[0.31, 1.0, 0.35]}>
+          <Cil p={[0, 0, 0]} r={0.05} h={0.1} c="#f8fafc" />
+        </group>
+        <group ref={cabeza} position={[0, 1.66, 0]}>
+          <mesh geometry={BOLA} material={mat(piel)} scale={0.24} />
+          <mesh geometry={BOLA} material={mat(jefe ? "#9ca3af" : pelo)} position={[0, 0.09, -0.03]} scale={[0.255, 0.18, 0.25]} />
+          {[-0.08, 0.08].map((x) => <mesh key={x} geometry={BOLA} material={mat("#0f172a")} position={[x, 0.02, 0.215]} scale={0.03} />)}
+        </group>
       </group>
       <group ref={humo} visible={false}>
-        {[0, 1, 2].map((i) => <mesh key={i}><sphereGeometry args={[1, 10, 8]} /><meshStandardMaterial color="#64748b" transparent opacity={0.4} depthWrite={false} /></mesh>)}
+        {humos.map((m, i) => <mesh key={i} geometry={BOLA} material={m} />)}
       </group>
-      {estado === "tarde" && !fuera && (
-        <Etiqueta position={[0.25, 2.1, 0]} center distanceFactor={10}>
-          <span className="select-none text-xl font-black text-sky-500 animate-pulse">z<sup>z</sup></span>
-        </Etiqueta>
-      )}
-      {(bocadillo || encima) && (
-        <Etiqueta position={[0, 2.35, 0]} center zIndexRange={[40, 20]}>
-          {bocadillo ? (
-            <div className="cz-fade relative w-[170px] sm:w-[240px] -translate-y-1/2 rounded-2xl rounded-bl-md bg-white px-3 py-2 text-[13px] leading-snug text-slate-800 shadow-[0_12px_30px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/5 select-none">
-              <p className="text-[11px] font-bold text-rose-500 mb-0.5">{bocadillo.titulo}</p>
-              {bocadillo.texto}
-            </div>
-          ) : (
-            <span className="select-none whitespace-nowrap rounded-full bg-slate-900/85 px-2.5 py-1 text-[11px] font-semibold text-white">{jefe ? "👔 El jefe" : `${e.emoji} ${e.nombre}`}</span>
-          )}
+      {rotulo && (
+        <Etiqueta position={[0, rotulo.alto || 2.35, 0]} center>
+          <span className={`select-none whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold text-white shadow ${rotulo.color || "bg-slate-900/85"} ${rotulo.soloGrande ? "hidden sm:inline-block" : ""}`}>{rotulo.texto}</span>
         </Etiqueta>
       )}
     </group>
   );
 }
 
-// ---------- El director: reproduce la charla ----------
-function Director({ escenas, sitios, poses, alCambiar, enMarcha }) {
-  const estado = useRef({ i: 0, inicio: null, fase: null });
-  useFrame(({ clock }) => {
-    if (!escenas.length) return;
-    const ahora = clock.elapsedTime * 1000;
-    const s = estado.current;
-    if (s.inicio == null) s.inicio = ahora;
-    if (!enMarcha) { s.inicio = ahora - (s.pausadoEn ?? 0); return; }
-    const esc = escenas[s.i % escenas.length];
-    const t = ahora - s.inicio;
-    s.pausadoEn = t;
-    const quien = sitios[esc.quien], a = sitios[esc.a];
-    const ida = esc.anda ? ruta(quien, a) : null;
-    const vel = ida ? Math.max(1.8, largo(ida) / 5.5) : 1;
-    const tAndar = ida ? (largo(ida) / vel) * 1000 : 0;
-    const tHablar = HABLA * (esc.respuesta ? 2 : 1);
-    const total = tAndar * 2 + tHablar + PAUSA;
+// Las carpetas que vuelan del mostrador a su sitio (repetición)
+function Carpetas({ rep, reloj }) {
+  const refs = useRef([]);
+  useFrame(() => {
+    const vuelan = rep ? enVuelo(rep, reloj.get()) : [];
+    refs.current.forEach((m, i) => {
+      if (!m) return;
+      const v = vuelan[i];
+      m.visible = !!v;
+      if (!v) return;
+      const a = DESTINOS.mostrador, b = DESTINOS[v.destino];
+      m.position.set(a[0] + (b[0] - a[0]) * v.t, a[1] + (b[1] - a[1]) * v.t + Math.sin(v.t * Math.PI) * 2.2, a[2] + (b[2] - a[2]) * v.t);
+      m.rotation.y = v.t * 6;
+    });
+  });
+  const colores = { archivo: "#22c55e", buzon: "#f59e0b", papelera: "#94a3b8" };
+  return Array.from({ length: 6 }, (_, i) => (
+    <group key={i} ref={(m) => { refs.current[i] = m; }} visible={false}>
+      <Caja p={[0, 0, 0]} s={[0.42, 0.06, 0.32]} c="#facc15" />
+      <Caja p={[0, 0.04, 0]} s={[0.3, 0.02, 0.2]} c={colores[["archivo", "buzon", "papelera"][i % 3]]} />
+    </group>
+  ));
+}
 
-    let fase;
-    if (t < tAndar) fase = "ida";
-    else if (t < tAndar + HABLA) fase = "habla";
-    else if (esc.respuesta && t < tAndar + tHablar) fase = "responde";
-    else if (t < tAndar * 2 + tHablar) fase = "vuelta";
-    else fase = "pausa";
-
-    if (ida) {
-      if (fase === "ida") poses.set(esc.quien, { ...puntoEn(ida, (t / 1000) * vel), andando: true });
-      else if (fase === "vuelta") poses.set(esc.quien, { ...puntoEn([...ida].reverse(), ((t - tAndar - tHablar) / 1000) * vel), andando: true });
-      else if (fase === "pausa") poses.delete(esc.quien);
-      else {
-        // De pie al lado de la mesa del otro, mirándole
-        const [x, z] = a.visita;
-        poses.set(esc.quien, { x, z, giro: Math.atan2(a.mesa[0] - x, a.mesa[1] - 0.6 - z), hablando: fase === "habla", andando: false });
+// El director: en directo deja a cada uno en su sitio; en la repetición mueve a todos según el reloj
+function Director({ rep, enDirecto, poses, reloj, repitiendo, pausa, alAcabar }) {
+  const s = useRef(0);
+  const acabado = useRef(false);
+  useFrame((_, delta) => {
+    if (repitiendo && rep && !rep.vacia) {
+      if (!pausa) s.current = Math.min(rep.duracion, s.current + Math.min(delta, 0.1));
+      reloj.set(s.current);
+      for (const [id, viva] of Object.entries(enDirecto)) {
+        poses.set(id, id === "jefe" ? viva : poseEn(rep, id, s.current) || rep.quietos?.[id] || viva);
       }
+      if (s.current >= rep.duracion && !acabado.current) { acabado.current = true; alAcabar(); }
+      return;
     }
-    if (fase !== s.fase) {
-      s.fase = fase;
-      alCambiar(esc, fase);
-    }
-    if (t >= total) {
-      poses.delete(esc.quien);
-      s.i++; s.inicio = ahora; s.fase = null;
-    }
+    for (const [id, p] of Object.entries(enDirecto)) poses.set(id, p);
   });
   return null;
 }
 
-// Mueve la cámara con suavidad a la sala elegida (si no la estás moviendo tú)
-function Camara({ vista, controles, tocando }) {
-  const { camera, size } = useThree();
-  const llegado = useRef(false);
-  useEffect(() => { llegado.current = false; }, [vista, size.width, size.height]);
+// ---------- Cámara isométrica: encuadra la sala elegida y no deja salirse del edificio ----------
+const VISTAS = {
+  todo: [EDIFICIO.x0 - 0.3, EDIFICIO.x1 + 0.3, EDIFICIO.z0 - 0.3, EDIFICIO.z1 + 1.2],
+  ...Object.fromEntries(Object.entries(SALAS).map(([id, s]) => [id, [s.x0, s.x1, s.z0, s.z1]])),
+};
+// arriba / abajo: lo que tapan la hora y la barra de salas (en píxeles)
+function encuadre(caja, w, h, arriba = 84, abajo = 62) {
+  const [x0, x1, z0, z1] = caja;
+  const centro = new THREE.Vector3((x0 + x1) / 2, 0.8, (z0 + z1) / 2);
+  const f = OFFSET.clone().negate().normalize();
+  const r = new THREE.Vector3().crossVectors(f, new THREE.Vector3(0, 1, 0)).normalize();
+  const u = new THREE.Vector3().crossVectors(r, f);
+  let [rmin, rmax, umin, umax] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (const x of [x0, x1]) for (const z of [z0, z1]) for (const y of [0, 2.6]) {
+    const v = new THREE.Vector3(x, y, z).sub(centro);
+    rmin = Math.min(rmin, v.dot(r)); rmax = Math.max(rmax, v.dot(r));
+    umin = Math.min(umin, v.dot(u)); umax = Math.max(umax, v.dot(u));
+  }
+  const zoom = Math.min(w / (rmax - rmin), Math.max(120, h - arriba - abajo) / (umax - umin)) * 0.96;
+  centro.addScaledVector(r, (rmin + rmax) / 2).addScaledVector(u, (umin + umax) / 2 + (arriba - abajo) / 2 / zoom);
+  return { centro, zoom };
+}
+
+function Camara({ vista }) {
+  const { size } = useThree();
+  const controles = useRef(), tocando = useRef(false), llegado = useRef(false);
+  const destino = useMemo(() => encuadre(VISTAS[vista.trim()] || VISTAS.todo, size.width, size.height), [vista, size.width, size.height]);
+  const minimo = useMemo(() => encuadre(VISTAS.todo, size.width, size.height).zoom * 0.85, [size.width, size.height]);
+  // Al elegir otra sala, la cámara vuelve a moverse sola (hasta que la arrastres tú)
+  useEffect(() => { llegado.current = false; tocando.current = false; }, [destino]);
   useFrame(() => {
     const c = controles.current;
-    if (!c || llegado.current || tocando.current) return;
-    const v = VISTAS.find((x) => x.id === vista) || VISTAS[0];
-    // En una pantalla estrecha (móvil en vertical) la cámara se aleja para que quepa la sala entera
-    const k = Math.min(2.1, Math.max(1, 1.3 / (size.width / size.height)));
-    // …y mira un poco más cerca, para que la oficina no quede baja con el cielo vacío arriba
-    const o = { x: v.objetivo[0] + (k - 1) * 3, y: v.objetivo[1], z: v.objetivo[2] + (k - 1) * 4 };
-    const destino = { x: o.x + (v.camara[0] - v.objetivo[0]) * k, y: o.y + (v.camara[1] - v.objetivo[1]) * k, z: o.z + (v.camara[2] - v.objetivo[2]) * k };
-    camera.position.lerp(destino, 0.06);
-    c.target.lerp(o, 0.08);
+    if (!c) return;
+    const cam = c.object;
+    c.minZoom = minimo;
+    if (!llegado.current && !tocando.current) {
+      c.target.lerp(destino.centro, 0.14);
+      cam.zoom += (destino.zoom - cam.zoom) * 0.14;
+      cam.position.copy(c.target).add(OFFSET);
+      cam.updateProjectionMatrix();
+      if (c.target.distanceTo(destino.centro) < 0.02 && Math.abs(destino.zoom - cam.zoom) < 0.05) llegado.current = true;
+    }
+    // Que no se escape del edificio al arrastrar
+    const t = c.target;
+    const cx = Math.min(EDIFICIO.x1 + 2, Math.max(EDIFICIO.x0 - 2, t.x)), cz = Math.min(EDIFICIO.z1 + 4, Math.max(EDIFICIO.z0 - 2, t.z));
+    if (cx !== t.x || cz !== t.z) {
+      cam.position.x += cx - t.x; cam.position.z += cz - t.z;
+      t.x = cx; t.z = cz;
+    }
     c.update();
-    if (camera.position.distanceTo(destino) < 0.05) llegado.current = true;
   });
-  return null;
+  return (
+    <MapControls ref={controles} makeDefault enableRotate={false} enableDamping dampingFactor={0.15} maxZoom={90} zoomToCursor
+      onStart={() => { tocando.current = true; }} />
+  );
 }
 
+// ---------- La oficina ----------
 const nombreDe = (id, porId) => (id === "jefe" ? "👔 Jefe" : id === "tu" ? "📱 Tú" : porId[id] ? `${porId[id].emoji} ${porId[id].nombre}` : id);
+const horaMadrid = (ms) => new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
+const SALAS_BOTONES = [["todo", "Todo"], ["busqueda", "🔎 Búsqueda"], ["control", "🧐 Control"], ["archivo", "🗄️ Archivo"], ["despacho", "👔 Jefe"], ["cafe", "☕ Cafetería"], ["despensa", "🧺 Despensa"], ["negocio", "📣 Negocio"], ["escaparate", "🪟 Escaparate"]];
 
-export default function Oficina3D({ departamentos, charla = [], alElegir }) {
+// Rótulos de cada sala, y los contadores del archivo, tu buzón y la papelera
+function Rotulos({ rep, reloj, repitiendo, flujo, bandeja }) {
+  const s = useSegundo(reloj);
+  const c = repitiendo && rep ? contadores(rep, s) : null;
+  // En el móvil, solo la cifra
+  const cifras = {
+    archivo: [c ? `+${fmt(c.archivo)}` : fmt(flujo.agenda), c ? " nuevos" : " en la agenda"],
+    buzon: [c ? `+${fmt(c.buzon)}` : fmt(bandeja), c ? " dudosos" : " en tu buzón"],
+    papelera: [c ? `+${fmt(c.papelera)}` : fmt(flujo.sinFuente), " sin fuente"],
+  };
+  return (
+    <>
+      {/* Las de atrás, en lo alto de su pared del fondo; las de delante, en su borde de la calle */}
+      {Object.entries(SALAS).map(([id, sala]) => (
+        <Etiqueta key={id} position={[sala.rotulo[0], sala.rotulo[1] < 0 ? ALTO + 0.4 : 0.5, sala.rotulo[1]]} center>
+          <span className="select-none whitespace-nowrap rounded-full bg-white/90 px-2 py-0.5 text-[9px] sm:text-[11px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-900/5">{sala.emoji} <span className="sm:hidden">{sala.corto}</span><span className="hidden sm:inline">{sala.nombre}</span></span>
+        </Etiqueta>
+      ))}
+      {[["archivo", "📅", "bg-emerald-500"], ["buzon", "📥", "bg-amber-500"], ["papelera", "🗑", "bg-slate-500"]].map(([id, icono, color]) => (
+        <Etiqueta key={id} position={[DESTINOS[id][0], DESTINOS[id][1] + 0.9, DESTINOS[id][2]]} center>
+          <span className={`select-none whitespace-nowrap rounded-full ${color} px-2 py-0.5 text-[10px] sm:text-[11px] font-bold text-white shadow tabular-nums`}>{icono} {cifras[id][0]}<span className="hidden sm:inline">{cifras[id][1]}</span></span>
+        </Etiqueta>
+      ))}
+    </>
+  );
+}
+
+// Los bocadillos de la charla durante la repetición
+function Bocadillos({ rep, reloj, poses, porId }) {
+  const s = useSegundo(reloj);
+  return bocadillosEn(rep, s).map((b) => {
+    const p = poses.get(b.quien);
+    if (!p) return null;
+    return (
+      <Etiqueta key={`${b.s0}${b.quien}`} position={[p.x, 2.5, p.z]} center zIndexRange={[40, 20]}>
+        <div className="cz-fade w-[150px] sm:w-[210px] -translate-y-1/2 rounded-2xl rounded-bl-md bg-white px-2.5 py-1.5 text-[12px] leading-snug text-slate-800 shadow-[0_12px_30px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/5 select-none">
+          <p className="text-[10px] font-bold text-rose-500">{nombreDe(b.de, porId)} → {nombreDe(b.a, porId)}</p>
+          <p className="line-clamp-3">{b.texto}</p>
+        </div>
+      </Etiqueta>
+    );
+  });
+}
+
+// Lo que está pasando en la repetición, en una línea (y la barra de progreso)
+function Narrador({ rep, reloj, porId, pausa, setPausa, alParar }) {
+  const s = useSegundo(reloj);
+  const g = [...rep.golpes].reverse().find((x) => x.s <= s + 0.2);
+  const c = contadores(rep, s);
+  const quien = g ? g.empleados.filter((id) => porId[id]).map((id) => `${porId[id].emoji} ${porId[id].nombre}`).join(", ") : "";
+  const que = !g ? "Todos en la cafetería, esperando su turno" : g.sinMostrador ? `${quien}: ${g.texto || "turno hecho"}` : `${quien}: ${g.busquedas} búsquedas → ${g.nuevos} nuevos, ${g.descartados} sin fuente`;
+  return (
+    <div className="pointer-events-auto rounded-2xl bg-slate-900/90 text-white px-3 py-2 shadow-lg backdrop-blur">
+      <div className="flex items-center gap-2">
+        <span className="font-bold tabular-nums text-[15px]">🌙 {horaMadrid(horaReal(rep, s))}</span>
+        <span className="flex-1 truncate text-[12px] text-white/80">{que}</span>
+        <button onClick={() => setPausa((x) => !x)} className={`${PRESS} h-8 w-8 shrink-0 rounded-full bg-white/15 text-[12px]`} aria-label={pausa ? "Seguir" : "Pausar"}>{pausa ? "▶" : "❚❚"}</button>
+        <button onClick={alParar} className={`${PRESS} h-8 w-8 shrink-0 rounded-full bg-white/15 text-[12px]`} aria-label="Salir de la repetición">✕</button>
+      </div>
+      <div className="mt-1.5 h-1 rounded-full bg-white/15 overflow-hidden"><div className="h-full bg-gradient-to-r from-rose-400 to-amber-300" style={{ width: `${(s / rep.duracion) * 100}%` }} /></div>
+      <p className="mt-1 text-[11px] text-white/70 tabular-nums">📅 +{fmt(c.archivo)} a la agenda · 📥 +{fmt(c.buzon)} a tu buzón · 🗑 +{fmt(c.papelera)} sin fuente</p>
+    </div>
+  );
+}
+
+export default function Oficina3D({ departamentos, charla = [], golpes = [], bandeja = [], flujo = {}, alElegir, vista = "todo", setVista, repeticion, alAcabarRepeticion }) {
   const sitios = useMemo(() => planta(departamentos), [departamentos]);
-  const porId = useMemo(() => Object.fromEntries(departamentos.flatMap((d) => d.empleados.map((e) => [e.id, { ...e, dep: d.id }]))), [departamentos]);
-  const escenas = useMemo(() => episodios(charla.slice(-60), sitios), [charla, sitios]);
-  // Dónde está cada uno que se ha levantado: lo escribe el director y lo leen las personas en cada fotograma
+  const empleados = useMemo(() => departamentos.flatMap((d) => d.empleados.map((e, i) => ({ ...e, dep: d.id, i }))), [departamentos]);
+  const porId = useMemo(() => Object.fromEntries(empleados.map((e) => [e.id, e])), [empleados]);
   const [poses] = useState(() => new Map());
-  const controles = useRef(), tocando = useRef(false);
+  const [reloj] = useState(crearReloj);
   const capa = useRef(null);
-  const [vista, setVista] = useState("todo");
-  const [enMarcha, setEnMarcha] = useState(true);
-  const [ahora, setAhora] = useState({ esc: null, fase: null });
+  const [pausa, setPausa] = useState(false);
 
-  const alCambiar = (esc, fase) => setAhora({ esc, fase });
-  // Quién tiene bocadillo en cada momento
-  const bocadillos = {};
-  const { esc, fase } = ahora;
-  const fuera = esc?.anda && fase !== "pausa" ? esc.quien : null; // quien está levantado
-  if (esc && (fase === "habla" || fase === "responde")) {
-    const habla = fase === "habla" ? esc.quien : esc.a;
-    const linea = fase === "habla" ? esc : esc.respuesta;
-    const para = fase === "habla" ? esc.a : esc.quien;
-    // Lo que va o viene de Alejandro lo dice el jefe con el móvil en la mano
-    const donde = sitios[habla] ? habla : "jefe";
-    bocadillos[donde] = { titulo: `${nombreDe(habla, porId)} → ${nombreDe(para, porId)}`, texto: linea.texto };
-  }
+  // La hora de ahora, cada 30 segundos (para saber quién está en su turno)
+  const [ahora, setAhora] = useState(null);
+  useEffect(() => {
+    const tic = () => setAhora(Date.now());
+    const r = requestAnimationFrame(tic);
+    const i = setInterval(tic, 30000);
+    return () => { cancelAnimationFrame(r); clearInterval(i); };
+  }, []);
+
+  // En directo: cada uno en su sitio según su turno y su estado
+  const { enDirecto, rotulos, trabajando, siguiente, resto } = useMemo(() => {
+    if (ahora == null) return { enDirecto: {}, rotulos: {}, trabajando: [], siguiente: null, resto: {} };
+    const donde = Object.fromEntries(empleados.map((e) => [e.id, dondeEsta(e, ahora)]));
+    const sitio = colocar(donde, sitios);
+    const enDirecto = { jefe: { x: sitios.jefe.silla[0], z: sitios.jefe.silla[1], giro: 0, modo: "jefe" } };
+    const rotulos = {};
+    for (const e of empleados) {
+      const { sitio: s, modo } = sitio[e.id];
+      enDirecto[e.id] = { x: s.pos[0], z: s.pos[1], giro: s.giro || 0, modo };
+      if (modo === "teclea") rotulos[e.id] = { texto: `${e.emoji} ${e.nombre}` };
+      // Los que esperan en la puerta están juntos: sus rótulos, a dos alturas para que no se pisen
+      if (modo === "espera") rotulos[e.id] = { texto: `⚠️ ${e.nombre}`, color: "bg-rose-600/90", alto: Object.values(rotulos).filter((r) => r.espera).length % 2 ? 2.9 : 2.35, espera: true };
+      if (modo === "duerme") rotulos[e.id] = { texto: "💤", color: "bg-amber-500/90" };
+    }
+    const trabajando = empleados.filter((e) => donde[e.id] === "mesa");
+    const cuenta = (d) => Object.values(donde).filter((x) => x === d).length;
+    const prox = empleados.map((e) => ({ e, t: proximoTurno(e.turnos, ahora) })).filter((x) => x.t).sort((a, b) => a.t - b.t)[0] || null;
+    return { enDirecto, rotulos, trabajando, siguiente: prox, resto: { cafe: cuenta("cafe"), sofa: cuenta("sofa"), puerta: cuenta("puerta") } };
+  }, [ahora, empleados, sitios]);
+
+  // La repetición de las últimas 24 h (se monta al pulsar ▶)
+  const repitiendo = !!repeticion;
+  const rep = useMemo(() => {
+    if (!repeticion || ahora == null) return null;
+    const r = montarRepeticion({ golpes, departamentos, bandeja, charla }, sitios, ahora);
+    // Quien no trabajó en ese rato se queda en la cafetería, en los sitios que sobran
+    const usados = new Set(Object.values(r.cafe || {}).map((s) => s.id));
+    const libres = CAFE_SITIOS.filter((s) => !usados.has(s.id));
+    r.quietos = Object.fromEntries(empleados.filter((e) => !r.tramosDe?.[e.id]).map((e, i) => {
+      const s = libres[i % Math.max(1, libres.length)] || CAFE_SITIOS[0];
+      return [e.id, { x: s.pos[0], z: s.pos[1], giro: s.giro, modo: "sentado" }];
+    }));
+    return r;
+  }, [repeticion, ahora, golpes, departamentos, bandeja, charla, sitios, empleados]);
+
+  const camisa = (e) => (CAMISAS[e.dep] || CAMISAS.agenda)[e.i % 3];
+  const luzDe = (e) => (e.estado === "ok" && !trabajando.includes(e) ? "#64748b" : LUZ[e.estado] || LUZ.nuevo);
 
   return (
-    <div className="relative rounded-[2rem] overflow-hidden ring-1 ring-white/80 shadow-[0_30px_70px_-30px_rgba(15,23,42,0.5)] bg-gradient-to-b from-sky-100 via-rose-50 to-amber-50">
-      <div className="relative h-[64dvh] min-h-[420px] sm:h-[620px] touch-none">
+    <div className="relative rounded-[2rem] overflow-hidden ring-1 ring-white/80 shadow-[0_30px_70px_-30px_rgba(15,23,42,0.5)] bg-gradient-to-b from-slate-100 via-slate-50 to-stone-100">
+      <div className="relative h-[min(62dvh,125vw)] min-h-[400px] sm:h-[640px] touch-none">
         <div ref={capa} className="pointer-events-none absolute inset-0 z-10 overflow-hidden" />
         <Capa.Provider value={capa}>
-        <Canvas shadows dpr={[1, 1.75]} camera={{ position: VISTAS[0].camara, fov: 32, near: 0.5, far: 120 }}
-          fallback={<p className="p-6 text-sm text-slate-600">Tu navegador no puede mostrar la oficina en 3D. Usa la vista de lista.</p>}>
-          <hemisphereLight args={["#fff7ed", "#cbd5e1", 1.1]} />
-          <directionalLight position={[14, 22, 12]} intensity={1.7} castShadow shadow-mapSize={[2048, 2048]} shadow-bias={-0.0004}
-            shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} />
-          <directionalLight position={[-10, 8, 14]} intensity={0.35} color="#fecdd3" />
-          <Edificio />
-          <Alfombras sitios={sitios} />
-          <Cafe />
-          <Despacho />
-          {Object.values(sitios).map((s) => (
-            <Mesa key={s.id} x={s.mesa[0]} z={s.mesa[1]} grande={s.id === "jefe"} luz={s.id === "jefe" ? "#f43f5e" : LUZ[porId[s.id]?.estado] || LUZ.nuevo} />
-          ))}
-          {Object.values(porId).map((e, i) => (
-            <Persona key={e.id} e={e} sitio={sitios[e.id]} estado={e.estado} semilla={i * 1.7}
-              camisa={(CAMISAS[e.dep] || CAMISAS.agenda)[i % 3]} piel={PIELES[(i * 7) % PIELES.length]} pelo={PELOS[(i * 5) % PELOS.length]}
-              poses={poses} bocadillo={bocadillos[e.id]} fuera={fuera === e.id} alTocar={() => alElegir(e)} />
-          ))}
-          <Persona e={{ id: "jefe", emoji: "👔", nombre: "El jefe" }} sitio={sitios.jefe} estado="ok" jefe semilla={3}
-            piel={PIELES[0]} pelo={PELOS[3]} poses={poses} bocadillo={bocadillos.jefe} fuera={fuera === "jefe"} alTocar={() => alElegir({ jefe: true })} />
-          <Director escenas={escenas} sitios={sitios} poses={poses} alCambiar={alCambiar} enMarcha={enMarcha} />
-          <OrbitControls ref={controles} enablePan={false} minDistance={6} maxDistance={70} minPolarAngle={0.35} maxPolarAngle={1.2}
-            onStart={() => { tocando.current = true; }} onEnd={() => { tocando.current = false; }} />
-          <Camara vista={vista} controles={controles} tocando={tocando} />
-        </Canvas>
+          <Canvas orthographic dpr={[1, 1.5]} camera={{ position: OFFSET.toArray(), zoom: 10, near: -200, far: 400 }}
+            fallback={<p className="p-6 text-sm text-slate-600">Tu navegador no puede mostrar la oficina en 3D. Usa la vista de lista.</p>}>
+            <hemisphereLight args={["#ffffff", "#c7ccd4", 1.35]} />
+            <directionalLight position={[12, 30, 18]} intensity={1.5} />
+            <directionalLight position={[-14, 10, 8]} intensity={0.35} color="#fde2e4" />
+            <Edificio />
+            <Busqueda />
+            <Control sinFuente={flujo.sinFuente || 0} />
+            <Archivadores agenda={flujo.agenda || 0} />
+            <Despacho luz="#f43f5e" />
+            <Cafeteria />
+            <Despensa />
+            <Negocio />
+            <Escaparate planes={flujo.planesAyer || 0} />
+            {empleados.map((e) => <Escritorio key={e.id} x={sitios[e.id].mesa[0]} z={sitios[e.id].mesa[1]} luz={luzDe(e)} />)}
+            {empleados.map((e, i) => (
+              <Persona key={e.id} e={e} poses={poses} semilla={i * 1.7} camisa={camisa(e)} piel={PIELES[(i * 7) % PIELES.length]} pelo={PELOS[(i * 5) % PELOS.length]}
+                rotulo={repitiendo ? null : rotulos[e.id]} alTocar={() => alElegir(e)} />
+            ))}
+            <Persona e={{ id: "jefe" }} jefe poses={poses} semilla={3} piel={PIELES[0]} pelo={PELOS[3]} rotulo={repitiendo ? null : { texto: "👔 El jefe", color: "bg-rose-600/90", soloGrande: true }} alTocar={() => alElegir({ jefe: true })} />
+            <Carpetas rep={rep} reloj={reloj} />
+            <Rotulos rep={rep} reloj={reloj} repitiendo={repitiendo} flujo={flujo} bandeja={bandeja.length} />
+            {rep && !rep.vacia && <Bocadillos rep={rep} reloj={reloj} poses={poses} porId={porId} />}
+            <Director key={repeticion || 0} rep={rep} enDirecto={enDirecto} poses={poses} reloj={reloj} repitiendo={repitiendo} pausa={pausa} alAcabar={alAcabarRepeticion} />
+            <Camara vista={vista} />
+          </Canvas>
         </Capa.Provider>
       </div>
 
-      {/* Lo que está pasando ahora, en una línea */}
-      <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-center">
-        <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-full bg-white/85 py-1.5 pl-3 pr-1.5 text-xs text-slate-700 shadow-sm ring-1 ring-slate-900/5 backdrop-blur">
-          <span className="truncate">
-            {esc ? <>📼 <b>{nombreDe(esc.quien, porId)}</b> · {hace(esc.cuando)}</> : escenas.length ? "📼 Reproduciendo lo que ha pasado" : "Aún no hay conversaciones: salen en cuanto el equipo trabaje un turno"}
-          </span>
-          {escenas.length > 0 && (
-            <button onClick={() => setEnMarcha((x) => !x)} className={`${PRESS} shrink-0 h-7 w-7 rounded-full bg-slate-900 text-white text-[11px]`} aria-label={enMarcha ? "Pausar" : "Seguir"}>{enMarcha ? "❚❚" : "▶"}</button>
-          )}
-        </div>
+      {/* Arriba: la hora y quién trabaja (o la repetición) */}
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-20">
+        {repitiendo && rep && !rep.vacia ? (
+          <Narrador rep={rep} reloj={reloj} porId={porId} pausa={pausa} setPausa={setPausa} alParar={alAcabarRepeticion} />
+        ) : repitiendo && rep?.vacia ? (
+          <p className="pointer-events-auto inline-flex rounded-2xl bg-white/90 px-3 py-2 text-xs text-slate-700 shadow ring-1 ring-slate-900/5">No hay turnos en las últimas 24 h que repetir. <button onClick={alAcabarRepeticion} className="ml-2 font-semibold text-rose-600">Cerrar</button></p>
+        ) : ahora != null && (
+          <div className="inline-flex max-w-full flex-col rounded-2xl bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm ring-1 ring-slate-900/5 backdrop-blur">
+            <span className="font-bold text-slate-900 text-[13px]">🕒 Ahora {horaMadrid(ahora)} · trabajando: {trabajando.length}</span>
+            <span className="truncate">{trabajando.length ? trabajando.map((e) => `${e.emoji} ${e.nombre}`).join(", ") : siguiente ? `Próximo turno: ${siguiente.e.emoji} ${siguiente.e.nombre} a las ${horaMadrid(siguiente.t)}` : "Nadie de turno"}</span>
+            <span className="truncate text-slate-500">☕ {resto.cafe} en la cafetería{resto.sofa ? ` · 💤 ${resto.sofa} dormidos (se saltaron el turno)` : ""}{resto.puerta ? ` · ⚠️ ${resto.puerta} en la puerta del jefe (fallaron)` : ""}</span>
+          </div>
+        )}
       </div>
 
-      {/* Salas: al alcance del pulgar */}
-      <div className="absolute inset-x-0 bottom-0 p-3">
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar rounded-full bg-white/80 p-1 ring-1 ring-slate-900/5 backdrop-blur">
-          {VISTAS.map((v) => (
-            <button key={v.id} onClick={() => { tocando.current = false; setVista(v.id); }} className={`${PRESS} shrink-0 h-9 px-3.5 rounded-full text-[13px] font-semibold ${vista === v.id ? "bg-slate-900 text-white" : "text-slate-600"}`}>{v.texto}</button>
+      {/* Abajo: las salas */}
+      <div className="absolute inset-x-0 bottom-0 z-20 p-2.5">
+        <div className="flex gap-1 overflow-x-auto no-scrollbar rounded-full bg-white/85 p-1 ring-1 ring-slate-900/5 backdrop-blur">
+          {SALAS_BOTONES.map(([id, texto]) => (
+            <button key={id} onClick={() => setVista(id === vista ? `${id} ` : id)} className={`${PRESS} shrink-0 h-9 px-3 rounded-full text-[12px] sm:text-[13px] font-semibold ${vista.trim() === id ? "bg-slate-900 text-white" : "text-slate-600"}`}>{texto}</button>
           ))}
         </div>
       </div>

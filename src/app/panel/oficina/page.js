@@ -1,10 +1,13 @@
 "use client";
 // /panel/oficina — solo para el equipo (clave = PANEL_CLAVE, la misma que /panel).
-// La oficina de Cazurronics: cada tarea automática es un empleado con su mesa en una oficina 3D. Si ha cumplido su
-// turno teclea, si se lo ha saltado se queda dormido y si ha fallado le sale humo. Lo que se dicen en cada turno se
-// ve en 3D (van andando a la mesa del otro) y en el chat, donde también le escribes al jefe. El jefe da el parte del
-// día y te deja en la bandeja los eventos que nadie ha podido comprobar. Ver la oficina no gasta IA.
-import { useCallback, useEffect, useState } from "react";
+// La oficina de Cazurronics, de arriba abajo:
+//  · «Hoy te toca»: lo que espera tu OK, con botones (eventos dudosos, locales listos, empleados que fallaron).
+//  · La tira del flujo: buscan → comprueban → agenda → planes → captación → tú, con las cifras de anoche.
+//  · El edificio en 3D: una sala por paso del trabajo; cada empleado está donde toca según su horario real.
+//    «▶ Anoche en 1 minuto» repite las últimas 24 h con sus cifras y su charla.
+//  · El chat con el jefe, el parte del día, las novedades, la bandeja entera y la lista de mesas.
+// Ver la oficina no gasta IA.
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import Fondo from "../../components/Fondo";
@@ -13,11 +16,12 @@ import { CAMISAS, ESTADOS, Monigote, diaCorto, fmt, hace } from "./monigotes";
 import { FichaEmpleado } from "./ficha";
 import Novedades from "./novedades";
 import Chat from "./chat";
+import { Flujo, HoyTeToca } from "./hoy";
 
 // three.js solo se descarga al abrir la oficina (y nunca en el servidor)
 const Oficina3D = dynamic(() => import("./Oficina3D"), {
   ssr: false,
-  loading: () => <div className="h-[64dvh] min-h-[420px] sm:h-[620px] rounded-[2rem] bg-white/50 ring-1 ring-white/80 grid place-items-center text-sm text-slate-500 animate-pulse">Encendiendo las luces de la oficina…</div>,
+  loading: () => <div className="h-[60dvh] min-h-[400px] sm:h-[640px] rounded-[2rem] bg-white/50 ring-1 ring-white/80 grid place-items-center text-sm text-slate-500 animate-pulse">Encendiendo las luces de la oficina…</div>,
 });
 
 
@@ -88,7 +92,7 @@ function Despacho({ jefe }) {
 
 function Bandeja({ lista, decidir, enCurso }) {
   return (
-    <section className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up`}>
+    <section id="bandeja" className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up scroll-mt-4`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
         <h2 className="font-bold text-slate-900 text-lg">📥 Bandeja del jefe <span className="text-slate-400 font-medium">· {lista.length}</span></h2>
       </div>
@@ -123,6 +127,12 @@ export default function Oficina() {
   const [enCurso, setEnCurso] = useState(null);
   const [modo, setModo] = useState("3d"); // "3d" (la planta), "chat" (lo que se dicen) o "lista" (las mesas en tarjetas)
   const [elegido, setElegido] = useState(null);
+  const [vista, setVista] = useState("todo"); // la sala que enfoca el 3D
+  const [repeticion, setRepeticion] = useState(0); // > 0: «Anoche en 1 minuto» en marcha
+  const planta = useRef(null);
+  const verPlanta = () => planta.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const irASala = (sala) => { setModo("3d"); setVista((v) => (v === sala ? `${sala} ` : sala)); verPlanta(); };
+  const repetirAnoche = () => { setModo("3d"); setVista("todo"); setRepeticion((n) => Math.abs(n) + 1); verPlanta(); };
 
   const cargar = useCallback(async (c) => {
     setError(""); setCargando(true);
@@ -169,7 +179,7 @@ export default function Oficina() {
   }
 
   return (
-    <main className="min-h-[100dvh] px-4 pt-5 pb-28 sm:px-6 sm:pb-10 text-slate-800">
+    <main className="min-h-[100dvh] px-4 pt-5 pb-28 sm:px-6 text-slate-800">
       <Fondo />
       <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
         <header className="flex items-end justify-between gap-3 px-1 cz-up">
@@ -178,10 +188,14 @@ export default function Oficina() {
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">Oficina <span className={TITULO_GRADIENTE}>Cazurronics</span></h1>
             <p className="text-sm text-slate-500">{datos.jefe.cifras.equipo} empleados trabajando solos, día y noche</p>
           </div>
-          <button onClick={() => cargar(clave)} className={`${PRESS} hidden sm:inline-flex items-center h-10 px-4 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold`}>{cargando ? "Actualizando…" : "Actualizar"}</button>
+          <button onClick={() => cargar(clave)} className={`${PRESS} inline-flex items-center h-10 px-3 sm:px-4 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold`} aria-label="Actualizar">{cargando ? "…" : <><span>🔄</span><span className="hidden sm:inline ml-1.5">Actualizar</span></>}</button>
         </header>
 
-        <section className="space-y-3 cz-up">
+        <HoyTeToca bandeja={datos.bandeja} captacion={datos.captacion} departamentos={datos.departamentos} flujo={datos.flujo || {}} decidir={decidir} enCurso={enCurso}
+          clave={clave} alTerminar={() => cargar(clave)} alVerBandeja={() => document.getElementById("bandeja")?.scrollIntoView({ behavior: "smooth" })} />
+        <Flujo flujo={datos.flujo || {}} alElegir={irASala} />
+
+        <section ref={planta} className="space-y-3 cz-up scroll-mt-4">
           <div className="flex items-center justify-between gap-3 px-1">
             <h2 className="font-bold text-slate-900 text-lg">{modo === "chat" ? "El chat" : "La planta"}</h2>
             <div className={`${GLASS_SOFT} flex p-1 rounded-full`}>
@@ -190,7 +204,10 @@ export default function Oficina() {
               ))}
             </div>
           </div>
-          {modo === "3d" && <Oficina3D departamentos={datos.departamentos} charla={datos.charla || []} alElegir={setElegido} />}
+          {modo === "3d" && (
+            <Oficina3D departamentos={datos.departamentos} charla={datos.charla || []} golpes={datos.golpes || []} bandeja={datos.bandeja} flujo={datos.flujo || {}}
+              alElegir={setElegido} vista={vista} setVista={setVista} repeticion={repeticion > 0 ? repeticion : 0} alAcabarRepeticion={() => setRepeticion((n) => -Math.abs(n))} />
+          )}
           {modo === "chat" && <Chat charla={datos.charla || []} departamentos={datos.departamentos} clave={clave} alTerminar={() => cargar(clave)} />}
         </section>
 
@@ -213,10 +230,14 @@ export default function Oficina() {
 
       <FichaEmpleado e={elegido} jefe={datos.jefe} alCerrar={() => setElegido(null)} clave={clave} alTerminar={() => cargar(clave)} />
 
-      {/* En el móvil, actualizar queda al alcance del pulgar */}
-      <div className="sm:hidden fixed inset-x-0 bottom-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-white/80 to-transparent">
-        <button onClick={() => cargar(clave)} className={`${BOTON_OSCURO} w-full h-12`}>{cargando ? "Actualizando…" : "🔄 Actualizar la oficina"}</button>
-      </div>
+      {/* Lo que más se usa, al alcance del pulgar */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-white/85 via-white/50 to-transparent pointer-events-none">
+        <div className={`${GLASS} pointer-events-auto mx-auto max-w-md grid grid-cols-3 gap-1 rounded-full p-1.5`}>
+          <button onClick={repetirAnoche} className={`${PRESS} h-12 rounded-full bg-slate-900 text-white text-[13px] font-semibold leading-tight`}>▶ Anoche<span className="hidden min-[380px]:inline"> en 1 min</span></button>
+          <button onClick={() => { setModo("chat"); verPlanta(); }} className={`${PRESS} h-12 rounded-full text-[13px] font-semibold text-slate-700 hover:bg-white/70`}>💬 Jefe</button>
+          <button onClick={() => document.getElementById("hoy")?.scrollIntoView({ behavior: "smooth" })} className={`${PRESS} h-12 rounded-full text-[13px] font-semibold text-slate-700 hover:bg-white/70`}>📥 Bandeja{datos.bandeja.length ? ` (${datos.bandeja.length})` : ""}</button>
+        </div>
+      </nav>
     </main>
   );
 }
