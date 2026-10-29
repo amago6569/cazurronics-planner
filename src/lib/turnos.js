@@ -1,7 +1,7 @@
 // ============ LOS TURNOS DE LA OFICINA ============
 // Cuándo trabaja cada empleado, sacado de los crons de vercel.json (en hora UTC), y dónde está ahora:
 // en su mesa durante su turno, en la cafetería si ya lo ha hecho, dormido en el sofá si se lo ha saltado
-// y en la puerta del jefe si ha fallado. Funciones puras: sirven en el servidor y en el navegador.
+// y también en la cafetería si ha fallado (con su fallo apuntado: lo repasa lo primero al empezar su próximo turno). Funciones puras: sirven en el servidor y en el navegador.
 
 // Un tramo del barrido cabe en un minuto, pero así se le ve en su mesa: 5 min antes y 15 después de la hora
 export const ANTES = 5 * 60000, DESPUES = 15 * 60000;
@@ -60,13 +60,13 @@ export const proximoTurno = (turnos, ahora) => inicios(turnos, ahora + 1, ahora 
 // Cuántos turnos le tocan en un día cualquiera (los de pueblos solo domingos y miércoles)
 export const turnosAlDia = (turnos = []) => turnos.filter((t) => !t.dias).length;
 
-// "mesa" | "puerta" (ha fallado: espera al jefe) | "sofa" (se ha saltado el turno) | "cafe"
+// "mesa" | "pendiente" (ha fallado: espera su turno en la cafetería con el fallo apuntado) | "sofa" (se ha saltado el turno) | "cafe"
 // enCurso: está trabajando ahora mismo de verdad (la tarea lo apunta al empezar) · descanso: la reunión le dio días libres
 export function dondeEsta(e, ahora) {
   if (e.enCurso) return "mesa";
   if (e.descanso) return "cafe";
   if (enTurno(e.turnos, ahora)) return "mesa";
-  if (e.estado === "error") return "puerta";
+  if (e.estado === "error") return "pendiente";
   if (e.estado === "tarde") return "sofa";
   return "cafe";
 }

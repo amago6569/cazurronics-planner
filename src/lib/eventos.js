@@ -15,7 +15,7 @@ import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON, motivoClaro } from "./gemini";
 import { fuentesPara } from "./intencion";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
-import { apuntarCharla, charlaDeTurno } from "./charla";
+import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera } from "./provincia";
 import { esOficial } from "./fiables";
 
@@ -496,7 +496,11 @@ export async function barrerEventos({ tramo, respetarPausas = false } = {}) {
   const [encargos, pausas] = await Promise.all([leerEncargos().catch(() => ({})), respetarPausas ? leerPausas().catch(() => ({})) : {}]);
   const descansan = def.busquedas.filter((b) => pausas[b.empleado]);
   if (descansan.length) informe.descansan = [...new Set(descansan.map((b) => b.empleado))];
-  Object.assign(informe, await trabajarEn({ ...def, busquedas: def.busquedas.filter((b) => !pausas[b.empleado]) }, { desde, hasta, inicio, encargos }));
+  const deTurno = def.busquedas.filter((b) => !pausas[b.empleado]);
+  // Lo primero del turno: cada uno repasa lo que le falló antes (ver repasoDeTurno)
+  const repaso = await repasarAlEmpezar(deTurno, desde, hasta, { jcyl: !!def.jcyl });
+  if (repaso.repite.length || repaso.sinArreglo.length) informe.repaso = { repite: repaso.repite.map((b) => b.nombre), sinArreglo: repaso.sinArreglo.map((c) => c.nombre) };
+  Object.assign(informe, await trabajarEn({ ...def, busquedas: [...repaso.repite, ...deTurno] }, { desde, hasta, inicio, encargos }));
   await guardarJSON(`eventos:tramo:${id}`, informe, 10 * 24 * 3600);
   // Los encargos que iban en este turno ya están hechos
   const usados = [...new Set(def.busquedas.map((b) => b.empleado))].filter((e) => encargos[e]?.length);
@@ -521,7 +525,7 @@ export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, en
     ...(jcyl ? [["Junta de Castilla y León (datos abiertos)", async () => ({ eventos: await fuenteJCyL(desde, hasta), dominios: new Set() })]] : []),
     ...busquedas.map((b) => [b.nombre, () => fuenteBusqueda({ ...b, extra: conEncargo(b), conocidos: yaConocidos(agenda, b) }, b.msMax || 44000), b.empleado]),
   ];
-  const resultados = await enTandas(tareas.map(([, f]) => f), 10);
+  const resultados = await enTandas(tareas.map(([, f]) => f), TANDA);
 
   const fuentes = {};
   let encontrados = 0, descartados = 0, errores = 0;
@@ -663,6 +667,37 @@ async function apuntarRepesca(fallidas, bien = []) {
     if (campos.length) comandos.push(["HSET", REPESCA, ...campos], ["EXPIRE", REPESCA, 4 * 24 * 3600]);
   }
   if (comandos.length) await varios(comandos);
+}
+
+// Al empezar su turno, cada empleado mira primero lo que le falló (la cola de la Repesca):
+//  · lo que no se arregla repitiendo (clave rechazada, modelo retirado, búsqueda mal escrita) sale de la cola:
+//    eso ya te llega como aviso (lib/avisos.js) y repetirlo solo gasta.
+//  · lo que es de este mismo turno ya se repite solo (es la misma búsqueda).
+//  · lo de otro turno suyo se repite ahora, al principio, si cabe en la tanda (máx. TANDA a la vez para no pasar
+//    del minuto de Vercel) y queda cupo gratis. Lo que no cabe sigue en la cola y lo hace la Repesca.
+// 0 € extra: son las mismas búsquedas que haría la Repesca (modelos 2.x, dentro de las 1.500 gratis), solo que antes.
+export const TANDA = 10, CUPO_SEGURO = 1300; // de las 1.500 gratis al día dejamos margen para los planes
+export const SIN_ARREGLO = new Set(["clave", "modelo", "peticion"]);
+export function repasoDeTurno(cola = [], busquedas = [], { hayCupo = true, ocupadas = busquedas.length } = {}) {
+  const empleados = new Set(busquedas.map((b) => b.empleado).filter(Boolean));
+  const deEsteTurno = new Set(busquedas.map((b) => b.nombre));
+  const suyas = cola.filter((c) => c.b && empleados.has(c.b.empleado));
+  const sinArreglo = suyas.filter((c) => SIN_ARREGLO.has(c.tipo));
+  const yaVan = suyas.filter((c) => !SIN_ARREGLO.has(c.tipo) && deEsteTurno.has(c.nombre));
+  const otras = suyas.filter((c) => !SIN_ARREGLO.has(c.tipo) && !deEsteTurno.has(c.nombre));
+  const caben = hayCupo ? Math.max(0, TANDA - ocupadas) : 0;
+  return { sinArreglo, yaVan, repite: otras.slice(0, caben).map((c) => c.b), esperan: otras.slice(caben) };
+}
+
+async function repasarAlEmpezar(busquedas, desde, hasta, { jcyl = false } = {}) {
+  const nada = { repite: [], sinArreglo: [] };
+  const [cola, usadas] = await Promise.all([leerRepesca().catch(() => []), comando(["GET", `ia:gratis:${hoyEnLeon()}`]).catch(() => 0)]);
+  if (!cola.length) return nada;
+  const r = repasoDeTurno(cola, busquedas, { hayCupo: (Number(usadas) || 0) < CUPO_SEGURO, ocupadas: busquedas.length + (jcyl ? 1 : 0) });
+  if (r.sinArreglo.length) await sinRomper(comando(["HDEL", REPESCA, ...r.sinArreglo.map((c) => c.nombre)]), "repesca");
+  const repite = r.repite.map((b) => ({ ...b, desde: !b.desde || b.desde < desde ? desde : b.desde, hasta: !b.hasta || b.hasta < desde ? hasta : b.hasta }));
+  await sinRomper(apuntarCharla(charlaDeRepaso(r)), "charla");
+  return { repite, sinArreglo: r.sinArreglo };
 }
 
 export async function leerRepesca() {

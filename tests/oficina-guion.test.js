@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { DEPARTAMENTOS, RUTAS_EMPLEADOS } from "../src/lib/oficina";
 import { dondeEsta, enTurno, leerCron, proximoTurno, quienesDeRuta, turnosDeCrons } from "../src/lib/turnos";
-import { CAFE_SITIOS, SALAS, colocar, entrega, largo, planta, puertaJefe, puntoEn, ruta } from "../src/app/panel/oficina/guion";
+import { CAFE_SITIOS, SALAS, colocar, entrega, largo, planta, puntoEn, ruta } from "../src/app/panel/oficina/guion";
 import { contadores, horaReal, montarRepeticion, poseEn } from "../src/app/panel/oficina/repeticion";
 import vercel from "../vercel.json";
 
@@ -29,8 +29,8 @@ describe("edificio", () => {
   });
 
   it("las rutas salen por la puerta, van por el pasillo y nunca atraviesan una pared", () => {
-    const lugares = [...mesas, ...CAFE_SITIOS, entrega(0), entrega(2), puertaJefe(0)];
-    for (const a of lugares) for (const b of [sitios.musica, sitios.junta, CAFE_SITIOS[0], CAFE_SITIOS.at(-1), entrega(1), puertaJefe(3)]) {
+    const lugares = [...mesas, ...CAFE_SITIOS, entrega(0), entrega(2)];
+    for (const a of lugares) for (const b of [sitios.musica, sitios.junta, CAFE_SITIOS[0], CAFE_SITIOS.at(-1), entrega(1)]) {
       if (a === b) continue;
       const r = ruta(a, b);
       expect(r[0]).toEqual(a.pos);
@@ -80,7 +80,7 @@ describe("turnos", () => {
     expect(enTurno(e.turnos, turno + 60000)).toBe(true);
     expect(dondeEsta(e, turno + 60000)).toBe("mesa");
     expect(dondeEsta(e, turno + 3 * 3600000)).toBe("cafe");
-    expect(dondeEsta({ ...e, estado: "error" }, turno + 3 * 3600000)).toBe("puerta");
+    expect(dondeEsta({ ...e, estado: "error" }, turno + 3 * 3600000)).toBe("pendiente");
     expect(dondeEsta({ ...e, estado: "tarde" }, turno + 3 * 3600000)).toBe("sofa");
     expect(proximoTurno(e.turnos, turno + 3600000)).toBe(turno + 864e5);
     // Pueblos solo domingos y miércoles (29-10-2026 es jueves)
@@ -88,13 +88,17 @@ describe("turnos", () => {
     expect(enTurno(turnos.pueblos, Date.UTC(2026, 9, 28, 3, 31))).toBe(true);
   });
 
-  it("colocar reparte cafetería, sofá, puerta del jefe y mesas sin repetir sitio", () => {
-    const donde = Object.fromEntries(DEPARTAMENTOS.flatMap((d) => d.empleados).map((e, i) => [e.id, i % 7 === 0 ? "sofa" : i % 5 === 0 ? "puerta" : i === 3 ? "mesa" : "cafe"]));
+  it("colocar reparte cafetería, sofá y mesas sin repetir sitio, y quien ha fallado va a la cafetería", () => {
+    const donde = Object.fromEntries(DEPARTAMENTOS.flatMap((d) => d.empleados).map((e, i) => [e.id, i % 7 === 0 ? "sofa" : i % 5 === 0 ? "pendiente" : i === 3 ? "mesa" : "cafe"]));
     const r = colocar(donde, sitios);
     const usados = Object.values(r).map((x) => x.sitio.id);
     expect(new Set(usados).size).toBe(usados.length);
     expect(r[Object.keys(donde)[0]].modo).toBe("duerme");
     expect(r[Object.keys(donde)[3]]).toMatchObject({ modo: "teclea", sitio: sitios[Object.keys(donde)[3]] });
+    // Nadie espera en la puerta del jefe: el que falló está sentado en la cafetería con su fallo apuntado
+    expect(Object.values(r).some((x) => x.modo === "espera")).toBe(false);
+    expect(r[Object.keys(donde)[5]]).toMatchObject({ modo: "sentado", pendiente: true });
+    expect(r[Object.keys(donde)[5]].sitio.sala).toBe("cafe");
   });
 });
 

@@ -87,7 +87,7 @@ export function sitioReunion(i = 0) {
   return { id: `reunion-${i % 8}`, sala: "escaparate", pos, giro: Math.atan2(cx - pos[0], cz - pos[1]), salida: [pos, [pos[0], lado], [10.4, lado], [10.4, 2.6], [7.5, 2.6], SALAS.escaparate.puerta] };
 }
 
-// Ir a hablar con alguien: un paso al lado de donde está (su silla, su sitio en la cafetería o la puerta del jefe)
+// Ir a hablar con alguien: un paso al lado de donde está (su silla, su sitio en la cafetería o el despacho del jefe)
 export function visita(sitio) {
   const pos = [sitio.pos[0] + 0.75, sitio.pos[1] + 0.25];
   return { id: `visita-${sitio.id}`, sala: sitio.sala, pos, giro: -Math.PI / 2, salida: [pos, ...sitio.salida.slice(1)] };
@@ -122,17 +122,11 @@ export const CAFE_SITIOS = (() => {
   return [...mesas, ...barra, ...sofas];
 })();
 
-// ---------- Control de fuentes, puerta del jefe y destinos de las carpetas ----------
+// ---------- Control de fuentes y destinos de las carpetas ----------
 export const MOSTRADOR = [2.5, -5.6];
 export function entrega(i = 0) {
   const x = MOSTRADOR[0] + ((i % 3) - 1) * 0.8;
   return { id: `entrega-${i % 3}`, sala: "control", pos: [x, -4.4], giro: Math.PI, salida: [[x, -4.4], [x, -2], SALAS.control.puerta] };
-}
-// Quien ha fallado espera en el pasillo, delante de la puerta del despacho
-export function puertaJefe(i = 0) {
-  const pos = [12.6 - (i % 5) * 0.75, 0.45 + Math.floor(i / 5) * 0.6];
-  const [px, pz] = SALAS.despacho.puerta;
-  return { id: `puerta-${i}`, sala: "pasillo", pos, giro: Math.atan2(px - pos[0], pz - pos[1]), salida: [pos] };
 }
 // Dónde caen las carpetas que salen del mostrador (x, altura, z)
 export const DESTINOS = {
@@ -171,8 +165,8 @@ export function puntoEn(puntos, d) {
 }
 
 // ---------- Dónde se pone cada uno ahora ----------
-// donde = { id: "mesa" | "cafe" | "sofa" | "puerta" } → { id: { sitio, modo } }
-// modo: "teclea" (en su mesa), "sentado" (cafetería), "duerme" (sofá), "espera" (puerta del jefe)
+// donde = { id: "mesa" | "cafe" | "sofa" | "pendiente" } → { id: { sitio, modo, pendiente? } }
+// modo: "teclea" (en su mesa), "sentado" (cafetería), "duerme" (sofá). pendiente: está en la cafetería con un fallo apuntado
 export function colocar(donde = {}, sitios = {}) {
   const libres = [...CAFE_SITIOS];
   const coger = (tipos) => {
@@ -180,14 +174,12 @@ export function colocar(donde = {}, sitios = {}) {
     return i < 0 ? null : libres.splice(i, 1)[0];
   };
   const r = {};
-  let enPuerta = 0;
   // Primero los del sofá, para que no les quiten el sitio
   const orden = Object.entries(donde).sort(([, a], [, b]) => Number(b === "sofa") - Number(a === "sofa"));
   for (const [id, d] of orden) {
     if (d === "mesa" && sitios[id]) r[id] = { sitio: sitios[id], modo: "teclea" };
-    else if (d === "puerta") r[id] = { sitio: puertaJefe(enPuerta++), modo: "espera" };
     else if (d === "sofa") r[id] = { sitio: coger(["sofa"]) || coger(["mesa", "barra"]), modo: "duerme" };
-    else r[id] = { sitio: coger(["mesa", "barra"]) || coger(["sofa"]), modo: "sentado" };
+    else r[id] = { sitio: coger(["mesa", "barra"]) || coger(["sofa"]), modo: "sentado", ...(d === "pendiente" ? { pendiente: true } : {}) };
     if (!r[id].sitio) r[id] = { sitio: sitios[id], modo: "teclea" };
   }
   return r;

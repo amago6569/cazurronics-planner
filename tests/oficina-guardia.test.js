@@ -133,6 +133,41 @@ describe("🚑 Repesca", () => {
     expect((await enAgenda()).map((e) => e.titulo)).toContain("Fiesta de San Froilán");
   });
 
+  it("al empezar su turno, cada uno repasa primero lo que le falló: repite lo que tiene arreglo y suelta lo que no", async () => {
+    const otra = { nombre: "Noche · búsqueda de otro turno", empleado: "noche", tema: "noche", pistas: "x", donde: "León", desde: dia(-2), hasta: dia(5) };
+    const rota = { nombre: "Noche · con la clave mal", empleado: "noche", tema: "noche", pistas: "x", donde: "León", desde: dia(0), hasta: dia(6) };
+    const ajena = { nombre: "Fiestas · de otro empleado", empleado: "fiestas", tema: "fiestas", pistas: "x", donde: "León", desde: dia(0), hasta: dia(6) };
+    respuestas.push(
+      Object.assign(new ErrorIA("x", 502), { fallos: ["gemini-2.5-flash-lite: tardó demasiado"] }),
+      Object.assign(new ErrorIA("x", 403), { fallos: ["gemini-2.5-flash-lite: 403 API key not valid"] }),
+      Object.assign(new ErrorIA("x", 502), { fallos: ["gemini-2.5-flash-lite: tardó demasiado"] }),
+    );
+    await ev.trabajarEn({ busquedas: [otra, rota, ajena] }, { desde: dia(0), hasta: dia(20), inicio: Date.now() });
+    expect((await ev.leerRepesca()).map((r) => r.nombre).sort()).toEqual([ajena.nombre, rota.nombre, otra.nombre].sort());
+    prompts.length = 0;
+
+    const tramo = ev.tramoPorId("t7", dia(0));
+    expect(tramo.busquedas.every((b) => b.empleado === "noche")).toBe(true);
+    const informe = await ev.barrerEventos({ tramo: "t7" });
+    // Sus 2 búsquedas del turno + la que le falló en otro turno, lo primero
+    expect(prompts).toHaveLength(tramo.busquedas.length + 1);
+    expect(informe.repaso).toEqual({ repite: [otra.nombre], sinArreglo: [rota.nombre] });
+    expect(Object.keys(informe.fuentes)[0]).toBe(otra.nombre);
+    // Lo suyo sale de la cola (repetido bien o sin arreglo); lo de otro empleado sigue para la Repesca
+    expect((await ev.leerRepesca()).map((r) => r.nombre)).toEqual([ajena.nombre]);
+    const { leerCharla } = await import("../src/lib/charla");
+    expect((await leerCharla()).find((l) => l.tipo === "repaso")).toMatchObject({ de: "noche", a: "jefe", texto: expect.stringMatching(/las repito ahora.*no tiene arreglo/) });
+  });
+
+  it("el repaso no mete más búsquedas de las que caben en la tanda ni gasta si no queda cupo gratis", () => {
+    const cola = [1, 2, 3].map((n) => ({ nombre: `x${n}`, tipo: "lento", b: { nombre: `x${n}`, empleado: "noche" } }));
+    const llenas = Array.from({ length: ev.TANDA - 1 }, (_, n) => ({ nombre: `t${n}`, empleado: "noche" }));
+    const r = ev.repasoDeTurno(cola, llenas);
+    expect(r.repite.map((b) => b.nombre)).toEqual(["x1"]);
+    expect(r.esperan.map((c) => c.nombre)).toEqual(["x2", "x3"]);
+    expect(ev.repasoDeTurno(cola, llenas.slice(0, 2), { hayCupo: false }).repite).toEqual([]);
+  });
+
   it("sin nada en cola no gasta ni una búsqueda", async () => {
     const r = await turnoDeRepesca();
     expect(r.busquedas).toBe(0);
@@ -211,6 +246,16 @@ describe("🚶 Vida en directo", () => {
     const charla = [{ de: "pueblos", a: "jefe", texto: "Traigo 3" }, { de: "musica", a: "noche", texto: "¿Tienes lo de Babia?" }];
     const r = vida.siguientePaseo({ charla, vivos, t0: 0, jefe: s.jefe });
     expect(r.paseo).toMatchObject({ id: "musica", texto: "¿Tienes lo de Babia?" });
+  });
+  it("quien ha fallado se lo cuenta al jefe UNA vez y no vuelve a la puerta", () => {
+    const conFallo = { ...vivos, musica: { sitio: s.musica, modo: "sentado", pendiente: true } };
+    const charla = [{ de: "musica", a: "jefe", tipo: "fallo", texto: "No he podido terminar: Google lento" }];
+    const dichos = new Set();
+    const r1 = vida.siguientePaseo({ charla, vivos: conFallo, t0: 0, jefe: s.jefe, dichos });
+    expect(r1.paseo).toMatchObject({ id: "musica" });
+    expect(vida.siguientePaseo({ charla, vivos: conFallo, i: r1.i, t0: 30, jefe: s.jefe, dichos }).paseo).toBeNull();
+    // Si ya lo arregló (no está pendiente), ni siquiera esa vez
+    expect(vida.siguientePaseo({ charla, vivos, t0: 0, jefe: s.jefe, dichos: new Set() }).paseo).toBeNull();
   });
   it("la reunión sienta a todos y cada uno habla por turnos", () => {
     const e = vida.montarReunionEscena([{ id: "jefe", texto: "Empezamos" }, { id: "musica", texto: "Dame un encargo" }], vivos, s.jefe, 0);

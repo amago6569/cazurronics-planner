@@ -2,7 +2,7 @@
 // La oficina en 3D (three.js con @react-three/fiber): un edificio visto en isométrico, con una sala por cada paso
 // del trabajo (ver guion.js). Cada empleado está donde toca según su horario real (vercel.json) y su estado:
 // en su mesa durante su turno, en la cafetería si ya lo ha hecho, dormido en el sofá si se lo ha saltado y
-// esperando en la puerta del jefe si ha fallado. «Anoche en 1 minuto» repite las últimas 24 h con sus cifras.
+// en la cafetería con su fallo apuntado (📝) si ha fallado: se lo cuenta al jefe una vez y lo repasa al empezar su turno. «Anoche en 1 minuto» repite las últimas 24 h con sus cifras.
 // Entre turnos no están quietos: se levantan a hablar entre ellos (lo que se dijeron de verdad, ver vida.js) y, al
 // pulsar «Ver la reunión», los que tienen propuesta van a la mesa redonda y la dicen por turnos.
 // Un dedo mueve la planta, dos dedos (o la rueda) acercan, y tocar a alguien abre su ficha. Ver esto no gasta IA.
@@ -602,7 +602,7 @@ function Carpetas({ rep, reloj }) {
 function Director({ rep, enDirecto, poses, reloj, repitiendo, pausa, alAcabar, vivos, jefe, charla, movimiento, reunion, alAcabarReunion, tablon }) {
   const s = useRef(0);
   const acabado = useRef(false);
-  const vida = useRef({ paseos: [], i: 0, siguiente: 2, escena: null, reunionHecha: 0 });
+  const vida = useRef({ paseos: [], i: 0, siguiente: 2, escena: null, reunionHecha: 0, dichos: new Set() });
   useFrame(({ clock }, delta) => {
     if (repitiendo && rep && !rep.vacia) {
       if (!pausa) s.current = Math.min(rep.duracion, s.current + Math.min(delta, 0.1));
@@ -623,7 +623,7 @@ function Director({ rep, enDirecto, poses, reloj, repitiendo, pausa, alAcabar, v
     if (v.escena && t >= v.escena.fin) { v.escena = null; v.siguiente = t + CADA; alAcabarReunion?.(); }
     v.paseos = v.paseos.filter((p) => t < p.t3);
     if (movimiento && !v.escena && t >= v.siguiente && v.paseos.length < A_LA_VEZ) {
-      const r = siguientePaseo({ charla, vivos, ocupados: v.paseos.flatMap((p) => [p.id, p.a]), i: v.i, t0: t, jefe });
+      const r = siguientePaseo({ charla, vivos, ocupados: v.paseos.flatMap((p) => [p.id, p.a]), i: v.i, t0: t, jefe, dichos: v.dichos });
       v.i = r.i;
       if (r.paseo) v.paseos.push(r.paseo);
       v.siguiente = t + CADA;
@@ -812,18 +812,18 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
     const rotulos = {};
     for (const e of empleados) {
       if (!sitio[e.id]?.sitio) continue;
-      const { sitio: s, modo } = sitio[e.id];
+      const { sitio: s, modo, pendiente } = sitio[e.id];
       enDirecto[e.id] = { x: s.pos[0], z: s.pos[1], giro: s.giro || 0, modo };
       if (modo === "teclea") rotulos[e.id] = e.enCurso ? { texto: `🔴 ${e.emoji} ${e.nombre}`, color: "bg-rose-600/90" } : { texto: `${e.emoji} ${e.nombre}` };
       if (e.descanso) rotulos[e.id] = { texto: "🏖️", color: "bg-violet-500/90" };
-      // Los que esperan en la puerta están juntos: sus rótulos, a dos alturas para que no se pisen
-      if (modo === "espera") rotulos[e.id] = { texto: `⚠️ ${e.nombre}`, color: "bg-rose-600/90", alto: Object.values(rotulos).filter((r) => r.espera).length % 2 ? 2.9 : 2.35, espera: true };
+      // Ha fallado: toma algo en la cafetería con su fallo apuntado y lo repasa lo primero en su próximo turno
+      if (pendiente) rotulos[e.id] = { texto: `📝 ${e.nombre}`, color: "bg-amber-500/90" };
       if (modo === "duerme") rotulos[e.id] = { texto: "💤", color: "bg-amber-500/90" };
     }
     const trabajando = empleados.filter((e) => donde[e.id] === "mesa");
     const cuenta = (d) => Object.values(donde).filter((x) => x === d).length;
     const prox = empleados.map((e) => ({ e, t: proximoTurno(e.turnos, ahora) })).filter((x) => x.t).sort((a, b) => a.t - b.t)[0] || null;
-    return { enDirecto, rotulos, trabajando, siguiente: prox, resto: { cafe: cuenta("cafe"), sofa: cuenta("sofa"), puerta: cuenta("puerta") }, vivos: sitio };
+    return { enDirecto, rotulos, trabajando, siguiente: prox, resto: { cafe: cuenta("cafe") + cuenta("pendiente"), sofa: cuenta("sofa"), pendiente: cuenta("pendiente") }, vivos: sitio };
   }, [ahora, empleados, sitios]);
 
   // La repetición de las últimas 24 h (se monta al pulsar ▶)
@@ -890,7 +890,7 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
           <div className="inline-flex max-w-full flex-col rounded-2xl bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm ring-1 ring-slate-900/5 backdrop-blur">
             <span className="font-bold text-slate-900 text-[13px]">🕒 Ahora {horaMadrid(ahora)} · trabajando: {trabajando.length}</span>
             <span className="truncate">{trabajando.length ? trabajando.map((e) => `${e.emoji} ${e.nombre}`).join(", ") : siguiente ? `Próximo turno: ${siguiente.e.emoji} ${siguiente.e.nombre} a las ${horaMadrid(siguiente.t)}` : "Nadie de turno"}</span>
-            <span className="truncate text-slate-500">☕ {resto.cafe} en la cafetería{resto.sofa ? ` · 💤 ${resto.sofa} dormidos (se saltaron el turno)` : ""}{resto.puerta ? ` · ⚠️ ${resto.puerta} en la puerta del jefe (fallaron)` : ""}</span>
+            <span className="truncate text-slate-500">☕ {resto.cafe} en la cafetería{resto.sofa ? ` · 💤 ${resto.sofa} dormidos (se saltaron el turno)` : ""}{resto.pendiente ? ` · 📝 ${resto.pendiente} con un fallo apuntado (lo repasan al empezar su turno)` : ""}</span>
           </div>
         )}
       </div>
