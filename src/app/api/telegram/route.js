@@ -8,12 +8,16 @@ import { cambiarMensaje, hablarConJefe, parteDiario, pulsarBoton } from "../../.
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-const AYUDA = `👔 Soy el jefe de tu oficina. Pregúntame cifras de la web o de Instagram, o dale órdenes al equipo, por ejemplo:
+const AYUDA = `👔 Soy el jefe de tu oficina. Pregúntame lo que quieras: te contesto con lo que tiene el equipo y, si no hay nada, lo busco en ese momento. Por ejemplo:
+· ¿Qué planes hay esta semana en Boñar?
+· ¿Qué hay el finde en Astorga?
+· ¿Dónde comprar cecina en Riaño?
 · ¿Cuántos planes esta semana?
+· ¿Cómo va el equipo?
+· Quita el mercadillo de Valencia de Don Juan
 · Que Música mire los conciertos de El Gran Café
-· Que Productos busque cecina de chivo por Boñar
 
-Cada mañana te mando el parte, tu bandeja y los locales listos para escribirles, con botones.
+Los eventos los filtra y los sube el equipo solo. Cada mañana te mando el parte y los locales listos para escribirles, con botones.
 Atajos: /jefe (parte ahora), /resumen (con recomendación), /web y /instagram (solo cifras).`;
 
 // Telegram llama aquí con cada mensaje que recibe el bot.
@@ -68,11 +72,11 @@ export async function POST(request) {
       // Si acabas de pulsar ✏️ en un mensaje de captación, esto es cómo quieres cambiarlo
       const cambiado = await cambiarMensaje(chatId, texto);
       if (cambiado) return await enviarTelegram(chatId, cambiado.texto, cambiado.botones);
-      const { respuesta } = await hablarConJefe(texto, { desde: "telegram" });
+      const { respuesta } = await hablarConJefe(texto, { desde: "telegram", avisar: (t) => enviarTelegram(chatId, t).then(() => escribiendo(chatId)) });
       await enviarTelegram(chatId, respuesta);
     } catch (e) {
       console.error("[telegram]", e?.message || e);
-      await enviarTelegram(chatId, "No he podido sacar las cifras ahora mismo 🦁 Prueba otra vez en un minuto.").catch(() => null);
+      await enviarTelegram(chatId, "No he podido contestarte ahora mismo 🦁 Prueba otra vez en un minuto.").catch(() => null);
     }
   });
   return NextResponse.json({ ok: true });

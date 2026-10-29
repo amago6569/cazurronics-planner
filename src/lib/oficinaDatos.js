@@ -91,7 +91,7 @@ export async function datosOficina({ ahora = Date.now() } = {}) {
     agenda: oficina.jefe.cifras.agenda,
     planesAyer: resumen?.porDia?.[1]?.plan ?? null, planesHoy: resumen?.porDia?.[0]?.plan ?? null,
     captacion: locales?.listos?.length ?? 0,
-    pendientes: sinConfirmar.length + tarjetas.length + conFallo.length,
+    pendientes: tarjetas.length + conFallo.length, // lo «por confirmar» no: lo resuelve el Verificador solo
     bandeja: bandeja.length, sinConfirmar: sinConfirmar.length, repesca: colaRepesca.length,
   };
   const repescaResumen = colaRepesca.slice(0, 12).map((r) => ({ nombre: r.nombre, empleado: r.b?.empleado || null, motivo: r.motivo, intentos: r.intentos }));

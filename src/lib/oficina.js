@@ -98,7 +98,7 @@ export function montarOficina(partes = {}, { bandeja = 0, agenda = 0, nuevosHoy 
   if (nuevosHoy) lineas.push(`Hoy han entrado ${nuevosHoy} eventos nuevos.`);
   if (descartados) lineas.push(`${descartados} se han quedado fuera por no tener una fuente que se pueda comprobar.`);
   if (bandeja) lineas.push(`${bandeja} ${bandeja === 1 ? "evento espera" : "eventos esperan"} la segunda comprobación del Verificador.`);
-  if (sinConfirmar) lineas.push(`${sinConfirmar} ${sinConfirmar === 1 ? "evento está subido" : "eventos están subidos"} sin fuente segura: échales un ojo.`);
+  if (sinConfirmar) lineas.push(`${sinConfirmar} ${sinConfirmar === 1 ? "evento está subido" : "eventos están subidos"} «por confirmar»: el Verificador los sigue mirando solo.`);
   const pendientes = Object.values(encargos).reduce((s, l) => s + l.length, 0);
   if (pendientes) lineas.push(`Hay ${pendientes} ${pendientes === 1 ? "encargo tuyo pendiente" : "encargos tuyos pendientes"} para el próximo turno.`);
   // Un fallo suelto lo arregla la Repesca: solo se nombra a quien falla dos días seguidos

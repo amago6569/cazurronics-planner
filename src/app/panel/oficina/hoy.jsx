@@ -89,7 +89,8 @@ async function mandar(clave, cuerpo) {
   } catch { return { exito: false, mensaje: "No se pudo conectar" }; }
 }
 
-// Un evento que el Verificador subió sin poder confirmarlo: ya está en la web, tú dices si se queda
+// Un evento que el Verificador subió sin poder confirmarlo: ya está en la web y lo sigue mirando él solo.
+// Tocar aquí es opcional: «Vale» le quita la marca, «Quitar» lo saca de la web.
 // «Quitar» no se manda al momento: tienes 10 segundos para deshacerlo (lo quitado no vuelve en 30 días)
 function SinConfirmar({ e, clave, alQuitar, alQuitarConDeshacer }) {
   const [ocupado, setOcupado] = useState(false);
@@ -108,7 +109,7 @@ function SinConfirmar({ e, clave, alQuitar, alQuitarConDeshacer }) {
         <p className="text-[11px] font-semibold text-rose-500 uppercase tracking-wide">{diaCorto(e.fecha)}{e.hora ? ` · ${e.hora}` : ""}</p>
         <p className="font-semibold text-slate-900 leading-snug">{e.titulo}</p>
         <p className="text-xs text-slate-600">{[e.lugar, e.localidad].filter(Boolean).join(" · ")}</p>
-        <p className="text-xs text-slate-600 mt-1">Ni el enlace ni Google lo confirman. Ya está en la web marcado «por confirmar».</p>
+        <p className="text-xs text-slate-600 mt-1">Ya está en la web marcado «por confirmar». El Verificador lo sigue mirando solo: lo confirma o lo quita.</p>
         {e.fuente && <a href={e.fuente} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-sky-700 hover:underline underline-offset-2 break-all line-clamp-1">🔗 Mirar dónde lo vio</a>}
       </div>
       {aviso && <p className="text-xs text-rose-600" role="alert">{aviso}</p>}
@@ -183,7 +184,7 @@ export function HoyTeToca({ bandeja, sinConfirmar = [], captacion = [], departam
   const locales = captacion.filter((l) => !quitados.includes(l.clave));
   const subidos = sinConfirmar.filter((e) => !quitados.includes(e.id));
   const { fallos, sueltos } = fallosQueTeTocan(departamentos, fallanSeguido);
-  const total = subidos.length + locales.length + fallos.length; // lo de la bandeja no te toca a ti: lo hace el Verificador
+  const total = locales.length + fallos.length; // ni la bandeja ni lo «por confirmar» te tocan a ti: lo resuelve el Verificador
   const quitar = (id) => (t) => { setQuitados((q) => [...q, id]); setAviso(t); };
 
   // Manda el «Quitar» que estaba esperando (al pasar los 10 s, al quitar otro o al salir de la página)
@@ -234,14 +235,24 @@ export function HoyTeToca({ bandeja, sinConfirmar = [], captacion = [], departam
         <p className="mt-2 text-[15px] text-slate-700">✅ Nada pendiente. {flujo.entran ? `Anoche entraron ${fmt(flujo.entran)} eventos nuevos` : "Anoche no entró nada nuevo"} y hay {fmt(flujo.agenda)} en la agenda.</p>
       ) : (
         <ul className="mt-3 -mx-4 px-4 flex items-stretch gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory md:mx-0 md:px-0 md:grid md:grid-cols-2 xl:grid-cols-3 md:overflow-visible">
-          {subidos.slice(0, MAX_BANDEJA * 2).map((e) => <SinConfirmar key={e.id} e={e} clave={clave} alQuitar={quitar(e.id)} alQuitarConDeshacer={quitarConDeshacer} />)}
           {bandeja.length > 0 && <EnCola n={bandeja.length} clave={clave} alTerminar={alTerminar} alVerBandeja={alVerBandeja} />}
           {locales.map((l) => <Local key={l.clave} l={l} clave={clave} alQuitar={(t) => { setQuitados((q) => [...q, l.clave]); setAviso(t); }} />)}
           {fallos.map((e) => <Fallo key={e.id} e={e} clave={clave} alTerminar={alTerminar} />)}
         </ul>
       )}
       {sueltos.length > 0 && <p className="mt-3 text-sm text-slate-600">🚑 {sueltos.map((e) => e.nombre).join(", ")} {sueltos.length === 1 ? "ha tenido" : "han tenido"} algún fallo suelto. La Repesca lo repite; solo te aviso si se repite mañana.</p>}
-      {subidos.length > MAX_BANDEJA * 2 && <p className="mt-3 text-sm text-slate-600">…y {subidos.length - MAX_BANDEJA * 2} más subidos sin fuente segura (te los vuelvo a enseñar cuando decidas estos).</p>}
+      {subidos.length > 0 && (
+        <details className="mt-3 group">
+          <summary className={`${PRESS} cursor-pointer list-none inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700`}>
+            🕵️ {subidos.length} en la web «por confirmar» · los mira el Verificador <span className="text-slate-400 group-open:rotate-90 transition-transform" aria-hidden>›</span>
+          </summary>
+          <p className="mt-2 text-xs text-slate-600">No tienes que hacer nada. Si alguno no te cuadra, quítalo aquí o dile al jefe «quita …».</p>
+          <ul className="mt-2 -mx-4 px-4 flex items-stretch gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory md:mx-0 md:px-0 md:grid md:grid-cols-2 xl:grid-cols-3 md:overflow-visible">
+            {subidos.slice(0, MAX_BANDEJA * 2).map((e) => <SinConfirmar key={e.id} e={e} clave={clave} alQuitar={quitar(e.id)} alQuitarConDeshacer={quitarConDeshacer} />)}
+          </ul>
+          {subidos.length > MAX_BANDEJA * 2 && <p className="mt-2 text-xs text-slate-500">…y {subidos.length - MAX_BANDEJA * 2} más.</p>}
+        </details>
+      )}
     </section>
   );
 }

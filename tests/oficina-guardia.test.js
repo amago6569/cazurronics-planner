@@ -89,7 +89,7 @@ describe("🕵️ Verificador", () => {
     expect(aviso.map((e) => e.titulo)).toEqual(["Ruta sin pistas"]);
     // Y te lo cuenta en el chat
     const { leerCharla } = await import("../src/lib/charla");
-    expect((await leerCharla()).some((l) => l.a === "tu" && /sin fuente segura/.test(l.texto))).toBe(true);
+    expect((await leerCharla()).some((l) => l.a === "tu" && /por confirmar/.test(l.texto))).toBe(true);
 
     // Quitar: fuera de la agenda y no vuelve a la bandeja en 30 días
     expect((await ev.decidirSinConfirmar(aviso[0].id, "quitar")).exito).toBe(true);

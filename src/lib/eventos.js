@@ -519,7 +519,7 @@ export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, en
     : b.extra);
   const tareas = [
     ...(jcyl ? [["Junta de Castilla y León (datos abiertos)", async () => ({ eventos: await fuenteJCyL(desde, hasta), dominios: new Set() })]] : []),
-    ...busquedas.map((b) => [b.nombre, () => fuenteBusqueda({ ...b, extra: conEncargo(b), conocidos: yaConocidos(agenda, b) }), b.empleado]),
+    ...busquedas.map((b) => [b.nombre, () => fuenteBusqueda({ ...b, extra: conEncargo(b), conocidos: yaConocidos(agenda, b) }, b.msMax || 44000), b.empleado]),
   ];
   const resultados = await enTandas(tareas.map(([, f]) => f), 10);
 
@@ -561,6 +561,7 @@ export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, en
   await sinRomper(apuntarRendimiento(hechas), "rendimiento");
   let entraron = [];
   const sumados = nuevos.length ? await sumarALaAgenda(nuevos, desde, hasta, (e) => deQuien.get(claveEvento(e)) || null, (lista) => { entraron = lista; }) : 0;
+  if (nuevos.length) await sinRomper(confirmarSubidos(nuevos), "por confirmar");
   if (dudosos.length) await sinRomper(guardarDudosos(dudosos), "bandeja del jefe");
   await sinRomper(apuntarRepesca(aRepescar, repescadas), "repesca");
   if (enMarcha.length) await sinRomper(comando(["HDEL", EN_CURSO, ...enMarcha]), "en curso");
@@ -604,6 +605,9 @@ async function conCerrojo(tarea) {
 // quien = (evento) => nombre del empleado que lo encontró, para la lista de novedades de la oficina
 export async function sumarALaAgenda(eventos, desde, hasta, quien = () => null, avisar = () => {}) {
   const entran = [];
+  // Lo que quitaste tú (o el Verificador vio que era falso) no vuelve a entrar en 30 días, aunque llegue de otra web
+  const tirados = new Set((await comando(["HKEYS", TIRADOS]).catch(() => [])) || []);
+  if (tirados.size) eventos = eventos.filter((e) => !tirados.has(idDudoso(e)));
   const nuevos = await conCerrojo(async () => {
     const porDia = fusionarPorDia([eventos], desde, hasta);
     const fechas = Object.keys(porDia);
@@ -703,13 +707,17 @@ const sumarFuente = (e, url) => {
 export async function guardarDudosos(lista) {
   // Lo que ya tiraste o ya está subido «por confirmar» no vuelve a la bandeja
   const [enBandeja, tirados, subidos] = await varios([["HLEN", BANDEJA], ["HKEYS", TIRADOS], ["HKEYS", SIN_CONFIRMAR]]);
-  const fuera = new Set([...(tirados || []), ...(subidos || [])]);
-  const porId = new Map();
+  const yaSubidos = new Set(subidos || []);
+  const fuera = new Set([...(tirados || []), ...yaSubidos]);
+  const porId = new Map(), otraVez = [];
   for (const { motivo: _, ...e } of lista) {
     const id = idDudoso(e);
+    if (yaSubidos.has(id)) otraVez.push(e);
     if (fuera.has(id)) continue;
     porId.set(id, porId.has(id) ? sumarFuente(porId.get(id), e.fuente) : e);
   }
+  // Uno ya subido «por confirmar» que aparece en otra web distinta: con dos webs se da por confirmado, solo
+  if (otraVez.length) await confirmarSubidos(otraVez, { soloOtraWeb: true });
   if (!porId.size) return;
   const ids = [...porId.keys()];
   const [previos] = await varios([["HMGET", BANDEJA, ...ids]]);
@@ -779,6 +787,11 @@ export async function apuntarSinConfirmar(lista) {
   await varios([["HSET", SIN_CONFIRMAR, ...campos], ["EXPIRE", SIN_CONFIRMAR, 21 * 24 * 3600]]);
 }
 
+// El Verificador apunta cuándo volvió a mirar cada uno (para no preguntar a Google por el mismo cada turno)
+export async function apuntarRepaso(lista) {
+  if (lista.length) await comando(["HSET", SIN_CONFIRMAR, ...lista.flatMap(({ id, ...e }) => [id, JSON.stringify({ ...e, repaso: new Date().toISOString() })])]);
+}
+
 export async function leerSinConfirmar() {
   const hoy = hoyEnLeon();
   const todos = Object.entries(aObjeto(await comando(["HGETALL", SIN_CONFIRMAR])) || {}).map(([id, v]) => {
@@ -802,6 +815,27 @@ export async function decidirSinConfirmar(id, decision) {
   }
   await comando(["HDEL", SIN_CONFIRMAR, id]);
   return { exito: true };
+}
+
+// Lo subido «por confirmar» se confirma solo cuando vuelve a aparecer con fuente comprobada (otro turno, otro empleado)
+// o, con soloOtraWeb, cuando llega desde una web distinta de la primera. Devuelve cuántos se han confirmado.
+export async function confirmarSubidos(eventos, { soloOtraWeb = false } = {}) {
+  const porId = new Map(eventos.map((e) => [idDudoso(e), e]));
+  if (!porId.size) return 0;
+  const ids = [...porId.keys()];
+  const guardados = await comando(["HMGET", SIN_CONFIRMAR, ...ids]);
+  let hechos = 0;
+  for (const [i, id] of ids.entries()) {
+    if (!guardados?.[i]) continue;
+    if (soloOtraWeb) {
+      let antes = null;
+      try { antes = JSON.parse(guardados[i]); } catch {}
+      if (!antes || !dominioDe(porId.get(id).fuente) || dominioDe(porId.get(id).fuente) === dominioDe(antes.fuente)) continue;
+    }
+    if ((await decidirSinConfirmar(id, "vale")).exito) hechos++;
+  }
+  if (hechos) await sinRomper(apuntarCharla([{ de: "verificador", a: "jefe", tipo: "nuevos", texto: `${hechos} ${hechos === 1 ? "evento que estaba" : "eventos que estaban"} «por confirmar» ya ${hechos === 1 ? "sale" : "salen"} en otra web: confirmado${hechos === 1 ? "" : "s"}.` }]), "charla");
+  return hechos;
 }
 
 // Cambia un evento en todos los días de la agenda en que sale (cambio = (evento) => evento nuevo)

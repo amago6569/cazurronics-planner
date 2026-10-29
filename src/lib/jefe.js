@@ -1,10 +1,11 @@
 // ============ EL JEFE DE LA OFICINA, POR TELEGRAM Y EN EL PANEL ============
-// · Parte diario: UN mensaje por la mañana con lo que ha hecho el equipo, lo que hay en tu bandeja (con botones para
-//   subir o tirar cada evento) y los locales listos para escribirles, cada uno con su mensaje ya hecho con sus cifras
+// · Parte diario: UN mensaje por la mañana con lo que ha hecho el equipo (lo subido «por confirmar» va en una línea: lo
+//   sigue mirando el Verificador solo, no hay que decidir nada) y los locales listos para escribirles, cada uno con su mensaje ya hecho con sus cifras
 //   reales y tres botones: ✅ Enviar · ✏️ Cambiar · ✖ No. Sustituye al correo de captación de las 7:30.
 // · ✅ nunca manda nada solo (LSSI): te deja el texto y un botón que abre Instagram o Gmail con él puesto; lo envías tú.
 // · Chat: lo que le escribes lo entiende una IA barata (flash-lite, sin Google, ~0,0001 $ por mensaje) y lo convierte
-//   en una orden a un empleado o en una pregunta de cifras (el asesor de siempre).
+//   en una orden a un empleado, en «quita tal evento» o en una pregunta. Las preguntas se contestan con lo que sabe la
+//   oficina y, si no hay nada, buscando en ese momento (lib/jefeSabe.js).
 import { comando } from "./almacen";
 import { llamarGemini, extraerJSON } from "./gemini";
 import { datosOficina } from "./oficinaDatos";
@@ -18,7 +19,8 @@ import { haversineKm } from "./planUtils";
 import { apuntarCharla, JEFE, TU } from "./charla";
 import { DEPARTAMENTOS } from "./oficina";
 import { euros } from "./euros";
-import { responderPregunta } from "./asesor";
+import { contextoMetricas, responderPregunta } from "./asesor";
+import { puebloEnTexto, quitarPorNombre, rangoDeFechas, redactar, reunirDatos, respuestaSinIA } from "./jefeSabe";
 import { ZONAS } from "./zonas";
 
 const MAX_BANDEJA = 5, MAX_LOCALES = 3;
@@ -39,14 +41,11 @@ export async function parteDiario({ conCaptacion = true } = {}) {
   else if (ofi.jefe.cifras.gastoMes != null) lineas.push(`IA este mes: ${ofi.jefe.cifras.gastoMes.toFixed(2).replace(".", ",")} $.`);
   const mensajes = [{ texto: `👔 Parte del jefe\n\n${lineas.map((l) => `· ${l}`).join("\n")}\n\nPanel: ${DOMINIO}/panel/oficina` }];
 
-  // Lo que el Verificador subió sin poder confirmarlo: ya está en la web; tú solo dices si se queda
-  for (const e of ofi.sinConfirmar.slice(0, MAX_BANDEJA)) {
-    mensajes.push({
-      texto: `⚠️ Subido sin fuente segura · ${diaCorto(e.fecha)}${e.hora ? ` ${e.hora}` : ""}\n${e.titulo}\n${[e.lugar, e.localidad].filter(Boolean).join(", ")}\nLo trajo ${nombreDe(e.empleado)}. Ni el enlace ni Google lo confirman${e.fuente ? `: ${e.fuente}` : "."}`,
-      botones: [[{ text: "👍 Vale", callback_data: `q:v:${e.id}` }, { text: "🗑 Quitar de la web", callback_data: `q:q:${e.id}` }]],
-    });
+  // Lo subido «por confirmar» ya no espera tu sí: el Verificador lo sigue mirando solo. Solo te lo cuento.
+  const n = ofi.flujo?.sinConfirmar ?? ofi.sinConfirmar.length;
+  if (n) {
+    mensajes[0].texto = mensajes[0].texto.replace(`\n\nPanel:`, `\n· 🕵️ ${n} ${n === 1 ? "evento está" : "eventos están"} en la web «por confirmar» (${ofi.sinConfirmar.slice(0, MAX_BANDEJA).map((e) => `${e.titulo.slice(0, 40)}, ${diaCorto(e.fecha)}`).join("; ")}${n > MAX_BANDEJA ? "…" : ""}). Los sigo mirando yo; si alguno no te cuadra, dime «quita …».\n\nPanel:`);
   }
-  if (ofi.sinConfirmar.length > MAX_BANDEJA) mensajes.push({ texto: `…y ${ofi.sinConfirmar.length - MAX_BANDEJA} más en el panel («Hoy te toca»).` });
   if (conCaptacion) mensajes.push(...(await tarjetasCaptacion()));
   return mensajes;
 }
@@ -246,16 +245,39 @@ export async function decidirReunion(accion = {}) {
 
 // ---------- Hablar con el jefe ----------
 const LISTA_EMPLEADOS = [...EMPLEADOS_BUSCADORES, EMPLEADO_DESPENSA].map((id) => `${id} (${nombreDe(id)})`).join(", ");
+const TEMAS = ["agenda", "planes", "sitios", "tiendas", "cifras", "oficina", "otro"];
+const MS_TOTAL = 56000; // lo que da Vercel (60 s) menos un margen para mandar la respuesta
 
-// Devuelve { respuesta, orden? }. desde = "telegram" | "panel"
-export async function hablarConJefe(texto, { desde = "panel" } = {}) {
+// Cómo va el equipo, en pocas líneas (0 €): para cuando le preguntas por la oficina
+export function oficinaEnPocasLineas(ofi) {
+  const empleados = ofi.departamentos.flatMap((d) => d.empleados)
+    .map((e) => `- ${e.emoji} ${e.nombre}: ${{ ok: "al día", tarde: "con retraso", error: "ha fallado", nuevo: "sin turnos aún", descanso: "de descanso" }[e.estado] || e.estado}${e.parte?.fin ? `, último turno ${hace(e.parte.fin)}` : ""}${e.parte?.texto ? ` (${String(e.parte.texto).slice(0, 80)})` : ""}${e.estado === "error" && (e.parte?.motivos?.[0]?.texto || e.parte?.error) ? ` · motivo: ${e.parte.motivos?.[0]?.texto || e.parte.error}` : ""}`);
+  return [
+    ...ofi.jefe.lineas.map((l) => `· ${l}`),
+    ofi.sinConfirmar?.length ? `· Subidos «por confirmar»: ${ofi.sinConfirmar.slice(0, 8).map((e) => `${e.titulo} (${e.fecha}, ${e.localidad || "?"})`).join("; ")}` : "",
+    ofi.repesca?.length ? `· En la cola de la Repesca: ${ofi.repesca.length} búsquedas` : "",
+    "Empleados:", ...empleados,
+  ].filter(Boolean).join("\n");
+}
+
+// Devuelve { respuesta, orden?, buscado? }. desde = "telegram" | "panel"
+// avisar(texto): para decirte «lo busco ahora, dame medio minuto» mientras busca (Telegram)
+export async function hablarConJefe(texto, { desde = "panel", avisar = null } = {}) {
+  const inicio = Date.now();
   const limpio = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 400);
   if (!limpio) return { respuesta: "Dime qué necesitas." };
   await apuntarCharla([{ de: TU, a: JEFE, tipo: "chat", texto: limpio }]).catch(() => null);
   const prompt = `Eres el jefe de una oficina de empleados que buscan eventos y tiendas en León para la web Cazurronics. Alejandro (el dueño) te escribe.
 Empleados que reciben órdenes: ${LISTA_EMPLEADOS}.
-Decide si es una ORDEN para un empleado (buscar algo concreto, ponerse a trabajar) o una PREGUNTA (cifras, cómo va algo, cualquier otra cosa).
-Devuelve SOLO JSON: {"tipo":"orden","empleado":"<id exacto>","accion":"encargo"|"trabajar","texto":"<qué buscar, si es encargo>","ya":<true solo si pide que sea ahora mismo>,"zona":"<solo para ${EMPLEADO_DESPENSA}: una de ${ZONAS.map((z) => z.id).join(", ")}>"} o {"tipo":"pregunta"}.
+Decide qué es:
+- ORDEN: le pide a un empleado concreto que busque algo en su turno o que se ponga a trabajar («que Música mire…», «dile a Pueblos que…»).
+- QUITAR: quiere quitar un evento de la web («quita el concierto de…», «ese mercadillo no es cierto, fuera»).
+- PREGUNTA: todo lo demás. Ojo: «¿qué planes hay en Boñar?», «búscame qué hay en Boñar», «¿puedes buscar algo sobre Boñar ahora?» son PREGUNTA (quiere la respuesta ya, no un encargo).
+Devuelve SOLO JSON, uno de estos:
+{"tipo":"orden","empleado":"<id exacto>","accion":"encargo"|"trabajar","texto":"<qué buscar, si es encargo>","ya":<true solo si pide que sea ahora mismo>,"zona":"<solo para ${EMPLEADO_DESPENSA}: una de ${ZONAS.map((z) => z.id).join(", ")}>"}
+{"tipo":"quitar","texto":"<nombre del evento tal como lo dice>"}
+{"tipo":"pregunta","tema":"agenda|planes|sitios|tiendas|cifras|oficina|otro","sitio":"<pueblo o lugar de León que nombra, o null>","que":"<qué busca en 2-4 palabras (conciertos, fiestas, comer…) o null>"}
+tema: agenda = eventos, fiestas, conciertos, qué hay · planes = qué hacer en un sitio (eventos y dónde comer) · sitios = bares, restaurantes · tiendas = dónde comprar un producto · cifras = visitas, planes hechos, Instagram, gasto · oficina = cómo va el equipo, qué has subido, qué ha fallado · otro = lo demás.
 MENSAJE: ${limpio}`;
   let decision = { tipo: "pregunta" };
   try {
@@ -286,7 +308,35 @@ MENSAJE: ${limpio}`;
     ]).catch(() => null);
     return { respuesta, orden: { empleado: emp, ...orden, exito: !!r.exito, parte: r.parte || null } };
   }
-  const respuesta = await responderPregunta(limpio);
+  if (decision.tipo === "quitar") {
+    const r = await quitarPorNombre(decision.texto || limpio);
+    await apuntarCharla([{ de: JEFE, a: TU, tipo: "chat", texto: r.respuesta.slice(0, 220) }]).catch(() => null);
+    return { respuesta: r.respuesta, orden: { accion: "quitar", exito: r.exito } };
+  }
+
+  // Una pregunta: se contesta con lo que tiene la oficina y, si de eso no hay nada, se busca ahora
+  const sitioIA = typeof decision.sitio === "string" && decision.sitio.trim() && !/^(null|leon provincia|provincia)$/i.test(decision.sitio.trim()) ? decision.sitio.trim().slice(0, 60) : null;
+  const sitio = puebloEnTexto(limpio) || sitioIA;
+  // Si nombra un pueblo y no se sabe qué quiere, se le cuenta qué hay allí
+  const tema = TEMAS.includes(decision.tema) && !(decision.tema === "otro" && sitio) ? decision.tema : sitio ? "planes" : "otro";
+  let respuesta;
+  if (tema === "cifras") respuesta = await responderPregunta(limpio);
+  else {
+    const pregunta = { tema, sitio, que: typeof decision.que === "string" ? decision.que.slice(0, 60) : null, ...rangoDeFechas(limpio) };
+    const [ofi, cifras] = await Promise.all([
+      ["oficina", "otro"].includes(tema) ? datosOficina().catch(() => null) : null,
+      tema === "otro" ? contextoMetricas().catch(() => null) : null,
+    ]);
+    const queda = MS_TOTAL - (Date.now() - inicio) - 16000; // lo que queda, menos lo que tarda en redactar
+    const datos = await reunirDatos(pregunta, {
+      buscar: queda >= 15000, msBuscar: Math.min(32000, queda), avisar: desde === "telegram" ? avisar : null,
+      extra: { oficina: ofi ? oficinaEnPocasLineas(ofi) : null, cifras },
+    });
+    respuesta = await redactar(limpio, datos.texto, { msMax: Math.max(5000, Math.min(15000, MS_TOTAL - (Date.now() - inicio))) })
+      .catch(() => respuestaSinIA(pregunta, datos.eventos));
+    await apuntarCharla([{ de: JEFE, a: TU, tipo: "chat", texto: respuesta.slice(0, 220) }]).catch(() => null);
+    return { respuesta, buscado: datos.buscado };
+  }
   await apuntarCharla([{ de: JEFE, a: TU, tipo: "chat", texto: respuesta.slice(0, 220) }]).catch(() => null);
   return { respuesta };
 }

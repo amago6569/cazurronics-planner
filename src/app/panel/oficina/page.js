@@ -140,7 +140,7 @@ function Bandeja({ lista, decidir, enCurso }) {
 // Cómo va todo, en una frase y un color
 function Semaforo({ datos, enCursoN, alHoy }) {
   const f = datos.flujo || {};
-  const tuyas = (datos.sinConfirmar?.length || 0) + (datos.captacion?.length || 0) + fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
+  const tuyas = (datos.captacion?.length || 0) + fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
   const [color, texto] = tuyas
     ? ["bg-amber-400", `Tienes ${tuyas} ${tuyas === 1 ? "cosa" : "cosas"} para hoy`]
     : ["bg-emerald-500", "Todo en marcha: no tienes nada pendiente"];
@@ -160,12 +160,12 @@ function Semaforo({ datos, enCursoN, alHoy }) {
 
 const AYUDA = [
   ["🟢🟠", "El semáforo de arriba", "Verde: no tienes que hacer nada. Naranja: algo espera tu sí o tu no en «Hoy te toca»."],
-  ["✋", "Hoy te toca", "Lo único que necesita tu dedo: eventos subidos sin fuente segura (Vale o Quitar), locales listos para escribirles y quien falló, con el porqué."],
+  ["✋", "Hoy te toca", "Lo único que necesita tu dedo: locales listos para escribirles y quien falla dos días seguidos, con el porqué. Los eventos los filtra y los sube el equipo solo."],
   ["🤝", "La reunión", "Cada día el equipo propone cosas con sus cifras: descansar si no traen nada, repetir lo que falló, un encargo para el que más trae. Dices sí o no."],
   ["🏢", "El edificio", "Cada empleado es una tarea automática de la web. En su mesa: trabajando (🔴 si es ahora mismo). En la cafetería: ya ha hecho su turno. Dormido en el sofá: se saltó el turno. En la puerta del jefe: ha fallado. 🏖️: de descanso."],
-  ["🕵️", "Verificador", "Vuelve a comprobar lo que no tenía fuente segura. Lo bueno lo sube; lo falso lo tira; lo dudoso lo sube «por confirmar» y te avisa."],
+  ["🕵️", "Verificador", "Vuelve a comprobar lo que no tenía fuente segura. Lo bueno lo sube; lo falso lo tira; lo dudoso lo sube «por confirmar» y lo sigue mirando él solo hasta confirmarlo o quitarlo."],
   ["🚑", "Repesca", "Repite las búsquedas que fallaron porque Google iba lento o saturado. Gratis, dentro del cupo diario de Google."],
-  ["💬", "El chat", "«Todos» es el grupo. Al jefe le puedes pedir cosas. A cada empleado le puedes preguntar «¿cómo vas?» o decirle «busca …»."],
+  ["💬", "El chat", "«Todos» es el grupo. Al jefe le puedes preguntar lo que sea («¿qué hay esta semana en Boñar?»): contesta con los datos del equipo y, si no hay nada, lo busca en ese momento. También «quita …» para sacar un evento de la web. A cada empleado le puedes preguntar «¿cómo vas?» o decirle «busca …»."],
   ["▶", "Anoche en 1 minuto", "Repite lo que pasó en las últimas 24 horas, turno a turno, con sus cifras reales."],
   ["➕", "Un empleado nuevo", "Pídeme «mete X en la oficina»: con una línea en lib/oficina.js aparece su monigote con mesa, ficha y chat."],
 ];
@@ -299,7 +299,7 @@ export default function Oficina() {
     );
   }
 
-  const pendientes = (datos.sinConfirmar?.length || 0) + (datos.captacion?.length || 0) + fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
+  const pendientes = (datos.captacion?.length || 0) + fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
   return (
     <main className="min-h-[100dvh] px-4 pt-5 pb-28 sm:px-6 text-slate-800">
       <Fondo />
