@@ -3,8 +3,9 @@
 // ordena con montarOficina. Lo usan el panel (/api/panel/oficina) y el parte diario del jefe por Telegram.
 import { leerJSON } from "./almacen";
 import { hoyEnLeon, leerGastoIA, leerResumen } from "./estadisticas";
-import { definirTramos, eventosProximos, leerBandeja, leerEncargos, partesDeOrdenes } from "./eventos";
-import { montarOficina } from "./oficina";
+import { definirTramos, eventosProximos, leerBandeja, leerEncargos, leerEnCurso, leerPausas, leerRepesca, leerSinConfirmar, partesDeOrdenes } from "./eventos";
+import { montarOficina, RUTAS_EMPLEADOS } from "./oficina";
+import { leerDescartadas, montarReunion } from "./reunion";
 import { EMPLEADO_DESPENSA, encargosDespensa } from "./despensa";
 import { leerNovedades, leerRendimiento } from "./novedades";
 import { leerCharla } from "./charla";
@@ -28,8 +29,10 @@ function masReciente(a = {}, b = {}) {
 }
 
 // Lo que dejan apuntado las tareas de la Despensa y los avisos, en el mismo formato que los partes del barrido
-function partesDeOtros({ productos, tiendas, fichas, captacion, finde }) {
+function partesDeOtros({ productos, tiendas, fichas, captacion, finde, verificador, repesca }) {
   const p = {};
+  if (verificador?.fin) p.verificador = { fin: verificador.fin, error: verificador.error || null, texto: verificador.texto, descartes: verificador.descartes || [] };
+  if (repesca?.fin) p.repesca = { fin: repesca.fin, error: repesca.error || null, texto: repesca.texto };
   if (productos?.fin) p["despensa-productos"] = { fin: productos.fin, error: productos.combinaciones?.every((c) => c.error) ? "Fallaron todas las búsquedas" : null, texto: `${productos.combinaciones?.length || 0} búsquedas de producto` };
   if (tiendas?.fin) p["despensa-tiendas"] = { fin: tiendas.fin, error: tiendas.error || null, texto: tiendas.nada || `${tiendas.tiendas || 0} tiendas nuevas` };
   if (fichas?.fin) p["despensa-fichas"] = { fin: fichas.fin, error: fichas.fallidas && !fichas.investigadas ? fichas.error : null, texto: fichas.nada || `${fichas.investigadas || 0} tiendas investigadas` };
@@ -39,28 +42,36 @@ function partesDeOtros({ productos, tiendas, fichas, captacion, finde }) {
 }
 
 export async function datosOficina({ ahora = Date.now() } = {}) {
-  const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades, rendimiento, charla, resumen, locales] = await Promise.all([
+  const [barrido, bandeja, agenda, gasto, jefe, productos, tiendas, fichas, captacion, finde, ordenes, encargos, encargosDesp, novedades, rendimiento, charla, resumen, locales, verificador, repesca, colaRepesca, pausas, enCurso, sinConfirmar, descartadas] = await Promise.all([
     leerJSON("eventos:ultimoBarrido"), leerBandeja(), eventosProximos(), leerGastoIA().catch(() => null), leerJSON("oficina:jefe"),
     leerJSON("despensa:ultimoBarrido"), leerJSON("despensa:g:ultimo"), leerJSON("despensa:fichas:ultimo"),
     leerJSON("oficina:turno:captacion"), leerJSON("oficina:turno:finde"),
     partesDeOrdenes().catch(() => ({})), leerEncargos().catch(() => ({})),
     encargosDespensa().catch(() => []), leerNovedades().catch(() => []), leerRendimiento().catch(() => ({})), leerCharla().catch(() => []),
     leerResumen(2).catch(() => null), listarCaptacion().catch(() => null),
+    leerJSON("oficina:turno:verificador"), leerJSON("oficina:turno:repesca"), leerRepesca().catch(() => []),
+    leerPausas().catch(() => ({})), leerEnCurso().catch(() => ({})), leerSinConfirmar().catch(() => []), leerDescartadas().catch(() => []),
   ]);
   const hoy = hoyEnLeon();
   const nuevosHoy = (barrido?.tramos || []).filter((t) => t.fin && new Date(t.fin).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) === hoy).reduce((s, t) => s + (t.nuevos || 0), 0);
-  const oficina = montarOficina({ ...masReciente(barrido?.empleados, ordenes), ...partesDeOtros({ productos, tiendas, fichas, captacion, finde }) }, {
+  // Los partes del barrido guardan el motivo de cada búsqueda fallida: al empleado le llega el último en cristiano
+  const partes = { ...masReciente(barrido?.empleados, ordenes), ...partesDeOtros({ productos, tiendas, fichas, captacion, finde, verificador, repesca }) };
+  for (const [nombre, f] of Object.entries(barrido?.fuentes || {})) {
+    const p = partes[f.empleado || "junta"];
+    if (p && !f.ok && f.error) p.motivos = [...(p.motivos || []), { busqueda: nombre, texto: f.error, tipo: f.tipo || null }].slice(0, 4);
+  }
+  const oficina = montarOficina(partes, {
     bandeja: bandeja.length,
     agenda: agenda.reduce((s, d) => s + d.eventos.length, 0),
     nuevosHoy,
     gastoMes: gasto?.[0]?.tareas?.reduce((s, t) => s + t.dolares, 0) ?? null,
     jefe,
     encargos: { ...encargos, [EMPLEADO_DESPENSA]: encargosDesp.map((texto) => ({ texto })) },
-    rendimiento,
+    rendimiento, pausas, enCurso, sinConfirmar: sinConfirmar.length,
   });
   // Cuándo trabaja cada uno (para saber si está en su mesa, en la cafetería…)
   const deTramo = empleadosDeTramo();
-  const turnos = turnosDeCrons(vercel.crons, deTramo);
+  const turnos = turnosDeCrons(vercel.crons, deTramo, RUTAS_EMPLEADOS);
   for (const d of oficina.departamentos) for (const e of d.empleados) e.turnos = turnos[e.id] || [];
 
   // Lo de las últimas 24 h, tramo a tramo: lo que se ve en «Anoche en 1 minuto» y en la tira del flujo
@@ -76,7 +87,13 @@ export async function datosOficina({ ahora = Date.now() } = {}) {
     agenda: oficina.jefe.cifras.agenda,
     planesAyer: resumen?.porDia?.[1]?.plan ?? null, planesHoy: resumen?.porDia?.[0]?.plan ?? null,
     captacion: locales?.listos?.length ?? 0,
-    pendientes: bandeja.length + tarjetas.length + conFallo.length,
+    pendientes: sinConfirmar.length + tarjetas.length + conFallo.length,
+    bandeja: bandeja.length, sinConfirmar: sinConfirmar.length, repesca: colaRepesca.length,
   };
-  return { ...oficina, bandeja, novedades, charla, turnosJefe: turnos.jefe || [], golpes, flujo, captacion: tarjetas };
+  const repescaResumen = colaRepesca.slice(0, 12).map((r) => ({ nombre: r.nombre, empleado: r.b?.empleado || null, motivo: r.motivo, intentos: r.intentos }));
+  const reunion = montarReunion({ departamentos: oficina.departamentos, flujo, sinConfirmar: sinConfirmar.length, repesca: colaRepesca.length, captacion: tarjetas.length, descartadas, ahora });
+  return {
+    ...oficina, bandeja, novedades, charla, turnosJefe: turnos.jefe || [], golpes, flujo, captacion: tarjetas,
+    sinConfirmar: sinConfirmar.slice(0, 30), repesca: repescaResumen, reunion, enCurso: Object.keys(enCurso),
+  };
 }

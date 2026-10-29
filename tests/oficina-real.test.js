@@ -33,7 +33,7 @@ describe("charla de la oficina", () => {
     expect(de("musica")).toMatch(/Traigo 3 eventos nuevos: «Concierto en El Gran Café» y «Jazz en Bebop» y 1 más/);
     expect(de("noche")).toMatch(/¿Tenemos ya «Sesión DJ en Babia»\?.*Sí, ya estaba/);
     expect(de("fiestas")).toMatch(/Magosto de Vegacervera/);
-    expect(l.some((x) => x.a === "tu" && /bandeja/.test(x.texto))).toBe(true);
+    expect(l.some((x) => x.a === "verificador" && /Verificador, mira/.test(x.texto))).toBe(true);
     expect(de("expo")).toMatch(/¿Cómo vas\?.*Nada nuevo en 6 búsquedas/);
     expect(de("teatros")).toMatch(/No he podido terminar: tardó demasiado/);
   });

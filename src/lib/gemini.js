@@ -64,18 +64,21 @@ export function medirUso(modelo, datos) {
 
 // json: true pide la respuesta directamente en JSON (solo sin Google Search: Gemini no admite las dos cosas a la vez)
 // tarea: nombre con el que se apunta el gasto en el panel (por defecto, el de "para")
-export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, maxSalida } = {}) {
+// msPorModelo: tope para cada modelo. Si el primero se queda colgado, al segundo aún le queda tiempo (antes el
+// primero se comía todo el minuto y el plan B nunca llegaba a probarse)
+export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, msPorModelo = 0, maxSalida } = {}) {
   const fallos = [];
   const fin = Date.now() + msMax;
   for (const modelo of modelosPara(para)) {
     const queda = fin - Date.now();
     if (queda < 3000) break;
+    const tope = msPorModelo ? Math.min(fin, Date.now() + msPorModelo) : fin;
     try {
       // La clave va en una cabecera, no en la URL (las URLs acaban en logs y trazas)
       // Los modelos 3.x "piensan" y los tokens de pensamiento se cobran: con nivel bajo el plan sale igual y cuesta mucho menos
       const pedir = (pensarPoco) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
         method: "POST",
-        signal: AbortSignal.timeout(Math.max(1000, fin - Date.now())),
+        signal: AbortSignal.timeout(Math.max(1000, tope - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}), ...(/^gemini-2\.5-flash$/.test(modelo) ? { thinkingConfig: { thinkingBudget: PENSAR_25 } } : {}) } }),
         cache: "no-store",
@@ -115,6 +118,26 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
   const err = new ErrorIA(saturado ? "saturado" : "Error en la IA", saturado ? 429 : 502);
   err.fallos = fallos;
   throw err;
+}
+
+// Por qué ha fallado una búsqueda, en cristiano, para la oficina. err.fallos trae lo que dijo cada modelo
+// ("gemini-2.5-flash-lite: 429 Resource exhausted…", "gemini-2.0-flash: tardó demasiado"). Devuelve { tipo, texto, detalle }
+export function motivoClaro(err) {
+  const fallos = Array.isArray(err?.fallos) && err.fallos.length ? err.fallos : [String(err?.message || err || "")];
+  const detalle = fallos.join(" | ").slice(0, 400);
+  const t = detalle.toLowerCase();
+  const codigo = (n) => new RegExp(`: ${n}\\b`).test(detalle);
+  const salida = (tipo, texto) => ({ tipo, texto, detalle });
+  if (codigo(429) && /per[ _-]?day|daily/.test(t)) return salida("cupo", "Se acabó el cupo diario de Google. La Repesca lo repite cuando se renueve.");
+  if (codigo(429)) return salida("saturado", "Google tenía demasiadas búsquedas a la vez. La Repesca lo vuelve a intentar en unas horas.");
+  if (/tardó demasiado|timeout|aborted/.test(t)) return salida("lento", "Google tardó demasiado en contestar. La Repesca lo vuelve a intentar con más calma.");
+  if (codigo(401) || codigo(403)) return salida("clave", "Google rechazó la clave de la IA. Hay que revisar GEMINI_API_KEY en Vercel.");
+  if ([500, 502, 503, 504].some(codigo)) return salida("caido", "Los servidores de Google fallaron un momento. La Repesca lo vuelve a intentar.");
+  if (/respuesta vacía/.test(t)) return salida("vacio", "La IA contestó en blanco. La Repesca lo vuelve a intentar.");
+  if (codigo(404)) return salida("modelo", "Uno de los modelos de IA ya no existe. Hay que cambiarlo en lib/gemini.js.");
+  if (codigo(400)) return salida("peticion", "Google no aceptó la búsqueda tal como iba escrita.");
+  if (/fetch failed|network|econn|enotfound/.test(t)) return salida("red", "No hubo conexión con Google. La Repesca lo vuelve a intentar.");
+  return salida("otro", `Fallo raro: ${detalle.slice(0, 120)}`);
 }
 
 // Lo que ve la persona cuando algo falla al montar o retocar un plan (nunca el error técnico)

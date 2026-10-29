@@ -1,7 +1,7 @@
 "use client";
 // Lo primero que ves en la oficina:
-//  · «Hoy te toca»: lo que espera tu OK, con sus botones (eventos dudosos, locales listos para escribirles y
-//    empleados que han fallado). Funciona sin el 3D.
+//  · «Hoy te toca»: lo que espera tu OK, con sus botones (eventos subidos sin fuente segura, locales listos para
+//    escribirles y empleados que han fallado, con el porqué en cristiano). Funciona sin el 3D.
 //  · La tira del flujo: el trabajo de anoche paso a paso, con números reales. Tocar un paso lleva a su sala.
 import { useState } from "react";
 import { GLASS, GLASS_SOFT, PRESS } from "../../../lib/estilos";
@@ -82,6 +82,63 @@ function Local({ l, clave, alQuitar }) {
   );
 }
 
+async function mandar(clave, cuerpo) {
+  try {
+    const r = await fetch("/api/panel/oficina", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+    return (await r.json().catch(() => null)) || { exito: false, mensaje: `Error ${r.status}` };
+  } catch { return { exito: false, mensaje: "No se pudo conectar" }; }
+}
+
+// Un evento que el Verificador subió sin poder confirmarlo: ya está en la web, tú dices si se queda
+function SinConfirmar({ e, clave, alQuitar }) {
+  const [ocupado, setOcupado] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const decidir = async (accion) => {
+    setOcupado(true);
+    const d = await mandar(clave, { aviso: e.id, accion });
+    setOcupado(false);
+    if (d.exito || d.mensaje === "Ya no está en la lista") alQuitar(accion === "quitar" ? `«${e.titulo}» quitado de la web.` : `«${e.titulo}» se queda.`);
+    else setAviso(d.mensaje || "No ha podido ser");
+  };
+  return (
+    <Tarjeta icono="⚠️" titulo="Subido sin fuente segura" tono="bg-amber-50/90">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-rose-500 uppercase tracking-wide">{diaCorto(e.fecha)}{e.hora ? ` · ${e.hora}` : ""}</p>
+        <p className="font-semibold text-slate-900 leading-snug">{e.titulo}</p>
+        <p className="text-xs text-slate-600">{[e.lugar, e.localidad].filter(Boolean).join(" · ")}</p>
+        <p className="text-xs text-slate-600 mt-1">Ni el enlace ni Google lo confirman. Ya está en la web marcado «por confirmar».</p>
+        {e.fuente && <a href={e.fuente} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-sky-700 hover:underline underline-offset-2 break-all line-clamp-1">🔗 Mirar dónde lo vio</a>}
+      </div>
+      {aviso && <p className="text-xs text-rose-600" role="alert">{aviso}</p>}
+      <div className="flex gap-2 mt-auto">
+        <button onClick={() => decidir("vale")} disabled={ocupado} className={`${PRESS} flex-1 h-11 rounded-full bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50`}>👍 Vale</button>
+        <button onClick={() => decidir("quitar")} disabled={ocupado} className={`${PRESS} flex-1 h-11 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold disabled:opacity-50`}>🗑 Quitar</button>
+      </div>
+    </Tarjeta>
+  );
+}
+
+// Lo que aún espera la segunda comprobación (el Verificador pasa a las 8:50, 13:50 y 19:50)
+function EnCola({ n, clave, alTerminar, alVerBandeja }) {
+  const [estado, setEstado] = useState("");
+  const ya = async () => {
+    setEstado("trabajando");
+    const d = await mandar(clave, { reunion: "verificar:manual", accion: "si", propuesta: { tipo: "guardia", que: "verificador" } });
+    setEstado(d.mensaje || (d.exito ? "Hecho" : "No ha podido ser"));
+    if (d.exito) alTerminar?.();
+  };
+  return (
+    <Tarjeta icono="🕵️" titulo="Esperan al Verificador">
+      <p className="font-semibold text-slate-900 leading-snug">{n} {n === 1 ? "evento sin fuente segura" : "eventos sin fuente segura"}</p>
+      <p className="text-xs text-slate-600">Los vuelve a comprobar en su próximo turno y los sube. No tienes que hacer nada.</p>
+      <div className="flex gap-2 mt-auto">
+        <button onClick={ya} disabled={!!estado} className={`${PRESS} flex-1 h-11 rounded-full bg-slate-900 text-white text-sm font-semibold disabled:opacity-60`}>{estado === "trabajando" ? "Comprobando… (hasta 1 min)" : estado || "🕵️ Compruébalos ya"}</button>
+        <button onClick={alVerBandeja} className={`${PRESS} h-11 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold`}>Ver</button>
+      </div>
+    </Tarjeta>
+  );
+}
+
 function Fallo({ e, clave, alTerminar }) {
   const [estado, setEstado] = useState("");
   const repetir = async () => {
@@ -97,7 +154,8 @@ function Fallo({ e, clave, alTerminar }) {
   return (
     <Tarjeta icono="🔥" titulo="Ha fallado" tono="bg-rose-50/90">
       <p className="font-semibold text-slate-900 leading-snug">{e.emoji} {e.nombre}</p>
-      <p className="text-xs text-slate-600">{p.busquedas ? `Fallaron ${p.errores} de sus ${p.busquedas} búsquedas (suele ser una web lenta).` : p.error || "Su último turno no salió bien."}</p>
+      <p className="text-xs text-slate-600">{p.busquedas ? `Fallaron ${p.errores} de sus ${p.busquedas} búsquedas.` : "Su último turno no salió bien."}</p>
+      <p className="text-xs text-slate-800"><b>Por qué:</b> {p.motivos?.[0]?.texto || p.error || "no lo dejó apuntado"}</p>
       {e.ordenes ? (
         <button onClick={repetir} disabled={!!estado} className={`${PRESS} mt-auto h-11 rounded-full bg-slate-900 text-white text-sm font-semibold disabled:opacity-60`}>
           {estado === "trabajando" ? "Trabajando… (hasta 1 min)" : estado || "🔁 Repetir su turno ahora"}
@@ -107,42 +165,32 @@ function Fallo({ e, clave, alTerminar }) {
   );
 }
 
-export function HoyTeToca({ bandeja, captacion = [], departamentos, flujo, decidir, enCurso, clave, alTerminar, alVerBandeja }) {
+export function HoyTeToca({ bandeja, sinConfirmar = [], captacion = [], departamentos, flujo, clave, alTerminar, alVerBandeja }) {
   const [quitados, setQuitados] = useState([]);
   const [aviso, setAviso] = useState("");
   const locales = captacion.filter((l) => !quitados.includes(l.clave));
+  const subidos = sinConfirmar.filter((e) => !quitados.includes(e.id));
   const fallos = departamentos.flatMap((d) => d.empleados).filter((e) => e.estado === "error");
-  const total = bandeja.length + locales.length + fallos.length;
+  const total = subidos.length + locales.length + fallos.length; // lo de la bandeja no te toca a ti: lo hace el Verificador
+  const quitar = (id) => (t) => { setQuitados((q) => [...q, id]); setAviso(t); };
   return (
     <section id="hoy" className={`${GLASS} rounded-[2rem] p-4 sm:p-6 cz-up scroll-mt-4`}>
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-bold text-slate-900 text-lg">✋ Hoy te toca {total > 0 && <span className="text-slate-400 font-medium">· {total}</span>}</h2>
         {total > 1 && <span className="md:hidden text-[11px] text-slate-400">Desliza →</span>}
       </div>
-      {aviso && <p className="mt-2 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-xs text-emerald-800">{aviso}</p>}
-      {total === 0 ? (
+      {aviso && <p className="mt-2 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-800" role="status">{aviso}</p>}
+      {total === 0 && !bandeja.length ? (
         <p className="mt-2 text-[15px] text-slate-700">✅ Nada pendiente. {flujo.entran ? `Anoche entraron ${fmt(flujo.entran)} eventos nuevos` : "Anoche no entró nada nuevo"} y hay {fmt(flujo.agenda)} en la agenda.</p>
       ) : (
         <ul className="mt-3 -mx-4 px-4 flex items-stretch gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory md:mx-0 md:px-0 md:grid md:grid-cols-2 xl:grid-cols-3 md:overflow-visible">
-          {bandeja.slice(0, MAX_BANDEJA).map((e) => (
-            <Tarjeta key={e.id} icono="📥" titulo="Evento sin fuente comprobada">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold text-rose-500 uppercase tracking-wide">{diaCorto(e.fecha)}{e.hora ? ` · ${e.hora}` : ""}</p>
-                <p className="font-semibold text-slate-900 leading-snug">{e.titulo}</p>
-                <p className="text-xs text-slate-500">{[e.lugar, e.localidad].filter(Boolean).join(" · ")}</p>
-                {e.fuente && <a href={e.fuente} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-sky-600 hover:underline underline-offset-2 break-all line-clamp-1">🔗 Mirar la fuente</a>}
-              </div>
-              <div className="flex gap-2 mt-auto">
-                <button onClick={() => decidir(e.id, "subir")} disabled={!!enCurso} className={`${PRESS} flex-1 h-11 rounded-full bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50`}>{enCurso === e.id ? "…" : "✅ Subir"}</button>
-                <button onClick={() => decidir(e.id, "tirar")} disabled={!!enCurso} className={`${PRESS} flex-1 h-11 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold disabled:opacity-50`}>✖ Tirar</button>
-              </div>
-            </Tarjeta>
-          ))}
+          {subidos.slice(0, MAX_BANDEJA * 2).map((e) => <SinConfirmar key={e.id} e={e} clave={clave} alQuitar={quitar(e.id)} />)}
+          {bandeja.length > 0 && <EnCola n={bandeja.length} clave={clave} alTerminar={alTerminar} alVerBandeja={alVerBandeja} />}
           {locales.map((l) => <Local key={l.clave} l={l} clave={clave} alQuitar={(t) => { setQuitados((q) => [...q, l.clave]); setAviso(t); }} />)}
           {fallos.map((e) => <Fallo key={e.id} e={e} clave={clave} alTerminar={alTerminar} />)}
         </ul>
       )}
-      {bandeja.length > MAX_BANDEJA && <button onClick={alVerBandeja} className="mt-3 text-sm font-semibold text-sky-600">Ver los {bandeja.length} de la bandeja ↓</button>}
+      {subidos.length > MAX_BANDEJA * 2 && <p className="mt-3 text-sm text-slate-600">…y {subidos.length - MAX_BANDEJA * 2} más subidos sin fuente segura (te los vuelvo a enseñar cuando decidas estos).</p>}
     </section>
   );
 }
@@ -151,7 +199,7 @@ export function HoyTeToca({ bandeja, captacion = [], departamentos, flujo, decid
 export function Flujo({ flujo, alElegir }) {
   const pasos = [
     { sala: "busqueda", icono: "🔎", titulo: "Buscan", n: flujo.buscan, pie: "búsquedas anoche" },
-    { sala: "control", icono: "🧐", titulo: "Comprueban", n: flujo.entran, pie: `nuevos · ${fmt(flujo.sinFuente)} sin fuente` },
+    { sala: "control", icono: "🧐", titulo: "Comprueban", n: flujo.entran, pie: `nuevos · ${fmt(flujo.sinFuente)} a revisar` },
     { sala: "archivo", icono: "📅", titulo: "Agenda", n: flujo.agenda, pie: "eventos, 3 semanas" },
     { sala: "escaparate", icono: "🗺️", titulo: "Planes", n: flujo.planesAyer, pie: "servidos ayer" },
     { sala: "negocio", icono: "📣", titulo: "Captación", n: flujo.captacion, pie: "locales listos" },

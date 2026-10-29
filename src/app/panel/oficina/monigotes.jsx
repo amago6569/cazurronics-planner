@@ -4,12 +4,13 @@ import { useId } from "react";
 export const fmt = (n) => new Intl.NumberFormat("es-ES").format(n || 0);
 export const PIELES = ["#f6d2b8", "#e9b894", "#c98e66", "#f3c9a5", "#8d5a3b", "#fbe0c8"];
 export const PELOS = ["#2b1d14", "#6b3f1d", "#c8902e", "#1f2937", "#9a3412", "#57534e", "#b45309"];
-export const CAMISAS = { agenda: ["#f43f5e", "#fb7185", "#e11d48"], territorio: ["#0ea5e9", "#38bdf8", "#0284c7"], despensa: ["#f59e0b", "#fbbf24", "#d97706"], negocio: ["#8b5cf6", "#a78bfa", "#7c3aed"] };
+export const CAMISAS = { agenda: ["#f43f5e", "#fb7185", "#e11d48"], territorio: ["#0ea5e9", "#38bdf8", "#0284c7"], despensa: ["#f59e0b", "#fbbf24", "#d97706"], negocio: ["#8b5cf6", "#a78bfa", "#7c3aed"], control: ["#10b981", "#34d399", "#059669"] };
 export const ESTADOS = {
   ok: { texto: "Al día", punto: "bg-emerald-500", pill: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   tarde: { texto: "Con retraso", punto: "bg-amber-500", pill: "bg-amber-50 text-amber-800 ring-amber-200" },
   error: { texto: "Con fallos", punto: "bg-rose-500", pill: "bg-rose-50 text-rose-700 ring-rose-200" },
   nuevo: { texto: "Aún no ha trabajado", punto: "bg-slate-300", pill: "bg-white/70 text-slate-500 ring-slate-200" },
+  descanso: { texto: "De descanso", punto: "bg-violet-400", pill: "bg-violet-50 text-violet-700 ring-violet-200" },
 };
 
 export function hace(fecha) {
