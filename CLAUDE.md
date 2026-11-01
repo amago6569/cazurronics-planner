@@ -37,8 +37,9 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 
 ## Diseño
 
-- Portada y plan (`src/app/page.js`) usan el sistema "Pegatina" (nov. 2026, elegido por Alejandro: le flipan Depo y White Desert, le gusta el granate y las fotos reales de León): `PEGATINA`, `PULSA`, `BOTON_GRANATE`, `DISPLAY` de `src/lib/estilos.js`. El resto de páginas siguen con "Vidriera" (`GLASS`, `BOTON_CTA`, `PRESS`…). No inventes estilos nuevos fuera de esos dos.
-- Alejandro rechazó: el granate con letra serif, recortes caseros de fotos con ondas, y la portada con scroll por el rosetón. No vuelvas a proponerlos.
+- Portada y plan (`src/app/page.js`) usan el sistema "Desierto": calco de la web de White Desert (nov. 2026, elegido por Alejandro) con fotos CC0 de León en `public/leon/`. Blanco y azul marino, rayas finas, esquinas rectas, acento naranja; Oswald, Cormorant e Inter Tight (`GIGANTE`, `SERIFA`, `TEXTO`, `ETIQUETA`, `BOTON_RAYA`, `BOTON_ACENTO` de `src/lib/estilos.js`). El resto de páginas siguen con "Vidriera" (`GLASS`, `BOTON_CTA`, `PRESS`…). No inventes estilos nuevos fuera de esos dos.
+- Alejandro rechazó: el granate con letra serif, recortes caseros de fotos con ondas, la portada con scroll por el rosetón y el estilo «Pegatina» (mezcla de Depo y White Desert en granate). No vuelvas a proponerlos.
+- Si Alejandro elige una web de referencia, cálcala tal cual (estructura, letras, colores) con contenido de León. No mezcles referencias ni las pases a granate por tu cuenta.
 - Solo Tailwind y React. Mobile first: debe sentirse como una app nativa en el móvil, con los botones principales al alcance del pulgar.
 
 ## Comprobar antes de dar algo por hecho

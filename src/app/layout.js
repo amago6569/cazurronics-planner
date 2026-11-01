@@ -1,11 +1,13 @@
-import { Fredoka, Anton, Archivo } from "next/font/google";
+import { Fredoka, Oswald, Cormorant_Garamond, Inter_Tight } from "next/font/google";
 import "./globals.css";
 import { URL_SITIO } from "../lib/sitio";
 import { jsonLdSeguro, sitioJsonLd } from "../lib/seo";
 
-// Portada y plan (sistema "Pegatina"): Anton para titulares grandes, Archivo para el resto
-const anton = Anton({ subsets: ["latin"], weight: "400", variable: "--font-anton" });
-const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo" });
+// Portada y plan (sistema "Desierto", calcado de White Desert): Oswald para la palabra
+// gigante, Cormorant para titulares con serifa e Inter Tight para el texto.
+const oswald = Oswald({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-oswald" });
+const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["400", "500"], style: ["normal", "italic"], variable: "--font-cormorant" });
+const interTight = Inter_Tight({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-inter-tight" });
 
 // Cargamos la tipografía Fredoka con distintos grosores
 const fredoka = Fredoka({ 
@@ -26,7 +28,7 @@ export const metadata = {
 //Pruebas para vercel
 export default function RootLayout({ children }) {
   return (
-    <html lang="es" suppressHydrationWarning className={`${anton.variable} ${archivo.variable}`}>
+    <html lang="es" suppressHydrationWarning className={`${oswald.variable} ${cormorant.variable} ${interTight.variable}`}>
       {/* Aplicamos la fuente "Fredoka" a todo el cuerpo de tu web */}
       <body className={fredoka.className}>
         {/* Quién está detrás de la web, para Google (no se ve) */}
