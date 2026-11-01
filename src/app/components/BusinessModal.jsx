@@ -236,6 +236,10 @@ export default function BusinessModal() {
                   </p>
                 )}
 
+                {/* Aviso del RGPD en el momento de pedir los datos: corto, con el detalle en /privacidad */}
+                <p className="text-[11px] leading-snug text-slate-500">
+                  Usamos tus datos solo para contestarte. Más info en <a href="/privacidad" target="_blank" className="underline underline-offset-2 hover:text-slate-800">privacidad</a>.
+                </p>
               </form>
             )}
 
