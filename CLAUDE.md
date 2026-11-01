@@ -37,7 +37,8 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 
 ## Diseño
 
-- Sistema visual "Vidriera": usa las clases de `src/lib/estilos.js` (`GLASS`, `BOTON_CTA`, `PRESS`…) en vez de inventar estilos nuevos.
+- Portada y plan (`src/app/page.js`) usan el sistema "Pegatina" (nov. 2026, elegido por Alejandro: le flipan Depo y White Desert, le gusta el granate y las fotos reales de León): `PEGATINA`, `PULSA`, `BOTON_GRANATE`, `DISPLAY` de `src/lib/estilos.js`. El resto de páginas siguen con "Vidriera" (`GLASS`, `BOTON_CTA`, `PRESS`…). No inventes estilos nuevos fuera de esos dos.
+- Alejandro rechazó: el granate con letra serif, recortes caseros de fotos con ondas, y la portada con scroll por el rosetón. No vuelvas a proponerlos.
 - Solo Tailwind y React. Mobile first: debe sentirse como una app nativa en el móvil, con los botones principales al alcance del pulgar.
 
 ## Comprobar antes de dar algo por hecho

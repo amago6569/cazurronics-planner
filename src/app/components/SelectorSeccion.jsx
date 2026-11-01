@@ -1,14 +1,30 @@
 // Las dos partes de Cazurronics, como pestañas de una app: Planes (portada) y Despensa.
 // Solo son enlaces: no toca estados ni llamadas al servidor.
 import Link from "next/link";
-import { GLASS, PRESS } from "../../lib/estilos";
+import { GLASS, PRESS, PEGATINA_PEQ, PULSA } from "../../lib/estilos";
 
 const SECCIONES = [
   { id: "planes", href: "/", emoji: "🦁", texto: "Planes", sub: "Qué hacer" },
   { id: "despensa", href: "/despensa", emoji: "🧺", texto: "Despensa", sub: "Qué comprar" },
 ];
 
-export default function SelectorSeccion({ actual, className = "" }) {
+export default function SelectorSeccion({ actual, className = "", estilo = "vidriera" }) {
+  // Variante "pegatina" (portada nueva): pestañas planas con borde negro. La Despensa sigue con la de cristal.
+  if (estilo === "pegatina") {
+    return (
+      <nav aria-label="Secciones de Cazurronics" className={`grid grid-cols-2 gap-2 ${className}`}>
+        {SECCIONES.map((s) => {
+          const activa = s.id === actual;
+          return (
+            <Link key={s.id} href={s.href} aria-current={activa ? "page" : undefined}
+              className={`${PEGATINA_PEQ} ${PULSA} flex items-center justify-center gap-2 h-12 rounded-xl text-[15px] font-bold ${activa ? "bg-[#1A1210] text-[#FFF4E6]" : "bg-[#FFF4E6] text-[#1A1210] hover:bg-white"}`}>
+              <span aria-hidden>{s.emoji}</span>{s.texto}
+            </Link>
+          );
+        })}
+      </nav>
+    );
+  }
   return (
     <nav aria-label="Secciones de Cazurronics" className={`${GLASS} grid grid-cols-2 gap-1 p-1.5 rounded-[1.6rem] ${className}`}>
       {SECCIONES.map((s) => {

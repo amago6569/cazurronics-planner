@@ -7,18 +7,20 @@ import SelectorSeccion from './components/SelectorSeccion';
 import Valorar from './components/Valorar';
 import AgendaFranjas from './components/AgendaFranjas';
 import { webSegura, telSeguro, baliza, compartirPlan, recordarPlan, actualizarParadaRecordada, planPendienteDeValorar, registrarVisita } from '../lib/cliente';
+import { PEGATINA, PEGATINA_PEQ, PULSA, BOTON_GRANATE, BOTON_CREMA, DISPLAY } from '../lib/estilos';
 
-const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false, loading: () => <div className="h-[300px] rounded-[2rem] bg-white/50 animate-pulse" /> });
+const MapSelectorDynamic = dynamic(() => import('./components/MapSelector'), { ssr: false, loading: () => <div className="h-[300px] rounded-2xl bg-[#F3E3CC] animate-pulse" /> });
 
 /* ─────────────────────────────────────────────────────────────
-   Sistema visual "Vidriera": cristal sobre León desenfocado.
-   Solo clases de Tailwind reutilizables; ninguna lógica aquí.
+   Sistema visual "Pegatina": León de cine arriba (foto real a pantalla
+   completa con LEÓN gigante) y debajo la app en granate, con bordes negros
+   gruesos y sombra dura. Solo clases de Tailwind; ninguna lógica aquí.
    ───────────────────────────────────────────────────────────── */
-const GLASS = "bg-white/55 backdrop-blur-2xl backdrop-saturate-150 border border-white/70 shadow-[0_10px_40px_-12px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.9)]";
-const GLASS_SOFT = "bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_6px_24px_-10px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.8)]";
-const INPUT = "w-full bg-white/75 border border-white text-slate-800 placeholder:text-slate-500 text-[15px] font-medium rounded-2xl px-4 py-3.5 outline-none ring-1 ring-slate-900/5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-300 hover:bg-white/90 focus:bg-white focus:ring-2 focus:ring-rose-300/70 focus:shadow-[0_0_0_6px_rgba(251,113,133,0.12)]";
-const LABEL = "flex items-center gap-2 text-[13px] font-semibold text-slate-700 mb-2 px-1";
-const PRESS = "transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70";
+const INPUT = "w-full bg-white border-2 border-[#1A1210] text-[#1A1210] placeholder:text-[#7D6F62] text-base font-medium rounded-xl px-4 py-3.5 outline-none transition-shadow duration-150 focus:shadow-[3px_3px_0_0_#7A1F2B]";
+const LABEL = "flex items-center gap-2 text-[13px] font-extrabold uppercase tracking-[0.06em] text-[#1A1210] mb-2";
+// Colores planos para chips y tarjetas (vidrio de la Catedral, sin degradados)
+const COLORES = ["bg-[#F2B33D]", "bg-[#8FC7A8]", "bg-[#F4A3A8]", "bg-[#9DB8F2]", "bg-[#F6D8A8]"];
+const GIROS = ["-rotate-[1.5deg]", "rotate-[1deg]", "-rotate-[0.5deg]", "rotate-[1.5deg]", "-rotate-[1deg]"];
 
 // Pasos que se van completando mientras /api/plan trabaja (solo visual)
 const PASOS_CARGA = [
@@ -32,7 +34,7 @@ const PASOS_CARGA = [
 /* ─────────────────────────────────────────────────────────────
    CAZURRONICS CHOICES — los locales destacados (promoción).
    Puedes meter todos los que quieras: si hay más de 3, se deslizan de lado.
-   Siempre queda una vidriera libre "Tu local aquí" que abre el formulario.
+   Siempre queda un hueco libre "Tu local aquí" que abre el formulario.
    { nombre: "Bar Ejemplo", categoria: "Tapeo", zona: "Barrio Húmedo",
      foto: "/choices/bar-ejemplo.jpg", url: "https://..." }   ← url es opcional
    Para quitar uno, bórralo de la lista.
@@ -40,31 +42,17 @@ const PASOS_CARGA = [
 const CAZURRONICS_CHOICES = [];
 const abrirNegocios = () => window.dispatchEvent(new Event("cz-abrir-negocios"));
 
-// Colores de cada vidriera (inspirados en el rosetón de la Catedral)
-const VIDRIERAS = [
-  "radial-gradient(circle at 50% 28%, #fef3c7 0 9%, transparent 10%), conic-gradient(from 210deg at 50% 62%, #fb7185, #f97316, #fde68a, #f43f5e, #fb923c, #fb7185)",
-  "radial-gradient(circle at 50% 28%, #e0f2fe 0 9%, transparent 10%), conic-gradient(from 180deg at 50% 62%, #38bdf8, #6366f1, #a78bfa, #0ea5e9, #818cf8, #38bdf8)",
-  "radial-gradient(circle at 50% 28%, #fef9c3 0 9%, transparent 10%), conic-gradient(from 240deg at 50% 62%, #34d399, #14b8a6, #facc15, #10b981, #a3e635, #34d399)",
-];
-const PLOMO = "linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,.95) calc(50% - 1px), rgba(255,255,255,.95) calc(50% + 1px), transparent calc(50% + 1px)), repeating-linear-gradient(0deg, transparent 0 26px, rgba(255,255,255,.85) 26px 28px), linear-gradient(90deg, transparent calc(25% - 1px), rgba(255,255,255,.6) calc(25% - 1px), rgba(255,255,255,.6) calc(25% + 1px), transparent calc(25% + 1px), transparent calc(75% - 1px), rgba(255,255,255,.6) calc(75% - 1px), rgba(255,255,255,.6) calc(75% + 1px), transparent calc(75% + 1px))";
-
 function SelloChoice({ className = "" }) {
   return (
     <svg viewBox="0 0 100 100" className={className} aria-label="Sello Cazurronics Choice" role="img">
       <defs>
         <path id="cz-sello-arco" d="M50,50 m-35,0 a35,35 0 1,1 70,0 a35,35 0 1,1 -70,0" />
-        <linearGradient id="cz-sello-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#fb7185" />
-          <stop offset="55%" stopColor="#f97316" />
-          <stop offset="100%" stopColor="#f59e0b" />
-        </linearGradient>
       </defs>
-      <circle cx="50" cy="50" r="48" fill="url(#cz-sello-grad)" />
-      <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="1" strokeDasharray="1.5 3" />
-      <text fill="#fff" fontSize="9" fontWeight="700" letterSpacing="1">
+      <circle cx="50" cy="50" r="47" fill="#7A1F2B" stroke="#1A1210" strokeWidth="3" />
+      <text fill="#FFF4E6" fontSize="9" fontWeight="800" letterSpacing="1">
         <textPath href="#cz-sello-arco" textLength="216" lengthAdjust="spacing">CAZURRONICS · CHOICE · LEÓN ·</textPath>
       </text>
-      <circle cx="50" cy="50" r="23" fill="#fff" />
+      <circle cx="50" cy="50" r="23" fill="#FFF4E6" stroke="#1A1210" strokeWidth="2.5" />
       <text x="50" y="58.5" textAnchor="middle" fontSize="23">🦁</text>
     </svg>
   );
@@ -212,143 +200,82 @@ export default function Home() {
   const hoy = fechaISO(0);
   const manana = fechaISO(1);
 
-  return (
-    <main
-      className={`min-h-[100dvh] flex flex-col items-center px-4 pt-6 pb-36 sm:px-6 sm:py-10 relative text-slate-800 antialiased selection:bg-rose-200/70 ${itinerario ? 'justify-start' : 'justify-center'} ${intro === "entrando" ? 'cz-wait' : ''}`}
-      style={{ cursor: "url('/leon.png'), auto" }}
-    >
-      <style dangerouslySetInnerHTML={{__html: `
-        .roseton-slider { -webkit-appearance: none; appearance: none; height: 10px; border-radius: 9999px; background: linear-gradient(90deg, rgba(251,113,133,.35), rgba(251,146,60,.35), rgba(56,189,248,.35)); box-shadow: inset 0 1px 2px rgba(15,23,42,.12), 0 1px 0 rgba(255,255,255,.9); outline: none; }
-        .roseton-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 34px; height: 34px; background-image: url('/roseton.png'); background-size: 170%; background-repeat: no-repeat; background-position: center; cursor: grab; border: 2px solid rgba(255,255,255,.95); border-radius: 50%; filter: drop-shadow(0px 6px 12px rgba(15,23,42,0.25)); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
-        .roseton-slider::-webkit-slider-thumb:hover { transform: scale(1.12) rotate(20deg); }
-        .roseton-slider:active::-webkit-slider-thumb { cursor: grabbing; transform: scale(1.18) rotate(45deg); }
-        .roseton-slider::-moz-range-thumb { width: 34px; height: 34px; background-image: url('/roseton.png'); background-size: 170%; background-repeat: no-repeat; background-position: center; cursor: grab; border: 2px solid rgba(255,255,255,.95); border-radius: 50%; background-color: transparent; filter: drop-shadow(0px 6px 12px rgba(15,23,42,0.25)); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
-        .roseton-slider::-moz-range-thumb:hover { transform: scale(1.12) rotate(20deg); }
+  const fechaLarga = fecha ? new Date(`${fecha}T12:00:00`) : null;
 
-        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.5; transition: opacity .2s; }
-        input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 0.9; }
+  return (
+    <main className={`min-h-[100dvh] bg-[#FFF4E6] text-[#1A1210] antialiased selection:bg-[#F2B33D] font-[family-name:var(--font-archivo)] ${intro === "entrando" ? 'cz-wait' : ''}`}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .roseton-slider { -webkit-appearance: none; appearance: none; height: 14px; border-radius: 9999px; background: #FFF4E6; border: 2px solid #1A1210; outline: none; }
+        .roseton-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; border-radius: 50%; background: #7A1F2B; border: 2.5px solid #1A1210; box-shadow: 2px 2px 0 #1A1210; cursor: grab; transition: transform .15s ease-out; }
+        .roseton-slider:active::-webkit-slider-thumb { cursor: grabbing; transform: scale(1.12); }
+        .roseton-slider::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: #7A1F2B; border: 2.5px solid #1A1210; box-shadow: 2px 2px 0 #1A1210; cursor: grab; }
+        .roseton-slider:focus-visible { box-shadow: 0 0 0 4px #F2B33D; }
+
+        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.7; }
         .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } input[type="number"] { -moz-appearance: textfield; }
 
-        @keyframes cz-up { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
+        @keyframes cz-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
         @keyframes cz-fade { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes cz-sheet { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
-        @keyframes cz-shimmer { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(220%) skewX(-20deg); } }
-        @keyframes cz-float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(-3deg); } }
+        @keyframes cz-sheet { from { transform: translateY(100%); } to { transform: none; } }
         @keyframes cz-spin { to { transform: rotate(360deg); } }
-        @keyframes cz-swap { 0% { opacity: 0; transform: translateY(6px); } 15%,85% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); } }
+        @keyframes cz-bote { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        .cz-up { animation: cz-up .5s cubic-bezier(.2,.8,.2,1) both; }
+        .cz-fade { animation: cz-fade .25s ease both; }
+        .cz-sheet { animation: cz-sheet .4s cubic-bezier(.32,.72,0,1) both; }
+        .cz-bote { animation: cz-bote 1.2s ease-in-out infinite; }
 
-        .cz-up { animation: cz-up .7s cubic-bezier(.2,.8,.2,1) both; }
-        .cz-fade { animation: cz-fade .35s ease both; }
-        .cz-sheet { animation: cz-sheet .5s cubic-bezier(.2,.8,.2,1) both; }
-        .cz-float { animation: cz-float 4s ease-in-out infinite; }
-        .cz-spin { animation: cz-spin 8s linear infinite; }
-        .cz-swap { animation: cz-swap 2.2s ease both; }
-        .cz-sheen::after { content: ""; position: absolute; inset: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); transform: translateX(-120%) skewX(-20deg); pointer-events: none; }
-        .cz-sheen:hover::after { animation: cz-shimmer 1s ease; }
-
-        /* Intro: el rosetón entra girando, el león salta dentro y aparece la marca */
-        @keyframes cz-intro-roseton { 0% { opacity: 0; transform: scale(.4) rotate(-140deg); } 70% { opacity: 1; transform: scale(1.04) rotate(8deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
-        @keyframes cz-intro-leon { 0% { opacity: 0; transform: scale(.2) translateY(20px); } 60% { opacity: 1; transform: scale(1.18) translateY(-4px); } 100% { opacity: 1; transform: none; } }
-        @keyframes cz-intro-halo { 0% { opacity: 0; transform: scale(.6); } 40% { opacity: .9; } 100% { opacity: 0; transform: scale(1.9); } }
-        @keyframes cz-intro-out { to { opacity: 0; transform: scale(1.06); filter: blur(10px); } }
-        .cz-intro-roseton { animation: cz-intro-roseton 1.1s cubic-bezier(.2,.8,.2,1) both; }
-        .cz-intro-leon { animation: cz-intro-leon .7s cubic-bezier(.3,1.4,.5,1) .45s both; }
-        .cz-intro-halo { animation: cz-intro-halo 1.2s ease-out .55s both; }
-        .cz-intro-out { animation: cz-intro-out .55s cubic-bezier(.4,0,.2,1) both; }
-        .cz-intro-txt { animation: cz-up .7s cubic-bezier(.2,.8,.2,1) both; }
+        /* Intro: LEÓN entra grande sobre granate y se va. Toca para saltarla. */
+        @keyframes cz-intro-leon { 0% { opacity: 0; transform: scale(1.35); filter: blur(12px); } 100% { opacity: 1; transform: none; filter: none; } }
+        @keyframes cz-intro-out { to { opacity: 0; transform: translateY(-4%); } }
+        .cz-intro-leon { animation: cz-intro-leon .8s cubic-bezier(.2,.8,.2,1) both; }
+        .cz-intro-txt { animation: cz-up .5s cubic-bezier(.2,.8,.2,1) .45s both; }
+        .cz-intro-out { animation: cz-intro-out .45s cubic-bezier(.4,0,.2,1) both; }
         /* Mientras dura la intro, las entradas de la página esperan congeladas en su primer fotograma */
         .cz-wait .cz-up { animation-play-state: paused; }
 
-        /* La vidriera se colorea en abanico mientras se genera el plan */
-        @property --cz-p { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
-        @keyframes cz-colorea { from { --cz-p: 0%; } to { --cz-p: 96%; } }
-        @keyframes cz-fade-out { to { opacity: 0; } }
-        .cz-colorea { -webkit-mask-image: conic-gradient(#000 var(--cz-p), transparent var(--cz-p)); mask-image: conic-gradient(#000 var(--cz-p), transparent var(--cz-p)); animation: cz-colorea 24s cubic-bezier(.2,.55,.35,1) forwards; }
-        .cz-spin-lento { animation: cz-spin 18s linear infinite; }
-
-        /* Si el sistema pide "reducir movimiento" (p. ej. Windows con los efectos de animación apagados)
-           no apagamos nada del todo: lo decorativo pasa a fundidos suaves y la carga sigue girando,
-           porque es lo que te dice que la web está trabajando. */
         @media (prefers-reduced-motion: reduce) {
-          .cz-up, .cz-sheet, .cz-intro-txt, .cz-intro-roseton, .cz-intro-leon { animation: cz-fade .5s ease both !important; }
-          .cz-float, .cz-swap, .cz-sheen:hover::after, .cz-intro-halo { animation: none !important; }
-          .cz-intro-out { animation: cz-fade-out .4s ease both !important; }
-          .cz-spin, .cz-spin-lento { animation-duration: 30s; }
+          .cz-up, .cz-sheet, .cz-intro-txt, .cz-intro-leon { animation: cz-fade .4s ease both !important; }
+          .cz-bote { animation: none !important; }
+          .cz-intro-out { animation: cz-fade .01s reverse both !important; }
         }
       `}} />
-
-      {/* ── Atmósfera: tu ilustración de León desenfocada + auroras de vidriera ── */}
-      <div aria-hidden className="fixed inset-0 -z-30 bg-[#fdf6ef]" />
-      <div aria-hidden className="fixed inset-0 -z-20 bg-[url('/fondo.jpg')] bg-cover bg-center scale-110 blur-xl opacity-90 saturate-150" />
-      <div aria-hidden className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -left-32 w-[55vw] h-[55vw] max-w-[640px] max-h-[640px] rounded-full bg-rose-300/40 blur-3xl" />
-        <div className="absolute top-1/3 -right-40 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-sky-300/35 blur-3xl" />
-        <div className="absolute -bottom-40 left-1/4 w-[45vw] h-[45vw] max-w-[520px] max-h-[520px] rounded-full bg-amber-200/45 blur-3xl" />
-      </div>
-      <div aria-hidden className="fixed inset-0 -z-10 bg-gradient-to-b from-white/35 via-white/10 to-white/45 pointer-events-none" />
 
       {/* ── Intro de bienvenida: solo al abrir la web (toca para saltar) ── */}
       {intro !== "fin" && (
         <div
           onClick={salirIntro}
           onAnimationEnd={(e) => { if (e.target === e.currentTarget && intro === "saliendo") setIntro("fin"); }}
-          className={`fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#fdf6ef]/95 backdrop-blur-2xl ${intro === "saliendo" ? "cz-intro-out pointer-events-none" : ""}`}
+          className={`fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#7A1F2B] text-[#FFF4E6] ${intro === "saliendo" ? "cz-intro-out pointer-events-none" : ""}`}
         >
-          <div className="relative w-36 h-36 sm:w-44 sm:h-44">
-            <div aria-hidden className="cz-intro-halo absolute inset-0 rounded-full bg-gradient-to-br from-rose-300 via-amber-200 to-sky-300 blur-xl" />
-            <div className="cz-intro-roseton absolute inset-0 rounded-full overflow-hidden ring-4 ring-white shadow-[0_20px_60px_-12px_rgba(244,63,94,0.55)]">
-              <img src="/roseton.png" alt="" aria-hidden className="w-full h-full object-cover" />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="cz-intro-leon text-6xl sm:text-7xl drop-shadow-[0_8px_14px_rgba(0,0,0,0.3)]">🦁</span>
-            </div>
-          </div>
-          <p className="cz-intro-txt mt-7 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900" style={{ animationDelay: "650ms" }}>
-            Cazurronics <span className="bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 bg-clip-text text-transparent">Planner</span>
-          </p>
-          <p className="cz-intro-txt mt-1.5 text-sm font-medium text-slate-500" style={{ animationDelay: "800ms" }}>Tu planazo en León</p>
+          <p className={`${DISPLAY} cz-intro-leon text-[38vw] sm:text-[24vw]`}>León</p>
+          <p className="cz-intro-txt mt-3 text-lg font-extrabold tracking-[0.2em] uppercase">Cazurronics 🦁</p>
         </div>
       )}
 
       {estaCargando ? (
         /* ───────────────────────── CARGANDO ─────────────────────────
-           El rosetón gira y su vidriera se va coloreando como una barra de progreso,
-           con el león dentro. Debajo, los pasos se van marcando uno a uno. */
-        <div className="w-full max-w-md my-auto cz-up" role="status" aria-live="polite">
-          <div className={`${GLASS} rounded-[2.25rem] px-6 pt-9 pb-6 sm:px-9 sm:pt-10 text-center relative overflow-hidden`}>
-            <div className="relative mx-auto mb-7 w-40 h-40 sm:w-44 sm:h-44">
-              <div aria-hidden className="absolute -inset-5 rounded-full bg-gradient-to-br from-rose-300/70 via-amber-200/70 to-sky-300/70 blur-2xl animate-pulse" />
-              <div className="cz-spin-lento absolute inset-0 rounded-full overflow-hidden ring-[5px] ring-white shadow-[0_18px_50px_-12px_rgba(244,63,94,0.55)] bg-white">
-                <img src="/roseton.png" alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover grayscale opacity-35" />
-                <img src="/roseton.png" alt="" aria-hidden className="cz-colorea absolute inset-0 w-full h-full object-cover" />
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20 rounded-full bg-white/85 backdrop-blur-sm ring-1 ring-white shadow-[0_8px_24px_-6px_rgba(15,23,42,0.35)] flex items-center justify-center">
-                  <span className="cz-float text-4xl sm:text-5xl">🦁</span>
-                </span>
-              </div>
-            </div>
-
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Creando tu plan maestro</h2>
-            <p className="text-slate-500 text-sm mt-1.5">Tu vidriera se va coloreando…</p>
-
-            <ol className="mt-7 space-y-1.5 text-left">
+           Granate a pantalla completa y los pasos como pegatinas que se van marcando. */
+        <div className="min-h-[100dvh] bg-[#7A1F2B] text-[#FFF4E6] px-4 py-10 flex flex-col justify-center" role="status" aria-live="polite">
+          <div className="w-full max-w-md mx-auto cz-up">
+            <p className="text-sm font-extrabold uppercase tracking-[0.16em] text-[#F2B33D]">Un momento</p>
+            <h2 className={`${DISPLAY} mt-2 text-[22vw] sm:text-8xl`}>Montando<br />tu plan</h2>
+            <ol className="mt-8 flex flex-col gap-2.5">
               {PASOS_CARGA.map((paso, i) => {
                 const hecho = i < pasoCarga;
                 const actual = i === pasoCarga;
                 return (
                   <li
                     key={paso.texto}
-                    className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all duration-500 ${actual ? "bg-white/80 ring-1 ring-rose-100 shadow-[0_6px_18px_-8px_rgba(244,63,94,0.35)]" : ""} ${!hecho && !actual ? "opacity-45" : ""}`}
+                    className={`${PEGATINA_PEQ} flex items-center gap-3 rounded-xl px-3 h-14 text-[#1A1210] transition-all duration-300 ${hecho ? "bg-[#8FC7A8]" : actual ? "bg-white" : "bg-[#FFF4E6] opacity-55"}`}
                   >
-                    <span className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center text-base transition-all duration-500 ${hecho ? "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.6)]" : "bg-white/80 ring-1 ring-slate-900/5"}`}>
+                    <span className={`w-8 h-8 shrink-0 rounded-lg border-2 border-[#1A1210] flex items-center justify-center text-base ${hecho ? "bg-[#1A1210] text-white" : "bg-white"}`}>
                       {hecho ? (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
                       ) : paso.emoji}
                     </span>
-                    <span className={`flex-1 text-[14px] font-medium ${hecho ? "text-slate-500" : "text-slate-800"}`}>{paso.texto}</span>
-                    {actual && <span className="w-4 h-4 shrink-0 rounded-full border-2 border-rose-200 border-t-rose-500 animate-spin" aria-hidden />}
+                    <span className="flex-1 text-[15px] font-bold">{paso.texto}</span>
+                    {actual && <span className="w-5 h-5 shrink-0 rounded-full border-[3px] border-[#1A1210]/20 border-t-[#7A1F2B] animate-spin" aria-hidden />}
                   </li>
                 );
               })}
@@ -357,89 +284,89 @@ export default function Home() {
         </div>
       ) : itinerario ? (
         /* ───────────────────────── RESULTADOS ───────────────────────── */
-        <div className="relative z-10 w-full max-w-6xl flex flex-col gap-5 sm:gap-6">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 pt-3 pb-16 flex flex-col gap-6">
 
-          {/* Barra superior flotante */}
-          <div className={`${GLASS} !bg-white/85 sticky top-3 z-50 rounded-full pl-5 pr-2 py-2 flex items-center justify-between gap-3 cz-up`}>
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-2xl shrink-0">🦁</span>
-              <div className="min-w-0">
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight leading-none bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 bg-clip-text text-transparent">Tu Planazo</h2>
-                <p className="text-[11px] sm:text-xs font-medium text-slate-500 mt-1 truncate first-letter:uppercase">{fecha ? new Date(`${fecha}T12:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }) : ""} · {itinerario.length} paradas</p>
-              </div>
+          {/* Barra superior fija */}
+          <div className={`${PEGATINA_PEQ} sticky top-3 z-50 bg-[#FFF4E6] rounded-2xl pl-4 pr-2 py-2 flex items-center justify-between gap-3 cz-up`}>
+            <div className="min-w-0">
+              <h2 className={`${DISPLAY} text-2xl`}>Tu planazo</h2>
+              <p className="text-xs font-semibold text-[#5C4F44] mt-0.5 truncate first-letter:uppercase">{fechaLarga ? fechaLarga.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }) : ""} · {itinerario.length} paradas</p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-            {planId && (
-              <button onClick={compartir} aria-label="Compartir plan" className={`${PRESS} shrink-0 flex items-center gap-1.5 bg-white/80 text-slate-800 ring-1 ring-slate-900/10 text-sm font-semibold px-3.5 h-11 rounded-full hover:bg-white`}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13" /></svg>
-                <span className="hidden sm:inline">Compartir</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {planId && (
+                <button onClick={compartir} aria-label="Compartir plan" className={`${BOTON_CREMA} bg-white`}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13" /></svg>
+                  <span className="hidden sm:inline">Compartir</span>
+                </button>
+              )}
+              <button
+                onClick={() => { setItinerario(null); setClimaPrevision(null); }}
+                className={`${PEGATINA_PEQ} ${PULSA} inline-flex items-center gap-1.5 h-11 pl-3 pr-4 rounded-xl bg-[#1A1210] text-[#FFF4E6] text-sm font-bold`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 18l-6-6 6-6" /></svg>
+                Volver
               </button>
-            )}
-            <button
-              onClick={() => { setItinerario(null); setClimaPrevision(null); }}
-              className={`${PRESS} shrink-0 flex items-center gap-1.5 bg-slate-900 text-white text-sm font-semibold pl-3.5 pr-4 h-11 rounded-full shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] hover:bg-slate-800 hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.55)]`}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 18l-6-6 6-6" /></svg>
-              Volver
-            </button>
             </div>
           </div>
 
-          {aviso && <div className="cz-fade fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg">{aviso}</div>}
+          {aviso && <div className={`${PEGATINA_PEQ} cz-fade fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] bg-[#1A1210] text-white text-sm font-bold px-4 py-2.5 rounded-xl`}>{aviso}</div>}
 
-          {/* Bento superior: mapa + tiempo/consejo */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
-            <div className={`${GLASS} lg:col-span-8 rounded-[2rem] p-2.5 cz-up`} style={{ animationDelay: "80ms" }}>
+          {/* Portada del plan: la primera parada a toda pantalla y el día en grande */}
+          <section className={`${PEGATINA} relative rounded-3xl overflow-hidden bg-[#7A1F2B] text-white min-h-[300px] sm:min-h-[360px] flex flex-col justify-end cz-up`} style={{ animationDelay: "60ms" }}>
+            {itinerario[0]?.fotoOficial && <img src={itinerario[0].fotoOficial} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover" />}
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#1A1210]/85 via-[#1A1210]/25 to-transparent" />
+            <div className="relative p-5 sm:p-7">
+              <p className="text-sm font-extrabold uppercase tracking-[0.16em] text-[#F2B33D]">Tu plan en León</p>
+              <p className={`${DISPLAY} pt-[0.14em] text-[19vw] sm:text-8xl`}>{fechaLarga ? fechaLarga.toLocaleDateString("es-ES", { weekday: "long" }) : "Tu día"}</p>
+              <p className="mt-2 text-base font-bold first-letter:uppercase">{fechaLarga ? fechaLarga.toLocaleDateString("es-ES", { day: "numeric", month: "long" }) : ""} · {itinerario.length} paradas</p>
+            </div>
+          </section>
+
+          {/* Mapa + tiempo, compartir y consejo */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div className={`${PEGATINA} lg:col-span-8 rounded-3xl p-1.5 bg-white overflow-hidden cz-up`} style={{ animationDelay: "100ms" }}>
               <MapSelectorDynamic radiusKm={distancia} setRadiusKm={setDistancia} center={centroMapa} setCenter={setCentroMapa} itinerario={itinerario} />
             </div>
 
-            <div className="lg:col-span-4 flex flex-col gap-4 sm:gap-5">
+            <div className="lg:col-span-4 flex flex-col gap-4">
               {climaPrevision && (
-                <div className={`${GLASS} rounded-[2rem] p-5 flex items-start gap-4 cz-up`} style={{ animationDelay: "140ms" }}>
-                  <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-sky-300 to-sky-500 flex items-center justify-center text-2xl shadow-[0_8px_20px_-6px_rgba(14,165,233,0.6)]">🌤️</div>
+                <div className={`${PEGATINA_PEQ} rounded-2xl p-4 bg-[#9DB8F2] flex items-start gap-3 cz-up`} style={{ animationDelay: "140ms" }}>
+                  <span className="w-11 h-11 shrink-0 rounded-xl bg-white border-2 border-[#1A1210] flex items-center justify-center text-2xl">🌤️</span>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-600 mb-1">Previsión</p>
-                    <p className="text-[15px] font-medium text-slate-700 leading-snug">{climaPrevision}</p>
-                    <p className="text-xs text-slate-500 mt-1.5">Plan adaptado al tiempo</p>
+                    <p className="text-xs font-extrabold uppercase tracking-[0.12em]">Previsión</p>
+                    <p className="text-[15px] font-semibold leading-snug mt-0.5">{climaPrevision}</p>
                   </div>
                 </div>
               )}
 
               {planId && (
-                <button onClick={compartir} className={`${GLASS} group text-left rounded-[2rem] p-5 relative overflow-hidden cz-up transition-all duration-500 hover:-translate-y-1 hover:bg-white/70`} style={{ animationDelay: "170ms" }}>
-                  <div aria-hidden className="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-gradient-to-br from-emerald-200/60 to-sky-200/40 blur-2xl" />
-                  <div className="relative flex items-center gap-4">
-                    <div className="flex -space-x-2 shrink-0" aria-hidden>
-                      {["🦁", "🐻", "🦊"].map((e, i) => <span key={e} className="w-10 h-10 rounded-full bg-white ring-2 ring-white shadow-sm flex items-center justify-center text-lg" style={{ zIndex: 3 - i }}>{e}</span>)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[15px] font-semibold text-slate-900">Decidid en grupo</p>
-                      <p className="text-sm text-slate-600 leading-snug">Manda el enlace y votad cada parada. <span className="font-semibold text-rose-500 group-hover:underline">Compartir →</span></p>
-                    </div>
-                  </div>
+                <button onClick={compartir} className={`${PEGATINA_PEQ} ${PULSA} text-left rounded-2xl p-4 bg-[#F2B33D] flex items-center gap-3 cz-up`} style={{ animationDelay: "170ms" }}>
+                  <span className="flex -space-x-2 shrink-0" aria-hidden>
+                    {["🦁", "🐻", "🦊"].map((e, i) => <span key={e} className="w-10 h-10 rounded-full bg-white border-2 border-[#1A1210] flex items-center justify-center text-lg" style={{ zIndex: 3 - i }}>{e}</span>)}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-base font-extrabold">Decidid en grupo</span>
+                    <span className="block text-sm font-medium leading-snug">Manda el enlace y votad cada parada →</span>
+                  </span>
                 </button>
               )}
 
-              <div className={`${GLASS} rounded-[2rem] p-5 flex-1 relative overflow-hidden cz-up`} style={{ animationDelay: "200ms" }}>
-                <div aria-hidden className="absolute -right-10 -bottom-10 w-40 h-40 rounded-full bg-gradient-to-br from-indigo-300/40 to-fuchsia-300/30 blur-2xl" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-2xl shadow-[0_8px_20px_-6px_rgba(99,102,241,0.6)] mb-4">💡</div>
-                  <p className="text-[15px] font-semibold text-slate-900 mb-1.5">¡Sácale todo el jugo al plan!</p>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    Toca cualquier tarjeta para ver <b className="font-semibold text-slate-800">horarios y precios</b>, asomarte con la <b className="font-semibold text-slate-800">cámara 360º</b> o <b className="font-semibold text-slate-800">pedirme que cambie el sitio</b> si no te convence.
-                  </p>
-                </div>
+              <div className={`${PEGATINA_PEQ} rounded-2xl p-4 bg-white cz-up`} style={{ animationDelay: "200ms" }}>
+                <p className="text-base font-extrabold">💡 Sácale todo el jugo</p>
+                <p className="text-sm text-[#4A3F36] leading-relaxed mt-1">
+                  Toca una parada para ver <b>horarios y precios</b>, asomarte con la <b>cámara 360º</b> o <b>pedirme que cambie el sitio</b>.
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Paradas */}
-          <div className="flex items-end justify-between px-1 pt-2">
-            <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">La ruta</h3>
-            <span className="text-xs font-medium text-slate-500">Toca para ver detalles</span>
+          {/* Paradas: tarjetas grandes con foto, como un feed */}
+          <div className="flex items-end justify-between pt-2">
+            <h3 className={`${DISPLAY} text-5xl sm:text-6xl`}>La ruta</h3>
+            <span className="text-xs font-bold text-[#5C4F44] pb-1">Toca para ver detalles</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {itinerario.map((parada, index) => (
               <div
                 key={index}
@@ -447,74 +374,64 @@ export default function Home() {
                 tabIndex={0}
                 onClick={() => abrirParada(parada, index)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirParada(parada, index); } }}
-                className={`${GLASS} cz-up group rounded-[2rem] p-2 flex flex-col cursor-pointer outline-none transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1.5 hover:bg-white/70 hover:shadow-[0_30px_60px_-18px_rgba(244,63,94,0.35),inset_0_1px_0_rgba(255,255,255,0.9)] focus-visible:ring-4 focus-visible:ring-rose-300/60 active:scale-[0.985]`}
-                style={{ animationDelay: `${260 + index * 70}ms` }}
+                className={`${PEGATINA} ${PULSA} cz-up group rounded-3xl overflow-hidden bg-white flex flex-col cursor-pointer outline-none`}
+                style={{ animationDelay: `${240 + index * 60}ms` }}
               >
-                <div className="h-48 sm:h-52 w-full rounded-[1.6rem] bg-slate-100 relative overflow-hidden">
-                  <img src={parada.fotoOficial} alt={parada.titulo} loading={index === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] group-hover:scale-[1.06]" />
-                  <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-900/45 via-transparent to-transparent" />
-                  <div className="absolute top-3 left-3 w-9 h-9 rounded-full bg-gradient-to-br from-rose-400 to-orange-500 text-white text-sm font-bold flex items-center justify-center ring-[3px] ring-white shadow-[0_6px_16px_-4px_rgba(244,63,94,0.6)]">
-                    {index + 1}
-                  </div>
-                  <div className="absolute top-3 right-3 bg-white/85 backdrop-blur-md text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow-[0_4px_12px_-2px_rgba(0,0,0,0.2)] flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                    {parada.hora}
-                  </div>
+                <div className="aspect-[4/5] md:aspect-[4/3] w-full bg-[#F3E3CC] relative overflow-hidden border-b-[2.5px] border-[#1A1210]">
+                  <img src={parada.fotoOficial} alt={parada.titulo} loading={index === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]" />
+                  <span className={`${DISPLAY} absolute top-3 left-3 w-12 h-12 rounded-full bg-[#7A1F2B] text-white text-3xl border-[2.5px] border-[#1A1210] flex items-center justify-center pt-0.5`}>{index + 1}</span>
+                  <span className={`${PEGATINA_PEQ} absolute top-3 right-3 bg-[#FFF4E6] text-sm font-extrabold px-3 py-1.5 rounded-lg tabular-nums`}>{parada.hora}</span>
                 </div>
-
-                <div className="px-3.5 pt-4 pb-3 flex-1 flex flex-col">
-                  <h3 className="text-lg font-bold tracking-tight text-slate-900 leading-snug mb-1.5">{parada.titulo}</h3>
-                  {parada.lugar && <p className="text-xs font-semibold text-rose-500 mb-1.5 truncate">📍 {parada.lugar}</p>}
-                  <p className="text-slate-600 text-sm mb-4 line-clamp-3 leading-relaxed">{parada.descripcion}</p>
-                  <div className="flex justify-between items-center mt-auto pt-3 border-t border-slate-900/5">
-                    <span className="text-xs font-semibold text-amber-700 bg-amber-100/80 px-2.5 py-1.5 rounded-full">⭐ {parada.resenas}</span>
-                    <span className="flex items-center gap-1 text-sm font-semibold text-rose-500 transition-all duration-300 group-hover:gap-2">
-                      Ver detalles
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 18l6-6-6-6" /></svg>
-                    </span>
+                <div className="p-4 flex-1 flex flex-col">
+                  <h3 className="text-xl font-extrabold leading-tight">{parada.titulo}</h3>
+                  {parada.lugar && <p className="text-sm font-bold text-[#7A1F2B] mt-1 truncate">📍 {parada.lugar}</p>}
+                  <p className="text-[15px] text-[#4A3F36] mt-2 mb-4 line-clamp-3 leading-relaxed">{parada.descripcion}</p>
+                  <div className="flex justify-between items-center mt-auto gap-2">
+                    <span className="text-xs font-extrabold bg-[#F2B33D] border-2 border-[#1A1210] px-2.5 py-1 rounded-lg truncate">⭐ {parada.resenas}</span>
+                    <span className="shrink-0 text-sm font-extrabold text-[#7A1F2B]">Ver detalles →</span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* NUEVO: todo lo demás que ha encontrado el barrido para ese día */}
+          {/* Todo lo demás que ha encontrado el barrido para ese día */}
           {masEseDia.length > 0 && (
             <section className="pt-2" aria-labelledby="cz-mas-titulo">
-              <div className="flex items-end justify-between px-1 mb-3">
-                <h3 id="cz-mas-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Más cosas ese día</h3>
-                <span className="hidden sm:inline text-xs font-medium text-slate-500">Eventos, mercadillos y ferias encontrados</span>
+              <div className="flex items-end justify-between mb-3">
+                <h3 id="cz-mas-titulo" className={`${DISPLAY} text-4xl sm:text-5xl`}>Más cosas ese día</h3>
+                <span className="hidden sm:inline text-xs font-bold text-[#5C4F44] pb-1">Eventos, mercadillos y ferias encontrados</span>
               </div>
               <AgendaFranjas eventos={masEseDia} mostrarCuando />
             </section>
           )}
 
-          {/* ── Hoja de detalle (bottom sheet en móvil, modal en escritorio) ── */}
+          {/* ── Hoja de detalle (desde abajo en móvil, ventana en escritorio) ── */}
           {paradaSeleccionada && (
-            <div className="cz-fade fixed inset-0 bg-slate-900/35 backdrop-blur-md z-[100] flex items-end sm:items-center justify-center sm:p-4" onClick={cerrarModal}>
+            <div className="cz-fade fixed inset-0 bg-[#1A1210]/55 z-[100] flex items-end sm:items-center justify-center sm:p-4" onClick={cerrarModal}>
               <div
-                className="cz-sheet bg-white/90 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_-10px_60px_-10px_rgba(15,23,42,0.35)] sm:shadow-[0_40px_80px_-20px_rgba(15,23,42,0.45)] w-full sm:max-w-lg max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto no-scrollbar rounded-t-[2rem] sm:rounded-[2rem] px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-7"
+                className="cz-sheet bg-[#FFF4E6] border-[2.5px] border-[#1A1210] sm:shadow-[6px_6px_0_0_#1A1210] w-full sm:max-w-lg max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto no-scrollbar rounded-t-3xl sm:rounded-3xl px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-7"
                 onClick={e => e.stopPropagation()}
                 role="dialog" aria-modal="true" aria-labelledby="cz-parada-titulo"
               >
-                <div aria-hidden className="sm:hidden mx-auto mb-4 h-1.5 w-10 rounded-full bg-slate-300" />
+                <div aria-hidden className="sm:hidden mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#1A1210]/30" />
 
                 <div className="flex justify-between items-start gap-3 mb-5">
                   <div className="min-w-0">
-                    <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-100 to-orange-100 text-rose-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-3">
-                      {indiceSeleccionado !== null && <span className="font-bold">Parada {indiceSeleccionado + 1} ·</span>} {paradaSeleccionada.hora}
+                    <span className="inline-flex items-center gap-1.5 bg-[#7A1F2B] text-white text-xs font-extrabold px-3 py-1.5 rounded-lg border-2 border-[#1A1210] mb-3">
+                      {indiceSeleccionado !== null && <span>Parada {indiceSeleccionado + 1} ·</span>} {paradaSeleccionada.hora}
                     </span>
-                    <h2 id="cz-parada-titulo" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 leading-tight">{paradaSeleccionada.titulo}</h2>
-                    {paradaSeleccionada.lugar && <p className="text-sm font-semibold text-rose-500 mt-1">📍 {paradaSeleccionada.lugar}</p>}
+                    <h2 id="cz-parada-titulo" className="text-2xl sm:text-3xl font-extrabold leading-tight">{paradaSeleccionada.titulo}</h2>
+                    {paradaSeleccionada.lugar && <p className="text-sm font-bold text-[#7A1F2B] mt-1">📍 {paradaSeleccionada.lugar}</p>}
                   </div>
-                  <button type="button" autoFocus onClick={cerrarModal} aria-label="Cerrar" className={`${PRESS} shrink-0 w-11 h-11 rounded-full bg-slate-900/5 text-slate-500 flex items-center justify-center hover:bg-slate-900/10 hover:text-slate-900 hover:rotate-90`}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  <button type="button" autoFocus onClick={cerrarModal} aria-label="Cerrar" className={`${PEGATINA_PEQ} ${PULSA} shrink-0 w-11 h-11 rounded-xl bg-white flex items-center justify-center`}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>
                   </button>
                 </div>
 
                 {paradaSeleccionada.streetView && (
-                  <div className="mb-5 relative rounded-[1.5rem] overflow-hidden ring-1 ring-slate-900/5 shadow-[0_12px_30px_-12px_rgba(15,23,42,0.3)]">
-                    <div className="absolute top-3 left-3 bg-white/85 backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-semibold text-slate-700 z-10 pointer-events-none shadow-sm">
+                  <div className="mb-5 relative rounded-2xl overflow-hidden border-[2.5px] border-[#1A1210]">
+                    <div className="absolute top-3 left-3 bg-[#FFF4E6] border-2 border-[#1A1210] px-2.5 py-1 rounded-lg text-[11px] font-extrabold z-10 pointer-events-none">
                       {paradaSeleccionada.streetView.includes("embed") ? "📍 Vista 360º · Arrastra" : "📍 Vista exterior"}
                     </div>
                     {paradaSeleccionada.streetView.includes("embed") ? (
@@ -525,62 +442,59 @@ export default function Home() {
                   </div>
                 )}
 
-                <p className="text-slate-600 text-[15px] leading-relaxed mb-5">{paradaSeleccionada.descripcion}</p>
+                <p className="text-[#4A3F36] text-base leading-relaxed mb-5">{paradaSeleccionada.descripcion}</p>
                 {paradaSeleccionada.fuente && /^https?:\/\//.test(paradaSeleccionada.fuente) && (
-                  <a href={webSegura(paradaSeleccionada.fuente)} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-rose-500 hover:underline">🎟️ Ver la fuente del evento</a>
+                  <a href={webSegura(paradaSeleccionada.fuente)} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-5 inline-flex items-center gap-1.5 text-sm font-extrabold text-[#7A1F2B] underline underline-offset-2">🎟️ Ver la fuente del evento</a>
                 )}
 
                 <div className="grid grid-cols-1 gap-2 mb-5">
                   {[
-                    { icono: "💶", color: "from-emerald-300 to-emerald-500", etiqueta: "Precio", valor: paradaSeleccionada.precio },
-                    { icono: "🕒", color: "from-sky-300 to-sky-500", etiqueta: "Horario", valor: paradaSeleccionada.horario },
-                    { icono: "🚶", color: "from-violet-300 to-violet-500", etiqueta: "Cómo llegar", valor: paradaSeleccionada.transporte },
+                    { icono: "💶", color: "bg-[#8FC7A8]", etiqueta: "Precio", valor: paradaSeleccionada.precio },
+                    { icono: "🕒", color: "bg-[#9DB8F2]", etiqueta: "Horario", valor: paradaSeleccionada.horario },
+                    { icono: "🚶", color: "bg-[#F4A3A8]", etiqueta: "Cómo llegar", valor: paradaSeleccionada.transporte },
                   ].map((dato) => (
-                    <div key={dato.etiqueta} className="flex items-center gap-3 bg-white/70 ring-1 ring-slate-900/5 rounded-2xl p-3">
-                      <span className={`w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br ${dato.color} flex items-center justify-center text-lg shadow-sm`}>{dato.icono}</span>
+                    <div key={dato.etiqueta} className="flex items-center gap-3 bg-white border-2 border-[#1A1210] rounded-xl p-3">
+                      <span className={`w-10 h-10 shrink-0 rounded-lg ${dato.color} border-2 border-[#1A1210] flex items-center justify-center text-lg`}>{dato.icono}</span>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{dato.etiqueta}</p>
-                        <p className="text-[15px] font-medium text-slate-800 leading-snug">{dato.valor}</p>
+                        <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#5C4F44]">{dato.etiqueta}</p>
+                        <p className="text-[15px] font-semibold leading-snug">{dato.valor}</p>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-5">
+                <div className="grid grid-cols-2 gap-3 mb-5">
                   {paradaSeleccionada.telefono !== "No disponible" ? (
-                    <a href={telSeguro(paradaSeleccionada.telefono)} onClick={() => baliza("llamar", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold rounded-2xl shadow-[0_10px_24px_-8px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5`}>📞 Llamar</a>
+                    <a href={telSeguro(paradaSeleccionada.telefono)} onClick={() => baliza("llamar", { lugarId: paradaSeleccionada.lugarId })} className={`${BOTON_GRANATE} h-12 text-base`}>📞 Llamar</a>
                   ) : (
-                    <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-500 font-semibold rounded-2xl cursor-not-allowed">📞 Sin teléfono</span>
+                    <span className="h-12 flex items-center justify-center gap-2 border-2 border-dashed border-[#1A1210]/40 text-[#7D6F62] font-bold rounded-2xl cursor-not-allowed">📞 Sin teléfono</span>
                   )}
                   {paradaSeleccionada.web !== "No disponible" ? (
-                    <a href={webSegura(paradaSeleccionada.web)} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: paradaSeleccionada.lugarId })} className={`${PRESS} h-12 flex items-center justify-center gap-2 bg-white text-rose-500 font-semibold rounded-2xl ring-1 ring-rose-200 hover:bg-rose-50 hover:-translate-y-0.5`}>🌐 Web</a>
+                    <a href={webSegura(paradaSeleccionada.web)} target="_blank" rel="noopener noreferrer" onClick={() => baliza("web", { lugarId: paradaSeleccionada.lugarId })} className={`${PEGATINA} ${PULSA} h-12 flex items-center justify-center gap-2 rounded-2xl bg-white font-extrabold`}>🌐 Web</a>
                   ) : (
-                    <span className="h-12 flex items-center justify-center gap-2 bg-slate-900/5 text-slate-500 font-semibold rounded-2xl cursor-not-allowed">🌐 Sin web</span>
+                    <span className="h-12 flex items-center justify-center gap-2 border-2 border-dashed border-[#1A1210]/40 text-[#7D6F62] font-bold rounded-2xl cursor-not-allowed">🌐 Sin web</span>
                   )}
                 </div>
 
-                <div className="relative overflow-hidden rounded-[1.5rem] p-4 sm:p-5 bg-gradient-to-br from-indigo-50 via-violet-50 to-sky-50 ring-1 ring-indigo-100">
-                  <label htmlFor="cz-retoque" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-indigo-500 mb-3">
+                <div className={`${PEGATINA_PEQ} relative overflow-hidden rounded-2xl p-4 bg-[#F6D8A8]`}>
+                  <label htmlFor="cz-retoque" className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] mb-3">
                     <span className="text-base">🔄</span> ¿No te convence? Te lo cambio
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input id="cz-retoque" type="text" value={instruccionRetoque} onChange={(e) => setInstruccionRetoque(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); retocarParada(); } }} placeholder="Ej: algo más barato, vegetariano…" disabled={retocando} className="flex-1 min-w-0 bg-white border border-white text-slate-800 placeholder:text-slate-500 text-[15px] font-medium rounded-2xl px-4 h-12 outline-none ring-1 ring-indigo-100 disabled:opacity-50 focus:ring-2 focus:ring-indigo-300 focus:shadow-[0_0_0_6px_rgba(99,102,241,0.12)] transition-all duration-300" />
-                    <button onClick={retocarParada} disabled={retocando || !instruccionRetoque.trim()} className={`${PRESS} cz-sheen relative overflow-hidden shrink-0 h-12 px-6 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-semibold shadow-[0_10px_24px_-8px_rgba(99,102,241,0.7)] hover:shadow-[0_14px_30px_-8px_rgba(99,102,241,0.8)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
+                    <input id="cz-retoque" type="text" value={instruccionRetoque} onChange={(e) => setInstruccionRetoque(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); retocarParada(); } }} placeholder="Ej: algo más barato, vegetariano…" disabled={retocando} className={`${INPUT} flex-1 min-w-0 h-12 py-0 disabled:opacity-50`} />
+                    <button onClick={retocarParada} disabled={retocando || !instruccionRetoque.trim()} className={`${PEGATINA_PEQ} ${PULSA} shrink-0 h-12 px-6 rounded-xl bg-[#1A1210] text-[#FFF4E6] font-extrabold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
                       {retocando && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" aria-hidden />}
                       {retocando ? "Pensando..." : "Cambiar"}
                     </button>
                   </div>
 
-                  {/* Espera del retoque: mini rosetón girando con el león dentro */}
+                  {/* Espera del retoque */}
                   {retocando && (
-                    <div className="cz-fade absolute inset-0 z-10 flex items-center justify-center gap-4 bg-white/75 backdrop-blur-md" role="status" aria-live="polite">
-                      <div className="relative w-14 h-14 shrink-0">
-                        <img src="/roseton.png" alt="" aria-hidden className="cz-spin absolute inset-0 w-full h-full object-cover rounded-full ring-2 ring-white shadow-[0_8px_20px_-6px_rgba(99,102,241,0.5)]" />
-                        <span className="cz-float absolute inset-0 flex items-center justify-center text-2xl drop-shadow-[0_4px_6px_rgba(0,0,0,0.25)]">🦁</span>
-                      </div>
+                    <div className="cz-fade absolute inset-0 z-10 flex items-center justify-center gap-3 bg-[#F6D8A8]" role="status" aria-live="polite">
+                      <span className="cz-bote text-3xl" aria-hidden>🦁</span>
                       <div className="text-left">
-                        <p className="text-sm font-semibold text-slate-900">Buscando otro sitio…</p>
-                        <p className="text-xs text-slate-500 mt-0.5">«{instruccionRetoque}»</p>
+                        <p className="text-sm font-extrabold">Buscando otro sitio…</p>
+                        <p className="text-xs font-medium text-[#4A3F36] mt-0.5">«{instruccionRetoque}»</p>
                       </div>
                     </div>
                   )}
@@ -590,88 +504,54 @@ export default function Home() {
           )}
         </div>
       ) : (
-        /* ───────────────────────── INICIO (Bento) ───────────────────────── */
-        <div className="relative z-10 w-full max-w-6xl my-auto grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
+        /* ───────────────────────── INICIO ─────────────────────────
+           Móvil: foto de León a pantalla completa con LEÓN gigante y, debajo, la app.
+           Escritorio: la foto se queda fija a la izquierda y la app va a la derecha. */
+        <div className="lg:grid lg:grid-cols-2">
 
-          {/* Planes | Despensa: las dos partes de Cazurronics, arriba del todo */}
-          <SelectorSeccion actual="planes" className="order-first lg:col-span-12 w-full lg:max-w-md lg:mx-auto cz-up" />
+          <section className="relative h-[86svh] min-h-[540px] lg:h-[100dvh] lg:sticky lg:top-0 overflow-hidden bg-[#1A1210] text-white">
+            <img src="/leon/catedral.webp" alt="Catedral de León" fetchPriority="high" decoding="async" className="absolute inset-0 w-full h-full object-cover object-[50%_30%]" />
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-b from-[#1A1210]/55 via-transparent via-35% to-[#1A1210]/80" />
 
-          {/* NUEVO: "¿Fuiste? ¿Qué tal?" si tiene un plan pasado sin valorar */}
-          {pendienteValorar && (
-            <div className="order-first lg:col-span-12">
-              <Valorar plan={pendienteValorar} onCerrar={() => setPendienteValorar(null)} />
+            <div className="absolute inset-x-0 top-0 px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] flex items-center justify-between gap-3">
+              <span className="text-sm font-extrabold tracking-[0.14em] uppercase whitespace-nowrap">Cazurronics 🦁</span>
+              {/* Para negocios: visible nada más entrar */}
+              <button type="button" onClick={abrirNegocios} className={`${BOTON_CREMA} h-10 text-xs`}>
+                <span aria-hidden>🏪</span><span className="whitespace-nowrap">¿Tienes un negocio?</span>
+              </button>
             </div>
-          )}
 
-          {/* Hero */}
-          <section className={`${GLASS} group order-1 lg:col-span-5 rounded-[2.25rem] p-6 sm:p-8 relative overflow-hidden cz-up`}>
-            <img src="/roseton.png" alt="" aria-hidden className="pointer-events-none transition-[rotate] duration-[2500ms] ease-[cubic-bezier(.2,.8,.2,1)] group-hover:rotate-90 absolute -right-20 -top-20 w-64 h-64 object-cover rounded-full opacity-[0.18]" />
-            <div className="relative">
-              <div className="flex items-center justify-between gap-2 mb-6">
-                <span className={`${GLASS_SOFT} inline-flex items-center gap-2 rounded-full pl-1.5 pr-3.5 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap`}>
-                  <span className="w-6 h-6 rounded-full bg-gradient-to-br from-rose-400 to-orange-500 flex items-center justify-center text-[13px] shadow-sm">🦁</span>
-                  Cazurronics<span className="hidden sm:inline">{" "}Planner</span>
-                </span>
-                {/* Para negocios: visible nada más entrar, sin tener que bajar */}
-                <button type="button" onClick={abrirNegocios} className="shrink-0 inline-flex items-center gap-1.5 h-11 pl-3 pr-3.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70">
-                  <span aria-hidden>🏪</span><span className="whitespace-nowrap">¿Tienes un negocio?</span>
-                </button>
-              </div>
-              <h1 className="text-[2.6rem] leading-[1.02] sm:text-5xl lg:text-[3.4rem] font-bold tracking-[-0.035em] text-slate-900">
-                Tu planazo<br />en León,{" "}
-                <span className="bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 bg-clip-text text-transparent">sin pensar.</span>
-              </h1>
-              <p className="mt-4 text-[15px] sm:text-base text-slate-600 leading-relaxed max-w-sm">
-                Dinos qué te apetece y montamos la ruta perfecta: tapas, monumentos, eventos y fiesta. Con el tiempo y los horarios ya mirados.
+            <div className="absolute inset-x-0 bottom-0 px-4 sm:px-6 pb-10 lg:pb-12">
+              <p className="text-lg font-extrabold uppercase tracking-[0.12em] text-[#F2B33D] cz-up">Tu planazo en</p>
+              <h1 className={`${DISPLAY} text-[37vw] lg:text-[16vw] -ml-1 pt-[0.16em] cz-up`} style={{ animationDelay: "60ms" }}>León</h1>
+              <p className="mt-3 max-w-sm text-[17px] font-semibold leading-snug cz-up" style={{ animationDelay: "120ms" }}>
+                Dinos qué te apetece y montamos la ruta: tapas, monumentos, eventos y fiesta. Con el tiempo y los horarios ya mirados.
               </p>
             </div>
+            <p className="absolute right-3 bottom-2 text-[10px] font-medium text-white/60">Foto: Joselodos (CC0)</p>
           </section>
 
-          {/* Formulario */}
-          <form onSubmit={generarPlan} className="order-2 lg:col-span-7 lg:row-span-4">
-            <div className={`${GLASS} rounded-[2.25rem] p-5 sm:p-7 cz-up`} style={{ animationDelay: "90ms" }}>
-              <div className="flex items-center justify-between mb-6 px-1">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">El plan perfecto</p>
-                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 mt-0.5">Cuéntame tu día</h2>
-                </div>
-                <span className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-white/60 ring-1 ring-slate-900/5 rounded-full px-3 py-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> IA lista
-                </span>
-              </div>
+          <div className="relative z-10 -mt-6 lg:mt-0 rounded-t-[28px] lg:rounded-none bg-[#FFF4E6] border-t-[2.5px] lg:border-t-0 lg:border-l-[2.5px] border-[#1A1210] px-4 sm:px-8 pt-6 pb-36 sm:pb-12 lg:pt-10">
+            <div className="w-full max-w-xl mx-auto flex flex-col gap-7">
 
-              <div className="space-y-5">
-                {/* Fecha */}
-                <div>
-                  <label htmlFor="cz-fecha" className={LABEL}><span>📅</span> ¿Qué día es el plan?</label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input id="cz-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={`${INPUT} cursor-pointer sm:flex-1`} />
-                    <div className="grid grid-cols-2 gap-2 sm:w-auto">
-                      {[{ v: hoy, t: "Hoy" }, { v: manana, t: "Mañana" }].map((op) => (
-                        <button
-                          key={op.t}
-                          type="button"
-                          onClick={() => setFecha(op.v)}
-                          className={`${PRESS} h-12 sm:h-auto sm:px-5 rounded-2xl text-sm font-semibold ring-1 ${fecha === op.v ? "bg-slate-900 text-white ring-slate-900 shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/60 text-slate-700 ring-slate-900/5 hover:bg-white"}`}
-                        >
-                          {op.t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              {/* Planes | Despensa */}
+              <SelectorSeccion actual="planes" estilo="pegatina" className="cz-up" />
 
-                {/* Apetece */}
-                <div>
-                  <label htmlFor="cz-apetece" className={LABEL}><span>🌮</span> ¿Qué te apetece?</label>
-                  <textarea id="cz-apetece" rows="2" value={apetece} onChange={(e) => setApetece(e.target.value)} className={`${INPUT} resize-none leading-relaxed`} placeholder="Ej: Cocido, ver monumentos y luego unas cañas…"></textarea>
-                  <div className="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 snap-x">
-                    {SUGERENCIAS.map((s) => (
+              {/* "¿Fuiste? ¿Qué tal?" si tiene un plan pasado sin valorar */}
+              {pendienteValorar && <Valorar plan={pendienteValorar} onCerrar={() => setPendienteValorar(null)} />}
+
+              {/* Formulario */}
+              <form onSubmit={generarPlan} id="cz-form" className="flex flex-col gap-7">
+                <div className="cz-up" style={{ animationDelay: "80ms" }}>
+                  <label htmlFor="cz-apetece" className={`${DISPLAY} block text-[15vw] sm:text-7xl mb-4`}>¿Qué te<br />apetece?</label>
+                  <textarea id="cz-apetece" rows="2" value={apetece} onChange={(e) => setApetece(e.target.value)} className={`${INPUT} ${PEGATINA_PEQ} resize-none leading-relaxed text-lg`} placeholder="Ej: Cocido, ver monumentos y luego unas cañas…"></textarea>
+                  <div className="flex gap-2.5 mt-3 overflow-x-auto no-scrollbar -mx-4 px-4 py-2 snap-x">
+                    {SUGERENCIAS.map((s, i) => (
                       <button
                         key={s.texto}
                         type="button"
                         onClick={() => anadirSugerencia(s.texto)}
-                        className={`${PRESS} snap-start shrink-0 flex items-center gap-1.5 h-11 px-4 rounded-full bg-white/60 ring-1 ring-slate-900/5 text-[13px] font-medium text-slate-700 hover:bg-white hover:ring-rose-200 hover:text-rose-600 hover:-translate-y-0.5`}
+                        className={`${PEGATINA_PEQ} ${PULSA} ${COLORES[i % COLORES.length]} ${GIROS[i % GIROS.length]} snap-start shrink-0 flex items-center gap-1.5 h-11 px-4 rounded-full text-sm font-bold`}
                       >
                         <span>{s.emoji}</span>{s.texto}
                       </button>
@@ -679,149 +559,150 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Fecha */}
+                <div className="cz-up" style={{ animationDelay: "120ms" }}>
+                  <label htmlFor="cz-fecha" className={LABEL}><span>📅</span> ¿Qué día?</label>
+                  <div className="grid grid-cols-[1fr_1fr_1.3fr] gap-2">
+                    {[{ v: hoy, t: "Hoy" }, { v: manana, t: "Mañana" }].map((op) => (
+                      <button
+                        key={op.t}
+                        type="button"
+                        onClick={() => setFecha(op.v)}
+                        aria-pressed={fecha === op.v}
+                        className={`${PEGATINA_PEQ} ${PULSA} h-12 rounded-xl text-[15px] font-extrabold ${fecha === op.v ? "bg-[#1A1210] text-[#FFF4E6]" : "bg-white"}`}
+                      >
+                        {op.t}
+                      </button>
+                    ))}
+                    <input id="cz-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={`${INPUT} h-12 py-0 px-3 text-sm cursor-pointer min-w-0 ${fecha && fecha !== hoy && fecha !== manana ? "bg-[#F2B33D]" : ""}`} />
+                  </div>
+                </div>
+
                 {/* Presupuesto */}
-                <div className="rounded-[1.75rem] p-4 sm:p-5 bg-gradient-to-br from-white/60 to-rose-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-                  <div className="flex items-center justify-between mb-4 px-1">
-                    <label className="flex items-center gap-2 text-[13px] font-semibold text-slate-700 whitespace-nowrap"><span>💶</span> Presupuesto <span className="hidden sm:inline font-normal text-slate-500">· por persona</span></label>
-                    <span className="text-xs font-semibold text-rose-500 bg-white/80 ring-1 ring-rose-100 rounded-full px-2.5 py-1 tabular-nums">
+                <div className={`${PEGATINA_PEQ} rounded-2xl p-4 bg-white cz-up`} style={{ animationDelay: "160ms" }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className={`${LABEL} mb-0 whitespace-nowrap`}><span>💶</span> Presupuesto <span className="hidden sm:inline normal-case tracking-normal font-semibold text-[#5C4F44]">· por persona</span></label>
+                    <span className="text-sm font-extrabold bg-[#F2B33D] border-2 border-[#1A1210] rounded-lg px-2.5 py-0.5 tabular-nums">
                       {presupuestoMin === '' ? 0 : presupuestoMin}€ – {presupuestoMax === '' ? 0 : (presupuestoMax >= 300 ? "+300" : presupuestoMax)}€
                     </span>
                   </div>
                   <div className="flex items-center gap-4 mb-4">
-                    <div className="relative flex items-center shrink-0 rounded-xl overflow-hidden ring-1 ring-slate-900/5 bg-white shadow-sm">
-                      <span className="absolute left-3 text-[11px] font-semibold text-slate-500 pointer-events-none">Mín</span>
-                      <input type="number" inputMode="numeric" aria-label="Presupuesto mínimo en euros" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
-                      <span className="absolute right-3 text-[11px] font-semibold text-slate-500 pointer-events-none">€</span>
+                    <div className="relative flex items-center shrink-0 rounded-lg overflow-hidden border-2 border-[#1A1210] bg-[#FFF4E6]">
+                      <span className="absolute left-2.5 text-[11px] font-extrabold text-[#5C4F44] pointer-events-none">Mín</span>
+                      <input type="number" inputMode="numeric" aria-label="Presupuesto mínimo en euros" min="0" max="300" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value === '' ? '' : Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-base font-extrabold text-center outline-none focus:bg-white tabular-nums" />
+                      <span className="absolute right-2.5 text-[11px] font-extrabold text-[#5C4F44] pointer-events-none">€</span>
                     </div>
                     <input type="range" min="0" max="300" step="5" value={presupuestoMin === '' ? 0 : presupuestoMin} onChange={(e) => setPresupuestoMin(Math.min(Number(e.target.value), presupuestoMax === '' ? 300 : presupuestoMax))} aria-label="Presupuesto mínimo" className="w-full cursor-pointer roseton-slider" />
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="relative flex items-center shrink-0 rounded-xl overflow-hidden ring-1 ring-slate-900/5 bg-white shadow-sm">
-                      <span className="absolute left-3 text-[11px] font-semibold text-slate-500 pointer-events-none">Máx</span>
-                      <input type="text" inputMode="numeric" aria-label="Presupuesto máximo en euros" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-sm font-semibold text-slate-800 text-center outline-none focus:bg-rose-50/60 transition-colors tabular-nums" />
-                      <span className="absolute right-3 text-[11px] font-semibold text-slate-500 pointer-events-none">€</span>
+                    <div className="relative flex items-center shrink-0 rounded-lg overflow-hidden border-2 border-[#1A1210] bg-[#FFF4E6]">
+                      <span className="absolute left-2.5 text-[11px] font-extrabold text-[#5C4F44] pointer-events-none">Máx</span>
+                      <input type="text" inputMode="numeric" aria-label="Presupuesto máximo en euros" value={presupuestoMax === '' ? '' : (presupuestoMax >= 300 ? "+300" : presupuestoMax)} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val === '') { setPresupuestoMax(''); return; } val = Number(val); if (val > 300) val = 300; setPresupuestoMax(Math.max(val, presupuestoMin === '' ? 0 : presupuestoMin)); }} className="w-24 h-10 pl-10 pr-6 bg-transparent border-0 text-base font-extrabold text-center outline-none focus:bg-white tabular-nums" />
+                      <span className="absolute right-2.5 text-[11px] font-extrabold text-[#5C4F44] pointer-events-none">€</span>
                     </div>
                     <input type="range" min="0" max="300" step="5" value={presupuestoMax === '' ? 0 : presupuestoMax} onChange={(e) => setPresupuestoMax(Math.max(Number(e.target.value), presupuestoMin === '' ? 0 : presupuestoMin))} aria-label="Presupuesto máximo" className="w-full cursor-pointer roseton-slider" />
                   </div>
                 </div>
 
                 {/* Zona */}
-                <div className="rounded-[1.75rem] p-2.5 sm:p-4 [&_input[type=text]]:min-w-0 [&_button]:whitespace-nowrap [&_button]:shrink-0 bg-gradient-to-br from-white/60 to-sky-50/50 ring-1 ring-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-                  <label className={`${LABEL} mt-1 mb-3`}><span>📍</span> Zona de búsqueda <span className="font-normal text-slate-500">· toca el mapa</span></label>
+                <div className={`${PEGATINA_PEQ} rounded-2xl p-2.5 sm:p-4 bg-white [&_input[type=text]]:min-w-0 [&_button]:whitespace-nowrap [&_button]:shrink-0 cz-up`} style={{ animationDelay: "200ms" }}>
+                  <label className={`${LABEL} mt-1 px-1.5 mb-3`}><span>📍</span> Zona <span className="normal-case tracking-normal font-semibold text-[#5C4F44]">· toca el mapa</span></label>
                   <MapSelectorDynamic radiusKm={distancia} setRadiusKm={setDistancia} center={centroMapa} setCenter={setCentroMapa} />
                 </div>
-              </div>
-            </div>
 
-            {/* CTA: flotante en móvil (zona del pulgar), integrado en escritorio.
-                Va fuera del contenedor de cristal: backdrop-filter rompería el "fixed". */}
-            <div className="fixed inset-x-0 bottom-0 z-40 px-4 pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-[#fdf6ef] via-[#fdf6ef]/85 to-transparent sm:static sm:z-auto sm:p-0 sm:pt-4 sm:bg-none">
-              <button
-                type="submit"
-                className={`${PRESS} cz-sheen group relative overflow-hidden w-full h-14 sm:h-16 rounded-full bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 text-white text-lg font-bold tracking-tight shadow-[0_14px_36px_-10px_rgba(244,63,94,0.65),inset_0_1px_0_rgba(255,255,255,0.35)] hover:shadow-[0_20px_44px_-10px_rgba(244,63,94,0.75),inset_0_1px_0_rgba(255,255,255,0.35)] hover:-translate-y-0.5 hover:brightness-105 flex items-center justify-center gap-2.5`}
-              >
-                <span className="text-xl transition-transform duration-500 group-hover:rotate-12 group-hover:scale-110">✨</span>
-                ¡Descubrir el plan!
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300 group-hover:translate-x-1" aria-hidden><path d="M5 12h14M13 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-          </form>
-
-          {/* Despensa: tarjeta grande justo debajo del formulario */}
-          <Link href="/despensa" className={`${GLASS} group/despensa order-3 lg:col-span-5 rounded-[2.25rem] p-5 sm:p-6 relative overflow-hidden flex items-center gap-4 transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:bg-white/70 active:scale-[0.98] cz-up`} style={{ animationDelay: "130ms" }}>
-            <span className="shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300 to-rose-400 flex items-center justify-center text-3xl shadow-[0_10px_24px_-10px_rgba(244,63,94,0.6)] transition-transform duration-500 group-hover/despensa:rotate-[-8deg] group-hover/despensa:scale-105" aria-hidden>🧺</span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Despensa de León</span>
-              <span className="block text-lg font-bold tracking-tight text-slate-900 leading-snug mt-0.5">¿Una morcilla buena y pan de leña cerca?</span>
-              <span className="block text-sm text-slate-500 mt-0.5">Escríbelo y te decimos dónde comprarlo en toda la provincia.</span>
-            </span>
-            <span className="shrink-0 w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-lg transition-transform duration-300 group-hover/despensa:translate-x-1" aria-hidden>→</span>
-          </Link>
-
-          {/* Valores: carrusel con snap en móvil, celdas bento en escritorio */}
-          <section className="order-3 lg:col-span-5 cz-up" style={{ animationDelay: "160ms" }} aria-label="Nuestros valores">
-            <div className="flex lg:grid lg:grid-cols-3 gap-3 overflow-x-auto lg:overflow-visible no-scrollbar snap-x snap-mandatory -mx-4 px-4 lg:mx-0 lg:px-0 pb-3">
-              {VALORES.map((v) => (
-                <div key={v.titulo} className={`${GLASS} snap-start shrink-0 w-[70%] sm:w-[45%] lg:w-auto rounded-[1.75rem] p-4 transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:bg-white/70`}>
-                  <div className="w-10 h-10 rounded-xl bg-white/80 ring-1 ring-slate-900/5 flex items-center justify-center text-xl shadow-sm mb-3">{v.emoji}</div>
-                  <p className="text-sm font-bold text-slate-900">{v.titulo}</p>
-                  <p className="text-xs text-slate-500 leading-snug mt-1">{v.texto}</p>
+                {/* Botón principal: fijo abajo en móvil (zona del pulgar), en su sitio en escritorio */}
+                <div className="fixed inset-x-0 bottom-0 z-40 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-[#FFF4E6] border-t-2 border-[#1A1210] sm:static sm:z-auto sm:p-0 sm:border-0 sm:bg-transparent">
+                  <button type="submit" className={`${BOTON_GRANATE} w-full h-16 text-xl`}>
+                    Montar mi plan
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 12h14M13 5l7 7-7 7" /></svg>
+                  </button>
                 </div>
-              ))}
+              </form>
+
+              {/* Despensa */}
+              <Link href="/despensa" className={`${PEGATINA} ${PULSA} rounded-3xl p-5 bg-[#F2B33D] flex items-center gap-4`}>
+                <span className="shrink-0 w-14 h-14 rounded-2xl bg-white border-[2.5px] border-[#1A1210] flex items-center justify-center text-3xl -rotate-6" aria-hidden>🧺</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-extrabold uppercase tracking-[0.14em]">Despensa de León</span>
+                  <span className="block text-lg font-extrabold leading-snug mt-0.5">¿Una morcilla buena y pan de leña cerca?</span>
+                  <span className="block text-sm font-medium mt-0.5">Te decimos dónde comprarlo en toda la provincia.</span>
+                </span>
+                <span className="shrink-0 w-10 h-10 rounded-full bg-[#1A1210] text-white flex items-center justify-center text-lg" aria-hidden>→</span>
+              </Link>
+
+              {/* Valores */}
+              <section className="grid grid-cols-3 gap-2.5" aria-label="Nuestros valores">
+                {VALORES.map((v, i) => (
+                  <div key={v.titulo} className={`${PEGATINA_PEQ} ${COLORES[(i + 1) % COLORES.length]} rounded-2xl p-3`}>
+                    <p className="text-2xl" aria-hidden>{v.emoji}</p>
+                    <p className="text-sm font-extrabold mt-1">{v.titulo}</p>
+                    <p className="text-xs font-medium leading-snug mt-0.5">{v.texto}</p>
+                  </div>
+                ))}
+              </section>
+
+              {/* Cazurronics Choices: arcos de la Catedral en colores planos */}
+              <section className={`${PEGATINA} rounded-3xl p-5 bg-white`} aria-labelledby="cz-choices-titulo">
+                <div className="flex items-center gap-4">
+                  <SelloChoice className="w-16 h-16 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#7A1F2B]">Locales destacados</p>
+                    <h2 id="cz-choices-titulo" className={`${DISPLAY} text-4xl`}>Cazurronics Choices</h2>
+                  </div>
+                </div>
+                <p className="text-sm font-medium text-[#4A3F36] leading-snug mt-3">Los locales de León que destacamos en la web y en nuestras redes.</p>
+
+                <div className={`mt-5 ${CAZURRONICS_CHOICES.length >= 3 ? "-mx-5 px-5 flex gap-3 overflow-x-auto no-scrollbar snap-x scroll-px-5 pb-2 pt-1" : "grid grid-cols-3 gap-3"}`}>
+                  {(CAZURRONICS_CHOICES.length ? [...CAZURRONICS_CHOICES, null] : [null, null, null]).map((local, i) => {
+                    // Hueco libre → abre el formulario de negocios; local con web → enlace
+                    const Tag = local ? (local.url ? "a" : "div") : "button";
+                    return (
+                      <Tag
+                        key={local?.nombre ?? `libre-${i}`}
+                        {...(local?.url ? { href: local.url, target: "_blank", rel: "noopener noreferrer" } : {})}
+                        {...(!local ? { type: "button", onClick: abrirNegocios, "aria-label": "Tu local aquí: pide información para salir en Cazurronics Choices" } : {})}
+                        className={`${CAZURRONICS_CHOICES.length >= 3 ? "shrink-0 snap-start w-[calc((100%-1.5rem)/3)]" : "w-full"} ${PEGATINA_PEQ} ${PULSA} relative block aspect-[3/4.2] cursor-pointer rounded-t-[999px] rounded-b-xl overflow-hidden ${COLORES[i % COLORES.length]}`}
+                      >
+                        {local?.foto && <img src={local.foto} alt={local.nombre} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />}
+                        {local ? (
+                          <div className="absolute inset-x-0 bottom-0 p-2 pt-8 bg-gradient-to-t from-[#1A1210]/85 to-transparent text-center">
+                            <p className="text-[13px] font-extrabold text-white leading-tight line-clamp-2">{local.nombre}</p>
+                            {local.categoria && <p className="text-[10px] font-semibold text-white/80 mt-0.5 truncate">{local.categoria}{local.zona ? ` · ${local.zona}` : ""}</p>}
+                          </div>
+                        ) : (
+                          <div className="absolute inset-x-0 bottom-2.5 flex flex-col items-center gap-1">
+                            <span className={`${DISPLAY} text-3xl`}>Nº {i + 1}</span>
+                            <span className="text-[11px] font-extrabold bg-white border-2 border-[#1A1210] rounded-md px-1.5 py-0.5 whitespace-nowrap">Tu local aquí</span>
+                          </div>
+                        )}
+                      </Tag>
+                    );
+                  })}
+                </div>
+
+                <p className="text-center text-sm font-medium text-[#4A3F36] mt-4">
+                  {CAZURRONICS_CHOICES.length ? "Locales destacados por Cazurronics · " : "Hay un hueco esperando a tu local · "}
+                  <button type="button" onClick={abrirNegocios} className="font-extrabold text-[#7A1F2B] underline underline-offset-2">¿Quieres uno?</button>
+                </p>
+              </section>
+
+              {/* Negocios */}
+              <section className={`${PEGATINA_PEQ} rounded-2xl p-4 pl-5 bg-[#F6D8A8] flex items-center justify-between gap-3`}>
+                <div className="min-w-0">
+                  <p className="text-base font-extrabold leading-snug">¿Tienes un negocio en León?</p>
+                  <p className="text-sm font-medium leading-snug mt-0.5">Sal en Cazurronics Choices y en nuestras redes.</p>
+                </div>
+                <BusinessModal />
+              </section>
+
+              {/* Enlaces a las páginas de contenido (ayudan a que Google encuentre la web) */}
+              <nav aria-label="Más de León" className="flex flex-wrap gap-2.5">
+                {[["/agenda-leon", "📅 Agenda de León"], ["/que-hacer-en-leon", "✨ Qué hacer en León"], ["/donde-comer-en-leon", "🍷 Dónde comer en León"], ["/despensa", "🧺 Despensa de León"]].map(([href, texto]) => (
+                  <Link key={href} href={href} className={`${BOTON_CREMA} bg-white`}>{texto}</Link>
+                ))}
+              </nav>
             </div>
-          </section>
-
-          {/* Cazurronics Choices: tres vidrieras góticas que se "encienden" con cada local destacado */}
-          <section className={`${GLASS} group/choices order-4 lg:col-span-5 rounded-[2.25rem] p-5 sm:p-6 relative overflow-hidden cz-up`} style={{ animationDelay: "220ms" }} aria-labelledby="cz-choices-titulo">
-            <div aria-hidden className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-gradient-to-br from-amber-200/50 via-rose-200/40 to-transparent blur-2xl" />
-            <div className="relative flex items-center gap-4">
-              <SelloChoice className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] shrink-0 drop-shadow-[0_8px_16px_rgba(244,63,94,0.35)] transition-transform duration-[1200ms] ease-[cubic-bezier(.2,.8,.2,1)] group-hover/choices:rotate-[30deg]" />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Locales destacados</p>
-                <h2 id="cz-choices-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-tight">Cazurronics Choices</h2>
-                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Los locales de León que destacamos en la web y en nuestras redes.</p>
-              </div>
-            </div>
-
-            <div className={`relative mt-5 ${CAZURRONICS_CHOICES.length >= 3 ? "-mx-5 sm:-mx-6 px-5 sm:px-6 flex gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x scroll-px-5 sm:scroll-px-6 pb-2 pt-1" : "grid grid-cols-3 gap-2.5 sm:gap-3"}`}>
-              {(CAZURRONICS_CHOICES.length ? [...CAZURRONICS_CHOICES, null] : [null, null, null]).map((local, i) => {
-                // Hueco libre → abre el formulario de negocios; local con web → enlace
-                const Tag = local ? (local.url ? "a" : "div") : "button";
-                return (
-                  <Tag
-                    key={local?.nombre ?? `libre-${i}`}
-                    {...(local?.url ? { href: local.url, target: "_blank", rel: "noopener noreferrer" } : {})}
-                    {...(!local ? { type: "button", onClick: abrirNegocios, "aria-label": "Tu local aquí: pide información para salir en Cazurronics Choices" } : {})}
-                    className={`${CAZURRONICS_CHOICES.length >= 3 ? "shrink-0 snap-start w-[calc((100%-1.25rem)/3)] sm:w-[calc((100%-1.5rem)/3)]" : "w-full"} group/arco relative block aspect-[3/4.2] cursor-pointer rounded-t-[999px] rounded-b-[1.25rem] overflow-hidden bg-white/50 ring-1 ring-white shadow-[0_10px_24px_-12px_rgba(15,23,42,0.35),inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-14px_rgba(244,63,94,0.45)]`}
-                  >
-                    {local?.foto && <img src={local.foto} alt={local.nombre} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />}
-                    {/* El cristal: apagado si el hueco está libre, translúcido sobre la foto si hay local */}
-                    <div
-                      aria-hidden
-                      className={`absolute inset-0 transition-all duration-700 ${local ? "opacity-30 mix-blend-color" : "opacity-40 saturate-[.6] group-hover/arco:opacity-90 group-hover/arco:saturate-150"}`}
-                      style={{ background: VIDRIERAS[i % VIDRIERAS.length] }}
-                    />
-                    {/* Las tiras de plomo de la vidriera */}
-                    <div aria-hidden className="absolute inset-0 opacity-70" style={{ backgroundImage: PLOMO }} />
-                    <div aria-hidden className="absolute inset-[5px] rounded-t-[999px] rounded-b-[1rem] ring-1 ring-white/80" />
-
-                    {local ? (
-                      <div className="absolute inset-x-0 bottom-0 p-2 pt-8 bg-gradient-to-t from-slate-900/80 via-slate-900/40 to-transparent text-center">
-                        <p className="text-[12px] sm:text-[13px] font-bold text-white leading-tight line-clamp-2">{local.nombre}</p>
-                        {local.categoria && <p className="text-[10px] font-medium text-white/75 mt-0.5 truncate">{local.categoria}{local.zona ? ` · ${local.zona}` : ""}</p>}
-                      </div>
-                    ) : (
-                      <div className="absolute inset-x-0 bottom-2 flex flex-col items-center gap-1">
-                        <span className="text-[10px] font-bold text-slate-500/90 tabular-nums">Nº {i + 1}</span>
-                        <span className="text-[10px] sm:text-[11px] font-semibold text-slate-700 bg-white/85 backdrop-blur-sm rounded-full px-2 py-0.5 shadow-sm whitespace-nowrap transition-colors group-hover/arco:text-rose-600">Tu local aquí</span>
-                      </div>
-                    )}
-                  </Tag>
-                );
-              })}
-            </div>
-
-            <p className="relative text-center text-xs text-slate-500 mt-4">
-              {CAZURRONICS_CHOICES.length ? "Locales destacados por Cazurronics · " : "Hay una vidriera esperando a tu local · "}
-              <button type="button" onClick={abrirNegocios} className="font-semibold text-rose-600 hover:underline underline-offset-2">¿Quieres una?</button>
-            </p>
-          </section>
-
-          {/* Negocios */}
-          <section className={`${GLASS_SOFT} order-5 lg:col-span-5 rounded-[1.75rem] p-4 pl-5 flex items-center justify-between gap-3 cz-up`} style={{ animationDelay: "280ms" }}>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900 leading-snug">¿Tienes un negocio en León?</p>
-              <p className="text-xs text-slate-500 leading-snug mt-0.5">Sal en Cazurronics Choices y en nuestras redes.</p>
-            </div>
-            <BusinessModal />
-          </section>
-
-          {/* NUEVO: enlaces a las páginas de contenido (ayudan a que Google encuentre la web) */}
-          <nav aria-label="Más de León" className="order-6 lg:col-span-12 flex flex-wrap items-center justify-center gap-2 pt-1 cz-up" style={{ animationDelay: "320ms" }}>
-            {[["/agenda-leon", "📅 Agenda de León"], ["/que-hacer-en-leon", "✨ Qué hacer en León"], ["/donde-comer-en-leon", "🍷 Dónde comer en León"], ["/despensa", "🧺 Despensa de León"]].map(([href, texto]) => (
-              <Link key={href} href={href} className={`${PRESS} h-11 px-4 inline-flex items-center rounded-full bg-white/50 ring-1 ring-white text-[13px] font-medium text-slate-600 hover:bg-white hover:text-rose-600`}>{texto}</Link>
-            ))}
-          </nav>
+          </div>
         </div>
       )}
     </main>
