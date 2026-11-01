@@ -38,6 +38,9 @@ const PASOS_CARGA = [
    Para quitar uno, bórralo de la lista.
    ───────────────────────────────────────────────────────────── */
 const CAZURRONICS_CHOICES = [];
+// Escondido mientras no haya locales destacados: quita Choices, la tarjeta de negocios y el botón de arriba.
+// Para volver a enseñarlo todo, pon true.
+const MOSTRAR_NEGOCIOS = false;
 const abrirNegocios = () => window.dispatchEvent(new Event("cz-abrir-negocios"));
 
 // Colores de cada vidriera (inspirados en el rosetón de la Catedral)
@@ -613,9 +616,9 @@ export default function Home() {
                   Cazurronics<span className="hidden sm:inline">{" "}Planner</span>
                 </span>
                 {/* Para negocios: visible nada más entrar, sin tener que bajar */}
-                <button type="button" onClick={abrirNegocios} className="shrink-0 inline-flex items-center gap-1.5 h-11 pl-3 pr-3.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70">
+                {MOSTRAR_NEGOCIOS && <button type="button" onClick={abrirNegocios} className="shrink-0 inline-flex items-center gap-1.5 h-11 pl-3 pr-3.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] hover:bg-slate-800 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/70">
                   <span aria-hidden>🏪</span><span className="whitespace-nowrap">¿Tienes un negocio?</span>
-                </button>
+                </button>}
               </div>
               <h1 className="text-[2.6rem] leading-[1.02] sm:text-5xl lg:text-[3.4rem] font-bold tracking-[-0.035em] text-slate-900">
                 Tu planazo<br />en León,{" "}
@@ -752,6 +755,7 @@ export default function Home() {
           </section>
 
           {/* Cazurronics Choices: tres vidrieras góticas que se "encienden" con cada local destacado */}
+          {MOSTRAR_NEGOCIOS && <>
           <section className={`${GLASS} group/choices order-4 lg:col-span-5 rounded-[2.25rem] p-5 sm:p-6 relative overflow-hidden cz-up`} style={{ animationDelay: "220ms" }} aria-labelledby="cz-choices-titulo">
             <div aria-hidden className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-gradient-to-br from-amber-200/50 via-rose-200/40 to-transparent blur-2xl" />
             <div className="relative flex items-center gap-4">
@@ -815,6 +819,7 @@ export default function Home() {
             </div>
             <BusinessModal />
           </section>
+          </>}
 
           {/* NUEVO: enlaces a las páginas de contenido (ayudan a que Google encuentre la web) */}
           <nav aria-label="Más de León" className="order-6 lg:col-span-12 flex flex-wrap items-center justify-center gap-2 pt-1 cz-up" style={{ animationDelay: "320ms" }}>
