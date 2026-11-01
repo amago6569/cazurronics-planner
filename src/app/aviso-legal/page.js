@@ -13,7 +13,7 @@ export default function AvisoLegal() {
   return (
     <PaginaLegal titulo="Aviso legal" intro="Quién está detrás de Cazurronics y las reglas básicas para usar la web." ctaRef="aviso-legal">
       <Apartado titulo="Quién somos">
-        <p>Esta web ({TITULAR.web}) es un proyecto personal de:</p>
+        <p>Esta web ({TITULAR.web}) es un proyecto personal, sin empresa detrás, de una persona particular:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>Titular:</strong> {TITULAR.nombre}</li>
           {TITULAR.nif && <li><strong>NIF:</strong> {TITULAR.nif}</li>}
@@ -34,8 +34,8 @@ export default function AvisoLegal() {
         <p>La web enlaza a negocios, mapas y webs de terceros. No somos responsables de sus contenidos ni de lo que ofrezcan. Las valoraciones y fotos de los sitios pueden venir de servicios externos como Google.</p>
       </Apartado>
 
-      <Apartado titulo="Propiedad intelectual">
-        <p>El diseño, los textos y la marca Cazurronics pertenecen a su titular. Las marcas, nombres y fotos de los negocios pertenecen a sus dueños.</p>
+      <Apartado titulo="Contenidos">
+        <p>El diseño y los textos de la web los ha hecho su titular; si quieres usarlos, pregunta antes. Los nombres, logos y fotos de los negocios pertenecen a sus dueños.</p>
       </Apartado>
 
       <Apartado titulo="Ley aplicable">
