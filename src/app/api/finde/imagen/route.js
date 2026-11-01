@@ -186,6 +186,7 @@ export async function GET(request) {
     const alto = formato === "historia" ? 1920 : 1350;
     return new ImageResponse(<Diapositiva d={d} p={pack} roseton={roseton} alto={alto} />, { width: 1080, height: alto, fonts, headers: cabeceras });
   } catch (e) {
-    return new Response(`No se pudo crear la imagen: ${e.message}`, { status: 500 });
+    console.error("[finde/imagen]", e?.message || e); // el detalle, solo en los registros de Vercel
+    return new Response("No se pudo crear la imagen", { status: 500 });
   }
 }

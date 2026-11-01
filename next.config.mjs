@@ -40,6 +40,13 @@ const nextConfig = {
           { key: "Content-Security-Policy-Report-Only", value: CSP },
         ],
       },
+      {
+        // La copia de la web en cazurronics-planner.vercel.app (y las de prueba de Vercel) no debe salir en Google:
+        // solo cuenta cazurronics.es. Sigue funcionando igual, simplemente los buscadores no la guardan.
+        source: "/:path*",
+        has: [{ type: "host", value: "(?<sub>.*)\\.vercel\\.app" }],
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
     ];
   },
 };
