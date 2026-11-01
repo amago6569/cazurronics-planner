@@ -2,6 +2,7 @@ import { Fredoka } from "next/font/google";
 import "./globals.css";
 import { URL_SITIO } from "../lib/sitio";
 import { jsonLdSeguro, sitioJsonLd } from "../lib/seo";
+import PieLegal from "./components/PieLegal";
 
 // Cargamos la tipografía Fredoka con distintos grosores
 const fredoka = Fredoka({ 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }) {
         {/* Quién está detrás de la web, para Google (no se ve) */}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSeguro(sitioJsonLd(URL_SITIO)) }} />
         {children}
+        <PieLegal />
       </body>
     </html>
   );
