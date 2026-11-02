@@ -480,7 +480,7 @@ function abrir(i) {
   // Street View: la vista 360º se puede arrastrar; si solo hay foto exterior, se enseña la foto
   const sv = CZ.webSegura(p.streetView);
   $("hSv").className = sv ? "sv" : ""; $("hSv").innerHTML = !sv ? "" : sv.includes("embed")
-    ? `<span>Vista 360º · Arrastra</span><iframe src="${esc(sv)}" title="Vista 360º de ${esc(p.titulo)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
+    ? `<iframe src="${esc(sv)}" title="Vista 360º de ${esc(p.titulo)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
     : `<span>Vista exterior</span><img src="${esc(sv)}" alt="Vista exterior de ${esc(p.titulo)}" loading="lazy" decoding="async">`;
   const fuente = CZ.webSegura(p.fuente); $("hFuente").hidden = !fuente; if (fuente) $("hFuente").href = fuente;
   $("hDatos").innerHTML = [["Precio", p.precio], ["Horario", p.horario], ["Cómo llegar", p.transporte], ["Dónde", p.lugar], ["Reseñas", CZ.hay(p.resenas) ? `★ ${p.resenas}` : ""]]
