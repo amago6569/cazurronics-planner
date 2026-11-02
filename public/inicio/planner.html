@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#07060a">
+<title>Cazurronics Planner | Tu plan en León</title>
+<meta name="description" content="Dinos qué día, qué te apetece, cuánto quieres gastar y por dónde te mueves, y te montamos el plan en la provincia de León con sitios reales, horarios y ruta.">
+<link rel="canonical" href="https://cazurronics.es/planner">
+<meta property="og:title" content="Cazurronics Planner | Tu plan en León">
+<meta property="og:description" content="Te montamos el plan en León con sitios reales, horarios y ruta.">
+<meta property="og:image" content="https://cazurronics.es/opengraph-image">
+<meta property="og:locale" content="es_ES">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
+<link rel="stylesheet" href="/inicio/vendor/leaflet.css">
+<link rel="stylesheet" href="/inicio/comun.css">
+<style>
+/* Layout: la misma búsqueda de la web de siempre (fecha, qué te apetece, presupuesto mín–máx y zona), una pregunta por
+   pantalla; y el resultado de siempre (mapa de la ruta, tiempo, compartir, paradas, retocar) con la cara nueva. */
+.app { position: fixed; inset: 0; height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; }
+.pasos { position: relative; z-index: 1; overflow: hidden; }
+.paso { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px max(20px, env(safe-area-inset-right, 0px)) 24px max(20px, env(safe-area-inset-left, 0px));
+  opacity: 0; transform: translateX(28%); pointer-events: none; visibility: hidden;
+  transition: transform 520ms var(--ease-ios), opacity 360ms ease, visibility 0s 520ms; }
+.paso.activo { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition: transform 520ms var(--ease-ios), opacity 360ms ease, visibility 0s; }
+.paso.pasado { transform: translateX(-18%); }
+.paso > * { flex-shrink: 0; } /* en una pantalla larga nada se aplasta: se hace scroll */
+.paso > * { opacity: 0; transform: translateY(10px); transition: opacity 420ms var(--ease-out), transform 420ms var(--ease-out); }
+.paso.activo > * { opacity: 1; transform: none; }
+.paso.activo > :nth-child(2) { transition-delay: 60ms; } .paso.activo > :nth-child(3) { transition-delay: 120ms; } .paso.activo > :nth-child(4) { transition-delay: 180ms; }
+.marco { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+
+/* 1 · fecha: Hoy / Mañana y calendario grande */
+.mes { display: flex; align-items: center; justify-content: space-between; }
+.mes b { font-size: 20px; font-weight: 800; text-transform: capitalize; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.cal .dsem { text-align: center; font-size: 13px; font-weight: 700; color: var(--gris); padding-bottom: 2px; }
+.cal button { aspect-ratio: 1; min-width: 0; border: 0; border-radius: 14px; background: var(--vidrio); color: var(--crema); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer;
+  display: grid; place-items: center; position: relative; transition: transform 120ms ease-out, background-color 160ms ease, color 160ms ease; }
+.cal button:active { transform: scale(.94); }
+.cal button[disabled] { background: transparent; color: rgba(243, 234, 216, .22); cursor: default; }
+.cal button.hoy::after { content: ""; position: absolute; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--oro); }
+.cal button[aria-pressed="true"] { background: var(--crema); color: var(--noche); }
+.cal .vacio { visibility: hidden; }
+
+/* ¿qué tal el último plan? */
+.valorar { padding: 16px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); display: grid; gap: 12px; }
+.valorar header { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.valorar header b { font-size: 17px; } .valorar header span { display: block; font-size: 13px; color: var(--gris); margin-top: 2px; }
+.valorar ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.valorar li { display: grid; gap: 8px; }
+.valorar li > span { font-size: 14px; font-weight: 700; } .valorar li > span small { color: var(--gris); font-weight: 600; }
+.valorar .tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.valorar .tres .chip { height: 40px; padding: 0 8px; font-size: 14px; }
+.valorar .chip[disabled] { opacity: .45; cursor: default; }
+.valorar .chip[aria-pressed="true"] { opacity: 1; }
+
+/* 2 · qué te apetece */
+.texto { width: 100%; box-sizing: border-box; min-height: 100px; resize: none; border: 0; border-bottom: 2px solid var(--borde); background: transparent; color: var(--crema);
+  font-family: inherit; font-size: 24px; font-weight: 500; line-height: 1.25; padding: 8px 0 12px; outline: none; transition: border-color 200ms ease; }
+.texto::placeholder { color: rgba(243, 234, 216, .38); }
+.texto:focus { border-color: var(--oro); }
+
+/* 3 · presupuesto mínimo y máximo en el medio anillo */
+.dial { position: relative; width: min(100%, 360px); aspect-ratio: 2 / 1.12; margin: 0 auto; touch-action: none; }
+.dial svg { width: 100%; height: 100%; overflow: visible; }
+.dial circle.tir { cursor: grab; }
+.dial .valor { position: absolute; left: 0; right: 0; bottom: 2%; text-align: center; }
+.dial .valor b { display: block; font-weight: 900; font-stretch: 62%; font-size: 58px; line-height: .9; font-variant-numeric: tabular-nums; }
+.dial .valor small { color: var(--gris); font-size: 14px; }
+.cajas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cajas label { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border-radius: 16px; background: var(--vidrio); border: 1px solid var(--borde); font-weight: 700; color: var(--gris); font-size: 14px; }
+.cajas input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--crema); font: 800 20px var(--letra); text-align: right; outline: none; font-variant-numeric: tabular-nums; }
+
+/* 4 · zona */
+.zona { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+
+/* montando */
+.montando { align-items: center; justify-content: center; text-align: center; }
+.montando img { width: min(62vw, 280px); border-radius: 50%; animation: gira 14s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+.montando .estado { font-size: 20px; font-weight: 600; min-height: 2.6em; max-width: 22ch; text-wrap: balance; transition: opacity 220ms ease, filter 220ms ease; }
+.montando .estado.cambia { opacity: 0; filter: blur(3px); }
+
+/* resultado */
+.resultado { gap: 14px; }
+.resultado .pregunta { font-size: clamp(52px, 16vw, 84px); }
+.datos { display: flex; flex-wrap: wrap; gap: 6px; }
+.datos span { font-size: 13px; font-weight: 700; padding: 7px 11px; border-radius: 999px; background: var(--vidrio); border: 1px solid var(--borde); }
+.datos span::first-letter { text-transform: uppercase; }
+.ruta-mapa { height: 300px; flex: none; }
+.tramos { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); overflow: hidden; }
+.tramos li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 14px; }
+.tramos li + li { border-top: 1px solid rgba(243,234,216,.08); }
+.tramos .n { display: flex; align-items: center; gap: 4px; font-weight: 900; font-stretch: 62%; font-size: 22px; }
+.tramos .n i { font-style: normal; color: var(--gris); font-size: 16px; }
+.tramos .q { font-size: 14px; color: #ddd4c4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tramos .d { text-align: right; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.tramos .d small { display: block; font-weight: 600; font-size: 12px; color: var(--gris); }
+.dos-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dos-col > :only-child, .dos-col > [hidden] + :not([hidden]), .dos-col > :not([hidden]):has(+ [hidden]) { grid-column: span 2; }
+.caja-info { padding: 14px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); display: grid; gap: 4px; align-content: start; text-align: left; color: var(--crema); font: inherit; }
+.caja-info[hidden] { display: none; }
+.caja-info b { font-size: 15px; } .caja-info span { font-size: 13px; color: var(--gris); line-height: 1.35; }
+button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } button.caja-info:active { transform: scale(.98); }
+.seccion { margin: 8px 0 0; font-size: 22px; font-weight: 800; }
+.seccion[hidden] { display: none; }
+.ficha { position: relative; display: block; width: 100%; height: 380px; border-radius: 28px; overflow: hidden; background: #111; border: 0; padding: 0; color: var(--crema); text-align: left; cursor: pointer; font: inherit; transition: transform 140ms ease-out; }
+.ficha:active { transform: scale(.985); }
+.ficha img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 700ms var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .ficha:hover img { transform: scale(1.04); } }
+.ficha::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,10,.92) 0%, rgba(7,6,10,.35) 48%, rgba(7,6,10,0) 68%); }
+.ficha .num { position: absolute; z-index: 1; top: 14px; left: 14px; width: 36px; height: 36px; border-radius: 50%; background: var(--crema); color: var(--noche); font-weight: 900; display: grid; place-items: center; }
+.ficha .info { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; padding: 18px; display: grid; gap: 6px; }
+.ficha .hora { font-weight: 900; font-stretch: 62%; font-size: 48px; line-height: .85; font-variant-numeric: tabular-nums; }
+.ficha h3 { margin: 0; font-size: 21px; font-weight: 800; line-height: 1.15; text-wrap: balance; }
+.ficha .lugar { font-size: 14px; color: var(--oro); font-weight: 700; }
+.ficha p { margin: 0; font-size: 14px; line-height: 1.4; color: #ddd4c4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ficha .pie-f { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; }
+.evento { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: start; padding: 14px; border-radius: 20px; background: var(--vidrio); border: 1px solid var(--borde); }
+.evento b.h { font-weight: 900; font-stretch: 62%; font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; }
+.evento b.h.larga { font-size: 14px; font-stretch: 100%; font-weight: 800; line-height: 1.2; }
+.evento > span { font-size: 14px; color: #ddd4c4; min-width: 0; } .evento strong { display: block; font-size: 15px; color: var(--crema); line-height: 1.25; margin-bottom: 2px; }
+.evento .extra { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 13px; }
+.evento .extra em { font-style: normal; color: var(--oro); font-weight: 700; }
+.evento .extra a { color: var(--gris); }
+.mas-eventos { justify-self: start; }
+
+/* hoja de detalle de una parada */
+.velo { position: fixed; inset: 0; z-index: 40; background: rgba(7,6,10,.55); opacity: 0; pointer-events: none; transition: opacity 300ms ease; }
+.velo.on { opacity: 1; pointer-events: auto; }
+.hoja { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-width: 640px; margin: 0 auto; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; background: #121017; border-radius: 28px 28px 0 0; border-top: 1px solid var(--borde); box-sizing: border-box;
+  padding: 10px max(20px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  transform: translateY(100%); visibility: hidden; transition: transform 500ms var(--ease-ios), visibility 0s 500ms; display: grid; gap: 14px; }
+.hoja.on { transform: none; visibility: visible; transition: transform 500ms var(--ease-ios), visibility 0s; }
+.hoja .asa { width: 40px; height: 5px; border-radius: 5px; background: rgba(243,234,216,.25); margin: 0 auto 4px; }
+.hoja .foto { height: 200px; border-radius: 20px; overflow: hidden; background: #1a1720; } .hoja .foto img { width: 100%; height: 100%; object-fit: cover; }
+.hoja h2 { margin: 0; font-size: 26px; font-weight: 800; line-height: 1.1; }
+.hoja .sub { font-size: 14px; color: var(--oro); font-weight: 700; }
+.hoja p { margin: 0; font-size: 16px; line-height: 1.5; color: #ddd4c4; }
+.sv { position: relative; border-radius: 20px; overflow: hidden; background: #1a1720; border: 1px solid var(--borde); }
+.sv iframe, .sv img { display: block; width: 100%; height: 220px; border: 0; object-fit: cover; }
+.sv span { position: absolute; z-index: 1; top: 10px; left: 10px; padding: 6px 10px; border-radius: 999px; background: rgba(7,6,10,.72); font-size: 12px; font-weight: 700; pointer-events: none; }
+.datos-p { display: grid; gap: 8px; margin: 0; }
+.datos-p div { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--vidrio); }
+.datos-p dt { color: var(--gris); font-size: 13px; font-weight: 700; } .datos-p dd { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.botones > :last-child:nth-child(odd) { grid-column: span 2; }
+.botones a, .botones button { height: 50px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; font: 800 15px var(--letra); text-decoration: none; border: 0; cursor: pointer; transition: transform 120ms ease-out; }
+.botones svg { width: 18px; height: 18px; flex: none; }
+.botones a:active, .botones button:active { transform: scale(.97); }
+.botones .uno { background: var(--crema); color: var(--noche); } .botones .dos { background: var(--vidrio); color: var(--crema); border: 1px solid var(--borde); }
+.fuente-ev { font-size: 14px; font-weight: 700; color: var(--oro); text-decoration: none; justify-self: start; }
+.fuente-ev[hidden] { display: none; }
+.retoque { padding: 14px; border-radius: 20px; background: rgba(233,180,76,.1); border: 1px solid rgba(233,180,76,.3); display: grid; gap: 10px; }
+.retoque label { font-weight: 800; font-size: 15px; }
+.retoque div { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.retoque .boton:disabled { opacity: .6; }
+
+.pie { position: relative; z-index: 2; padding: 12px max(20px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); }
+.pie .principal { display: block; max-width: 560px; margin: 0 auto; }
+@media (prefers-reduced-motion: reduce) { .paso, .paso > *, .hoja, .velo { transition-duration: 1ms !important; } .montando img { animation: none; } }
+</style>
+<script src="/inicio/vendor/leaflet.js"></script>
+<script src="/inicio/comun.js"></script>
+<script src="/inicio/rosa.js"></script>
+<script src="/inicio/provincia-datos.js"></script>
+<script src="/inicio/mapa.js"></script>
+<script src="/inicio/zona.js"></script>
+</head>
+<body>
+<div class="fondo"><video id="fondo" src="/inicio/leon.mp4" poster="/inicio/leon-poster.jpg" autoplay muted loop playsinline aria-hidden="true"></video></div>
+
+<div class="app">
+  <header class="cabeza">
+    <div class="progreso" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <div class="barra">
+      <button class="icono" id="atras" type="button" aria-label="Volver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="marca">Planner</span>
+      <a class="icono" href="/" aria-label="Volver al inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    </div>
+  </header>
+
+  <main class="pasos">
+    <section class="paso" aria-labelledby="p1">
+      <h1 class="pregunta marco" id="p1">¿Qué día es el plan?</h1>
+      <div class="chips marco" id="rapidos"></div>
+      <div class="mes marco"><button class="icono" id="mesAntes" type="button" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><b id="mesNombre" aria-live="polite"></b><button class="icono" id="mesDespues" type="button" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button></div>
+      <div class="cal marco" id="cal" aria-label="Calendario"></div>
+      <section class="valorar marco" id="valorar" hidden aria-labelledby="vTit"></section>
+    </section>
+
+    <section class="paso" aria-labelledby="p2">
+      <h1 class="pregunta marco" id="p2">¿Qué te apetece?</h1>
+      <textarea class="texto marco" id="apetece" rows="2" maxlength="500" placeholder="Ej: Cocido, ver monumentos y luego unas cañas…" enterkeyhint="next"></textarea>
+      <div class="chips marco" id="ideas"></div>
+    </section>
+
+    <section class="paso" aria-labelledby="p3">
+      <h1 class="pregunta marco" id="p3">¿Cuánto por persona?</h1>
+      <div class="dial" id="dial">
+        <svg viewBox="-110 -110 220 122" aria-hidden="true">
+          <path d="M-90 0 A90 90 0 0 1 90 0" fill="none" stroke="rgba(243,234,216,.16)" stroke-width="10" stroke-linecap="round"/>
+          <path id="arco" d="M-90 0 A90 90 0 0 1 90 0" fill="none" stroke="#e9b44c" stroke-width="10" pathLength="300"/>
+          <circle class="tir" id="tirMin" r="11" fill="#f3ead8"/><circle class="tir" id="tirMax" r="11" fill="#f3ead8"/>
+        </svg>
+        <div class="valor"><b id="rangoTxt">10 – 50 €</b><small>por persona</small></div>
+      </div>
+      <div class="cajas marco">
+        <label>Mín<input id="pMin" type="text" inputmode="numeric" aria-label="Presupuesto mínimo en euros">€</label>
+        <label>Máx<input id="pMax" type="text" inputmode="numeric" aria-label="Presupuesto máximo en euros">€</label>
+      </div>
+    </section>
+
+    <section class="paso" aria-labelledby="p4">
+      <h1 class="pregunta marco" id="p4">¿Por dónde?</h1>
+      <div class="zona marco" id="zona"></div>
+    </section>
+
+    <section class="paso montando" aria-live="polite">
+      <img id="rosaGira" src="/inicio/rosa.jpg" alt="">
+      <p class="estado" id="estado"></p>
+    </section>
+
+    <section class="paso resultado" id="resultado" aria-labelledby="p6">
+      <h1 class="pregunta marco" id="p6">Tu planazo</h1>
+      <div class="datos marco" id="datos"></div>
+      <div class="ruta-mapa marco" id="rutaMapa"></div>
+      <ol class="tramos marco" id="tramos"></ol>
+      <div class="dos-col marco" id="dosCol">
+        <div class="caja-info" id="prevCaja" hidden><b>Previsión</b><span id="prevTxt"></span></div>
+        <button class="caja-info" type="button" id="compartirCaja" hidden><b>Decidid en grupo</b><span id="compartirTxt">Manda el enlace y votad cada parada.</span></button>
+      </div>
+      <h2 class="seccion marco">La ruta</h2>
+      <div class="marco" id="fichas" style="display:grid;gap:12px"></div>
+      <h2 class="seccion marco" id="eventosTit" hidden>Más cosas ese día</h2>
+      <div class="marco" id="eventos" style="display:grid;gap:8px"></div>
+      <p class="legal marco"><a href="/aviso-legal">Aviso legal</a><a href="/privacidad">Privacidad</a><a href="/cookies">Cookies</a></p>
+    </section>
+  </main>
+
+  <footer class="pie"><button class="principal" id="siguiente" type="button">Siguiente</button></footer>
+</div>
+
+<div class="velo" id="velo"></div>
+<aside class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hTit" aria-hidden="true">
+  <div class="asa"></div>
+  <div class="foto"><img id="hFoto" src="/inicio/leon-poster.jpg" alt=""></div>
+  <div><span class="sub" id="hSub"></span><h2 id="hTit"></h2></div>
+  <p id="hDesc"></p>
+  <div id="hSv"></div>
+  <a class="fuente-ev" id="hFuente" href="#" target="_blank" rel="noopener noreferrer nofollow" hidden>Ver la fuente del evento ↗</a>
+  <dl class="datos-p" id="hDatos"></dl>
+  <div class="botones" id="hBotones"></div>
+  <div class="retoque"><label for="hRet">¿No te convence? Te lo cambio</label><div><input class="campo" id="hRet" maxlength="200" placeholder="Ej: algo más barato, vegetariano…" enterkeyhint="send"><button class="boton" type="button" id="hRetBtn">Cambiar</button></div></div>
+</aside>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = CZ.esc;
+const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
+CZ.registrarVisita();
+ponerRosaSimetrica($("rosaGira"));
+// Los mismos datos que manda la web a /api/plan
+const peticion = { fecha: "", apetece: "", presupuestoMin: 10, presupuestoMax: 50, radio: 15, lat: 42.5987, lon: -5.5671 };
+let zonaNombre = "León";
+
+/* ═══ Fondo: el vídeo se va al plano de lo que pides ═══ */
+const TRAMOS = { catedral: [0, 2.2], montana: [6.2, 8.2], comida: [10, 11.8], noche: [15.6, 17.4], cultura: [8.2, 10] };
+const PALABRAS = [[/cocido|comer|tapa|tapeo|cecina|vino|restaurante/i, "comida"], [/caña|fiesta|copa|bar|húmedo|humedo|noche/i, "noche"], [/monta|naturaleza|ruta|picos|paseo/i, "montana"], [/monumento|museo|cultura|isidoro|botines/i, "cultura"], [/catedral/i, "catedral"]];
+const fondo = $("fondo"); let tramo = null;
+function irATramo(k) { if (k === tramo) return; tramo = k; fondo.style.opacity = .3; setTimeout(() => { try { fondo.currentTime = TRAMOS[k][0] + .05; } catch {} fondo.style.opacity = 1; }, 220); }
+fondo.addEventListener("timeupdate", () => { if (tramo) { const [a, b] = TRAMOS[tramo]; if (fondo.currentTime > b - .1 || fondo.currentTime < a - .5) fondo.currentTime = a + .05; } });
+
+/* ═══ 1 · Fecha: Hoy / Mañana y calendario grande ═══ */
+const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const fechaLarga = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+let mesVista = new Date(hoy.getFullYear(), hoy.getMonth(), 1), elegida = null;
+function elegirDia(d) { elegida = d; peticion.fecha = iso(d); mesVista = new Date(d.getFullYear(), d.getMonth(), 1); pintarCal(); actualizarBoton(); }
+[["Hoy", hoy], ["Mañana", manana]].forEach(([t, d]) => { const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = t; b.dataset.f = iso(d); b.onclick = () => elegirDia(d); $("rapidos").appendChild(b); });
+function pintarCal() {
+  const cal = $("cal"); cal.innerHTML = "";
+  ["L", "M", "X", "J", "V", "S", "D"].forEach((d) => cal.insertAdjacentHTML("beforeend", `<span class="dsem" aria-hidden="true">${d}</span>`));
+  $("mesNombre").textContent = mesVista.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  const hueco = (mesVista.getDay() + 6) % 7, dias = new Date(mesVista.getFullYear(), mesVista.getMonth() + 1, 0).getDate();
+  for (let i = 0; i < hueco; i++) cal.insertAdjacentHTML("beforeend", `<span class="vacio"></span>`);
+  for (let d = 1; d <= dias; d++) {
+    const f = new Date(mesVista.getFullYear(), mesVista.getMonth(), d), b = document.createElement("button");
+    b.type = "button"; b.textContent = d; b.disabled = f < hoy; if (+f === +hoy) b.classList.add("hoy");
+    b.setAttribute("aria-pressed", !!elegida && +f === +elegida);
+    b.setAttribute("aria-label", f.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }));
+    b.onclick = () => elegirDia(f); cal.appendChild(b);
+  }
+  $("mesAntes").disabled = mesVista <= new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  $("rapidos").querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", c.dataset.f === peticion.fecha));
+}
+$("mesAntes").onclick = () => { mesVista = new Date(mesVista.getFullYear(), mesVista.getMonth() - 1, 1); pintarCal(); };
+$("mesDespues").onclick = () => { mesVista = new Date(mesVista.getFullYear(), mesVista.getMonth() + 1, 1); pintarCal(); };
+pintarCal();
+
+/* ═══ ¿Fuiste? ¿Qué tal?: el último plan cuya fecha ya pasó (alimenta el ranking, como siempre) ═══ */
+(function valorar() {
+  const plan = CZ.planPendienteDeValorar(); if (!plan || !plan.paradas || !plan.paradas.length) return;
+  const caja = $("valorar"), resp = {};
+  const OPC = [["bien", "Genial"], ["mal", "Regular"], ["nofui", "No fui"]];
+  caja.innerHTML = `<header><div><b id="vTit">¿Qué tal el plan del ${esc(fechaLarga(plan.fecha))}?</b><span>Con tu respuesta, los próximos planes salen mejores para todos.</span></div>
+    <button class="icono" type="button" id="vCerrar" aria-label="Ahora no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+    <ul>${plan.paradas.map((p, i) => `<li><span>${esc(p.titulo)} <small>${esc(p.hora || "")}</small></span><div class="tres">${OPC.map(([v, t]) => `<button class="chip" type="button" data-i="${i}" data-v="${v}">${t}</button>`).join("")}</div></li>`).join("")}</ul>`;
+  caja.hidden = false;
+  $("vCerrar").onclick = () => { CZ.marcarValorado(plan.id); caja.hidden = true; };
+  caja.querySelectorAll(".tres .chip").forEach((b) => (b.onclick = () => {
+    const i = +b.dataset.i; if (resp[i]) return; resp[i] = b.dataset.v;
+    b.parentElement.querySelectorAll(".chip").forEach((x) => { x.disabled = true; x.setAttribute("aria-pressed", x === b); });
+    fetch("/api/valoracion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id, indice: i, valor: b.dataset.v, votante: CZ.idVotante() }) }).catch(() => {});
+    if (plan.paradas.every((_, k) => resp[k])) { CZ.marcarValorado(plan.id); caja.innerHTML = `<header><div><b>¡Gracias, cazurro!</b><span>Lo tendremos en cuenta en los próximos planes.</span></div></header>`; }
+  }));
+})();
+
+/* ═══ 2 · Qué te apetece, con las mismas sugerencias de siempre ═══ */
+["Tapeo por el Húmedo", "Ver monumentos", "Comer cocido maragato", "Salir de fiesta", "Plan de naturaleza"].forEach((t) => {
+  const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = t;
+  b.onclick = () => { const v = $("apetece").value.trim(); if (!v.toLowerCase().includes(t.toLowerCase())) $("apetece").value = v ? `${v}, ${t.charAt(0).toLowerCase()}${t.slice(1)}` : t; alEscribir(); };
+  $("ideas").appendChild(b);
+});
+function alEscribir() { peticion.apetece = $("apetece").value; const m = PALABRAS.find(([re]) => re.test(peticion.apetece)); if (m) irATramo(m[1]); }
+$("apetece").addEventListener("input", alEscribir);
+
+/* ═══ 3 · Presupuesto mínimo y máximo (0–300 €, como siempre) en el medio anillo, con sus cajas ═══ */
+const TOPE = 300, R = 90;
+const pos = (v) => { const a = Math.PI * (1 - v / TOPE); return [Math.cos(a) * R, -Math.sin(a) * R]; };
+function ponPres(min, max) {
+  min = Math.max(0, Math.min(TOPE, Math.round(min / 5) * 5)); max = Math.max(min, Math.min(TOPE, Math.round(max / 5) * 5));
+  peticion.presupuestoMin = min; peticion.presupuestoMax = max;
+  const [x1, y1] = pos(min), [x2, y2] = pos(max);
+  $("tirMin").setAttribute("cx", x1); $("tirMin").setAttribute("cy", y1); $("tirMax").setAttribute("cx", x2); $("tirMax").setAttribute("cy", y2);
+  $("arco").setAttribute("stroke-dasharray", `0 ${min} ${max - min} ${TOPE}`);
+  const tx = (v) => (v >= TOPE ? "+300" : v);
+  $("rangoTxt").textContent = `${tx(min)} – ${tx(max)} €`;
+  if (document.activeElement !== $("pMin")) $("pMin").value = min; if (document.activeElement !== $("pMax")) $("pMax").value = tx(max);
+}
+let tirando = null;
+function valorDe(e) { const r = $("dial").querySelector("svg").getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height * (110 / 122); let a = Math.atan2(cy - e.clientY, e.clientX - cx); if (a < 0) a = e.clientX < cx ? Math.PI : 0; return (1 - a / Math.PI) * TOPE; }
+$("dial").addEventListener("pointerdown", (e) => {
+  const v = valorDe(e); tirando = Math.abs(v - peticion.presupuestoMin) <= Math.abs(v - peticion.presupuestoMax) && v <= peticion.presupuestoMax ? "min" : "max";
+  try { $("dial").setPointerCapture(e.pointerId); } catch {} moverPres(e);
+});
+function moverPres(e) { if (!tirando) return; const v = valorDe(e); tirando === "min" ? ponPres(Math.min(v, peticion.presupuestoMax), peticion.presupuestoMax) : ponPres(peticion.presupuestoMin, Math.max(v, peticion.presupuestoMin)); }
+$("dial").addEventListener("pointermove", moverPres); $("dial").addEventListener("pointerup", () => { tirando = null; }); $("dial").addEventListener("pointercancel", () => { tirando = null; });
+$("pMin").addEventListener("change", () => ponPres(+$("pMin").value.replace(/\D/g, "") || 0, peticion.presupuestoMax));
+$("pMax").addEventListener("change", () => ponPres(peticion.presupuestoMin, +$("pMax").value.replace(/\D/g, "") || 0));
+ponPres(10, 50);
+
+/* ═══ 4 · Zona: igual que siempre (buscar, mi ubicación, tocar el mapa, 1–150 km, sin salir de León) ═══ */
+let zona = null;
+
+/* ═══ Navegación ═══ */
+const pasos = [...document.querySelectorAll(".pasos > .paso")], N = 4; let actual = 0;
+let PLAN = [], planId = null, rutaMapa = null;
+function mostrar(i) {
+  pasos.forEach((p, k) => { p.classList.toggle("activo", k === i); p.classList.toggle("pasado", k < i); p.setAttribute("aria-hidden", k !== i); p.inert = k !== i; });
+  document.querySelectorAll(".progreso span").forEach((s, k) => s.style.setProperty("--lleno", i >= N ? 1 : k < i ? 1 : k === i ? .5 : 0));
+  $("atras").disabled = i === 0 || i === N;
+  actual = i; actualizarBoton();
+  if (i === 3) setTimeout(() => { if (!zona) zona = crearSelectorZona($("zona"), { km: peticion.radio, alCambiar: (z) => { peticion.lat = z.lat; peticion.lon = z.lon; peticion.radio = z.km; zonaNombre = z.nombre; } }); else zona.repintar(); });
+  if (i === N + 1) setTimeout(() => rutaMapa && rutaMapa.reencuadrar());
+}
+function actualizarBoton() {
+  const b = $("siguiente");
+  b.hidden = actual === N || (actual === N + 1 && !planId);
+  b.textContent = actual === N - 1 ? "Descubrir el plan" : actual === N + 1 ? "Compartir el plan" : "Siguiente";
+  b.disabled = actual === 0 && !peticion.fecha;
+}
+$("siguiente").onclick = () => {
+  if (actual === N + 1) { compartir(); return; }
+  if (actual === 0 && !peticion.fecha) return;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (actual === N - 1) { montar(); return; }
+  if (actual < N - 1) mostrar(actual + 1);
+};
+$("atras").onclick = () => { if (actual === N + 1) mostrar(N - 1); else if (actual > 0 && actual < N) mostrar(actual - 1); };
+async function compartir() {
+  if (!planId) return;
+  const r = await CZ.compartirPlan(planId);
+  if (r === "copiado") { $("siguiente").textContent = "Enlace copiado"; $("compartirTxt").textContent = "Enlace copiado. Pégalo en el grupo."; setTimeout(actualizarBoton, 1600); }
+  else if (r === "error") CZ.avisar("No hemos podido copiar el enlace. Prueba otra vez.");
+}
+$("compartirCaja").onclick = compartir;
+
+/* ═══ Montando: la web llama a /api/plan y mientras enseña los mismos pasos de siempre ═══ */
+const PASOS_CARGA = ["Mirando la previsión del tiempo", "Buscando sitios dentro de tu zona", "Ajustándolo a tu presupuesto", "Comprobando horarios y fotos reales", "Trazando la ruta más cazurra"];
+let montandoYa = false;
+async function montar() {
+  if (montandoYa) return; montandoYa = true;
+  mostrar(N);
+  let k = 0; const e = $("estado"); e.textContent = PASOS_CARGA[0];
+  const t = setInterval(() => { if (k >= PASOS_CARGA.length - 1) return; k++; e.classList.add("cambia"); setTimeout(() => { e.textContent = PASOS_CARGA[k]; e.classList.remove("cambia"); }, 220); }, reducir ? 1200 : 2600);
+  try {
+    const res = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fecha: peticion.fecha, apetece: peticion.apetece, presupuestoMin: peticion.presupuestoMin, presupuestoMax: peticion.presupuestoMax, radio: peticion.radio || 1, lat: peticion.lat, lon: peticion.lon }) });
+    const datos = await res.json().catch(() => null);
+    if (datos && datos.exito && Array.isArray(datos.plan) && datos.plan.length) {
+      PLAN = datos.plan; planId = datos.planId || null;
+      CZ.recordarPlan(planId, peticion.fecha, PLAN);
+      pintarResultado(datos);
+      mostrar(N + 1);
+    } else { CZ.avisar((datos && datos.mensaje) || "No hemos podido montar el plan. Prueba otra vez."); mostrar(N - 1); }
+  } catch { CZ.avisar("Error de conexión. Prueba otra vez en un momento."); mostrar(N - 1); }
+  finally { clearInterval(t); montandoYa = false; }
+}
+
+/* ═══ Resultado ═══ */
+const conSitio = (p) => p.lat != null && p.lon != null && p.lat !== "" && Number.isFinite(+p.lat) && Number.isFinite(+p.lon);
+function pintarResultado(datos) {
+  $("datos").innerHTML = [fechaLarga(peticion.fecha), $("rangoTxt").textContent, `${peticion.radio} km · ${zonaNombre}`].map((t) => `<span>${esc(t)}</span>`).join("");
+  $("prevCaja").hidden = !datos.prevision; $("prevTxt").textContent = datos.prevision || "";
+  $("compartirCaja").hidden = !planId;
+  $("dosCol").hidden = !datos.prevision && !planId;
+  pintarFichas();
+  pintarEventos(datos.masEseDia || []);
+  pintarRuta();
+  $("resultado").scrollTop = 0;
+}
+function pintarRuta() {
+  const puntos = PLAN.map((p, i) => ({ lat: +p.lat, lon: +p.lon, n: i + 1, titulo: p.titulo, alTocar: () => abrir(i), ok: conSitio(p) })).filter((p) => p.ok);
+  $("rutaMapa").hidden = !puntos.length;
+  if (puntos.length) { if (!rutaMapa) rutaMapa = crearMapa($("rutaMapa")); setTimeout(() => rutaMapa.paradas(puntos)); }
+  // lo que hay de una parada a la siguiente: andando si está cerca, en coche si no
+  const filas = [];
+  for (let i = 1; i < PLAN.length; i++) {
+    const a = PLAN[i - 1], b = PLAN[i]; if (!conSitio(a) || !conSitio(b)) continue;
+    const km = CZ.distanciaKm([+a.lat, +a.lon], [+b.lat, +b.lon]) * 1.3; // por las calles, algo más que en línea recta
+    const andando = km <= 2.5, min = Math.max(1, Math.round((km / (andando ? 4.8 : 45)) * 60));
+    filas.push(`<li><span class="n">${i}<i>→</i>${i + 1}</span><span class="q">${esc(b.titulo)}</span><span class="d">${CZ.km(km)}<small>${min} min ${andando ? "andando" : "en coche"}</small></span></li>`);
+  }
+  $("tramos").innerHTML = filas.join(""); $("tramos").hidden = !filas.length;
+}
+function pintarFichas() {
+  $("fichas").innerHTML = PLAN.map((p, i) => `
+    <button class="ficha" type="button" data-i="${i}">
+      <img src="${esc(CZ.webSegura(p.fotoOficial) || "/inicio/leon-poster.jpg")}" alt="" decoding="async"${i ? ' loading="lazy"' : ""}><span class="num">${i + 1}</span>
+      <span class="info"><span class="hora">${esc(p.hora || "")}</span><h3>${esc(p.titulo)}</h3>${CZ.hay(p.lugar) ? `<span class="lugar">${esc(p.lugar)}</span>` : ""}<p>${esc(p.descripcion || "")}</p>
+      <span class="pie-f"><span>${CZ.hay(p.resenas) ? `★ ${esc(p.resenas)}` : ""}</span><span>Ver detalles →</span></span></span>
+    </button>`).join("");
+  $("fichas").querySelectorAll(".ficha").forEach((b) => (b.onclick = () => abrir(+b.dataset.i)));
+  $("fichas").querySelectorAll("img").forEach((im) => im.addEventListener("error", () => { if (!im.src.endsWith("leon-poster.jpg")) im.src = "/inicio/leon-poster.jpg"; }, { once: true }));
+}
+function pintarEventos(lista) {
+  const vistos = new Set(), ev = lista.filter((e) => { const k = String(e.titulo || "").toLowerCase(); if (!k || vistos.has(k)) return false; vistos.add(k); return true; });
+  $("eventosTit").hidden = !ev.length;
+  const fila = (e) => {
+    const h = String(e.hora || "").trim(), corta = /^\d{1,2}[:.]\d{2}/.test(h);
+    const donde = [e.lugar, e.localidad].filter(CZ.hay).join(" · "), fuente = CZ.webSegura(e.fuente);
+    return `<div class="evento"><b class="h${corta ? "" : " larga"}">${esc(corta ? h.slice(0, 5) : h || "Todo el día")}</b><span><strong>${esc(e.titulo)}</strong>${esc(donde)}
+      ${CZ.hay(e.precio) || fuente ? `<span class="extra">${CZ.hay(e.precio) ? `<em>${esc(e.precio)}</em>` : ""}${fuente ? `<a href="${esc(fuente)}" target="_blank" rel="noopener noreferrer nofollow">Ver fuente ↗</a>` : ""}</span>` : ""}</span></div>`;
+  };
+  const VER = 6;
+  $("eventos").innerHTML = ev.slice(0, VER).map(fila).join("") + (ev.length > VER ? `<button class="chip mas-eventos" type="button" id="masEv">Ver ${ev.length - VER} más</button>` : "");
+  if (ev.length > VER) $("masEv").onclick = () => { $("eventos").innerHTML = ev.map(fila).join(""); };
+}
+
+/* ═══ Hoja de detalle: Street View, precio, horario, llamar, web, cómo llegar y "te lo cambio" ═══ */
+const ICO = {
+  tel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>',
+  web: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+  ir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+};
+let abierta = null;
+function abrir(i) {
+  const p = PLAN[i]; if (!p) return; abierta = i;
+  CZ.baliza("detalle", { lugarId: p.lugarId });
+  const foto = $("hFoto"); foto.onerror = () => { foto.onerror = null; foto.src = "/inicio/leon-poster.jpg"; };
+  foto.src = CZ.webSegura(p.fotoOficial) || "/inicio/leon-poster.jpg"; foto.alt = p.titulo || "";
+  $("hSub").textContent = `Parada ${i + 1}${p.hora ? ` · ${p.hora}` : ""}`; $("hTit").textContent = p.titulo || ""; $("hDesc").textContent = p.descripcion || "";
+  // Street View: la vista 360º se puede arrastrar; si solo hay foto exterior, se enseña la foto
+  const sv = CZ.webSegura(p.streetView);
+  $("hSv").className = sv ? "sv" : ""; $("hSv").innerHTML = !sv ? "" : sv.includes("embed")
+    ? `<span>Vista 360º · Arrastra</span><iframe src="${esc(sv)}" title="Vista 360º de ${esc(p.titulo)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
+    : `<span>Vista exterior</span><img src="${esc(sv)}" alt="Vista exterior de ${esc(p.titulo)}" loading="lazy" decoding="async">`;
+  const fuente = CZ.webSegura(p.fuente); $("hFuente").hidden = !fuente; if (fuente) $("hFuente").href = fuente;
+  $("hDatos").innerHTML = [["Precio", p.precio], ["Horario", p.horario], ["Cómo llegar", p.transporte], ["Dónde", p.lugar], ["Reseñas", CZ.hay(p.resenas) ? `★ ${p.resenas}` : ""]]
+    .filter(([, v]) => CZ.hay(v)).map(([a, b]) => `<div><dt>${a}</dt><dd>${a === "Horario" ? esc(b).split(/\s*\|\s*/).map((l) => l.charAt(0).toUpperCase() + l.slice(1)).join("<br>") : esc(b)}</dd></div>`).join("");
+  const destino = conSitio(p) ? `${+p.lat},${+p.lon}` : `${p.titulo}, ${p.lugar || "León"}`;
+  const web = CZ.hay(p.web) ? CZ.webSegura(p.web) : "", tel = CZ.hay(p.telefono) && String(p.telefono).replace(/\D/g, "").length >= 6;
+  $("hBotones").innerHTML = [
+    `<a class="uno" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}" target="_blank" rel="noopener noreferrer">${ICO.ir}Cómo llegar</a>`,
+    tel ? `<a class="dos" id="hTel" href="${esc(CZ.telSeguro(p.telefono))}">${ICO.tel}Llamar</a>` : "",
+    web ? `<a class="dos" id="hWeb" href="${esc(web)}" target="_blank" rel="noopener noreferrer">${ICO.web}Web</a>` : "",
+    `<button class="dos" type="button" id="hCerrar">Cerrar</button>`,
+  ].join("");
+  if (tel) $("hTel").onclick = () => CZ.baliza("llamar", { lugarId: p.lugarId });
+  if (web) $("hWeb").onclick = () => CZ.baliza("web", { lugarId: p.lugarId });
+  $("hCerrar").onclick = cerrar;
+  $("hoja").scrollTop = 0;
+  $("velo").classList.add("on"); $("hoja").classList.add("on"); $("hoja").setAttribute("aria-hidden", "false"); $("hCerrar").focus({ preventScroll: true });
+}
+function cerrar() {
+  $("velo").classList.remove("on"); $("hoja").classList.remove("on"); $("hoja").setAttribute("aria-hidden", "true");
+  setTimeout(() => { if (!$("hoja").classList.contains("on")) $("hSv").innerHTML = ""; }, 520); // el iframe de Street View deja de gastar
+  if (abierta != null) { const f = document.querySelector(`.ficha[data-i="${abierta}"]`); if (f) f.focus({ preventScroll: true }); }
+  abierta = null;
+}
+$("velo").onclick = cerrar;
+addEventListener("keydown", (e) => { if (e.key === "Escape" && abierta != null) cerrar(); });
+// arrastrar la hoja hacia abajo la cierra (con un tirón rápido basta)
+(() => { const h = $("hoja"); let y0 = null, t0 = 0;
+  h.addEventListener("pointerdown", (e) => { if (h.scrollTop > 0 || e.target.closest("input,button,a,iframe")) return; y0 = e.clientY; t0 = performance.now(); h.style.transition = "none"; });
+  h.addEventListener("pointermove", (e) => { if (y0 == null) return; const d = Math.max(0, e.clientY - y0); h.style.transform = `translateY(${d}px)`; });
+  const fin = (e) => { if (y0 == null) return; const d = e.clientY - y0, v = d / (performance.now() - t0); h.style.transition = ""; h.style.transform = ""; y0 = null; if (d > 120 || v > .5) cerrar(); };
+  h.addEventListener("pointerup", fin); h.addEventListener("pointercancel", fin);
+})();
+// "¿No te convence? Te lo cambio": /api/retocar con lo mismo que manda la web de siempre
+let retocando = false;
+async function retocar() {
+  const instruccion = $("hRet").value.trim(), i = abierta;
+  if (!instruccion || i == null || retocando) return;
+  retocando = true; $("hRetBtn").disabled = true; $("hRetBtn").textContent = "Buscando…";
+  try {
+    const res = await fetch("/api/retocar", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itinerarioActual: PLAN, indice: i, instruccion, fecha: peticion.fecha, presupuestoMin: peticion.presupuestoMin, presupuestoMax: peticion.presupuestoMax, radio: peticion.radio || 1, lat: peticion.lat, lon: peticion.lon, planId }) });
+    const datos = await res.json().catch(() => null);
+    if (datos && datos.exito && datos.parada) {
+      CZ.actualizarParadaRecordada(planId, i, datos.parada);
+      PLAN = PLAN.map((p, k) => (k === i ? datos.parada : p));
+      $("hRet").value = ""; pintarFichas(); pintarRuta(); abrir(i);
+    } else CZ.avisar((datos && datos.mensaje) || "No hemos podido cambiar este sitio. Prueba con otras palabras.");
+  } catch { CZ.avisar("Error al intentar cambiar el sitio. Prueba otra vez."); }
+  finally { retocando = false; $("hRetBtn").disabled = false; $("hRetBtn").textContent = "Cambiar"; }
+}
+$("hRetBtn").onclick = retocar;
+$("hRet").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); retocar(); } });
+
+mostrar(0);
+fondo.play && fondo.play().catch(() => {});
+</script>
+</body>
+</html>
