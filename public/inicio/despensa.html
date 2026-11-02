@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#07060a">
+<title>Despensa de León: dónde comprar cecina, quesos, pan y vino de León · Cazurronics</title>
+<meta name="description" content="Escribe qué quieres comprar y hasta dónde te mueves, y te damos las mejores tiendas de la provincia de León. Morcilla, cecina, pan, quesos, mantecadas, vino y más.">
+<link rel="canonical" href="https://cazurronics.es/despensa">
+<meta property="og:title" content="La Despensa de Cazurronics">
+<meta property="og:description" content="Las mejores tiendas de la provincia de León para cecina, quesos, pan, vino y más.">
+<meta property="og:image" content="https://cazurronics.es/opengraph-image">
+<meta property="og:locale" content="es_ES">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
+<link rel="stylesheet" href="/inicio/vendor/leaflet.css">
+<link rel="stylesheet" href="/inicio/comun.css">
+<style>
+/* Layout: la misma Despensa de siempre (qué quieres comprar o tu lista, atajos por producto, zona desde 200 m, tiendas
+   agrupadas por lo que compras, mapa con las tiendas y ruta por la mejor de cada cosa), con la cara nueva. */
+.app { position: fixed; inset: 0; height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; }
+.pasos { position: relative; z-index: 1; overflow: hidden; }
+.paso { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px max(20px, env(safe-area-inset-right, 0px)) 24px max(20px, env(safe-area-inset-left, 0px));
+  opacity: 0; transform: translateX(28%); pointer-events: none; visibility: hidden; transition: transform 520ms var(--ease-ios), opacity 360ms ease, visibility 0s 520ms; }
+.paso.activo { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition: transform 520ms var(--ease-ios), opacity 360ms ease, visibility 0s; }
+.paso.pasado { transform: translateX(-18%); }
+.paso > * { flex-shrink: 0; } /* en una pantalla larga nada se aplasta: se hace scroll */
+.marco { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+.texto { width: 100%; box-sizing: border-box; min-height: 110px; resize: none; border: 0; border-bottom: 2px solid var(--borde); background: transparent; color: var(--crema); font: 500 24px/1.25 var(--letra); padding: 8px 0 12px; outline: none; }
+.texto::placeholder { color: rgba(243, 234, 216, .38); }
+.texto:focus { border-color: var(--oro); }
+.aviso { margin: 0; color: #f3a99b; font-weight: 700; font-size: 14px; min-height: 1.2em; }
+/* atajos por producto, con foto los que la tienen */
+.atajos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.atajo { position: relative; aspect-ratio: 1; border: 0; padding: 0; border-radius: 18px; overflow: hidden; background: var(--vidrio); color: var(--crema); cursor: pointer; transition: transform 120ms ease-out; }
+.atajo:active { transform: scale(.96); }
+.atajo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.atajo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,10,.85), rgba(7,6,10,0) 60%); }
+.atajo b { position: absolute; z-index: 1; left: 10px; right: 10px; bottom: 8px; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 19px; line-height: .95; text-align: left; }
+.mas { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * max(20px, env(safe-area-inset-left, 0px))); padding: 0 max(20px, env(safe-area-inset-left, 0px)); }
+.mas::-webkit-scrollbar { display: none; }
+.mas .chip { flex: none; }
+@media (min-width: 600px) { .mas { flex-wrap: wrap; overflow: visible; margin: 0 auto; padding: 0; } }
+.zona { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.buscando { align-items: center; justify-content: center; text-align: center; }
+.buscando img { width: min(56vw, 240px); border-radius: 50%; animation: gira 10s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+/* resultados */
+.cabecera-r { display: grid; gap: 6px; }
+.cabecera-r small { color: var(--oro); font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cabecera-r .pregunta { font-size: clamp(40px, 12vw, 64px); }
+.cabecera-r p { margin: 0; color: #ddd4c4; font-size: 15px; line-height: 1.45; }
+.tiendas-mapa { height: 280px; flex: none; }
+.ruta { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 16px; border-radius: 22px; background: var(--crema); color: var(--noche); text-decoration: none; transition: transform 120ms ease-out; }
+.ruta:active { transform: scale(.98); }
+.ruta b { font-size: 16px; } .ruta span { display: block; font-size: 13px; opacity: .7; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ruta > span:first-child { min-width: 0; }
+.grupo h3 { margin: 6px 0 8px; font-size: 20px; font-weight: 800; }
+.grupo h3::first-letter { text-transform: uppercase; }
+.grupo ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.tienda { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 16px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); }
+.tienda .n { grid-row: 1 / span 6; width: 34px; height: 34px; border-radius: 50%; background: var(--crema); color: var(--noche); font-weight: 900; display: grid; place-items: center; }
+.tienda > :not(.n) { grid-column: 2; text-align: left; min-width: 0; }
+.tienda h4 { margin: 0; font-size: 18px; font-weight: 800; }
+.tienda .loc { font-size: 14px; color: var(--gris); } .tienda .loc b { color: var(--crema); font-weight: 700; margin-left: 6px; }
+.tienda .premio { font-size: 13px; font-weight: 700; color: var(--oro); margin-top: 4px; }
+.tienda p { margin: 4px 0 0; font-size: 15px; line-height: 1.45; color: #ddd4c4; }
+.tienda .esp { font-size: 13px; color: var(--gris); } .tienda .esp b { color: var(--crema); font-weight: 700; }
+.tienda .acc { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
+.tienda .acc a { height: 42px; padding: 0 14px; border-radius: 999px; display: inline-flex; align-items: center; text-decoration: none; font: 700 14px var(--letra); transition: transform 120ms ease-out; }
+.tienda .acc a:active { transform: scale(.96); }
+.tienda .acc .uno { background: var(--crema); color: var(--noche); padding: 0 16px; } .tienda .acc .dos { color: var(--gris); }
+.vacio { padding: 20px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); text-align: center; }
+.vacio b { display: block; font-size: 16px; } .vacio span { display: block; color: var(--gris); font-size: 14px; margin-top: 4px; }
+.nota { color: var(--gris); font-size: 13px; margin: 0; }
+.pie { position: relative; z-index: 2; padding: 12px max(20px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); }
+.pie .principal { display: block; max-width: 560px; margin: 0 auto; }
+@media (prefers-reduced-motion: reduce) { .paso { transition-duration: 1ms !important; } .buscando img { animation: none; } }
+</style>
+<script src="/inicio/vendor/leaflet.js"></script>
+<script src="/inicio/comun.js"></script>
+<script src="/inicio/rosa.js"></script>
+<script src="/inicio/provincia-datos.js"></script>
+<script src="/inicio/mapa.js"></script>
+<script src="/inicio/zona.js"></script>
+</head>
+<body>
+<div class="fondo"><video id="fondo" src="/inicio/leon.mp4" poster="/inicio/leon-poster.jpg" autoplay muted loop playsinline aria-hidden="true"></video></div>
+<div class="app">
+  <header class="cabeza">
+    <div class="progreso" aria-hidden="true" style="grid-template-columns:repeat(2,1fr)"><span></span><span></span></div>
+    <div class="barra">
+      <button class="icono" id="atras" type="button" aria-label="Volver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="marca">Despensa</span>
+      <a class="icono" href="/" aria-label="Volver al inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    </div>
+  </header>
+  <main class="pasos">
+    <section class="paso" aria-labelledby="d1">
+      <h1 class="pregunta marco" id="d1">¿Qué quieres comprar?</h1>
+      <textarea class="texto marco" id="texto" rows="3" maxlength="300" placeholder="Una cosa o tu lista: morcilla, pan de leña, nicanores…" enterkeyhint="next"></textarea>
+      <p class="aviso marco" id="aviso" role="status"></p>
+      <div class="atajos marco" id="atajos"></div>
+      <div class="mas marco" id="mas" aria-label="Más productos"></div>
+    </section>
+    <section class="paso" aria-labelledby="d2">
+      <h1 class="pregunta marco" id="d2">¿Hasta dónde te mueves?</h1>
+      <div class="zona marco" id="zona"></div>
+    </section>
+    <section class="paso buscando" aria-live="polite">
+      <img id="rosaGira" src="/inicio/rosa.jpg" alt="">
+      <p style="font-size:20px;font-weight:600;margin:0">Buscando en las tiendas de la zona…</p>
+    </section>
+    <section class="paso" id="resultado" aria-labelledby="d4">
+      <div class="cabecera-r marco"><small id="para"></small><h1 class="pregunta" id="d4"></h1><p id="frase"></p></div>
+      <div class="tiendas-mapa marco" id="tiendasMapa"></div>
+      <a class="ruta marco" id="ruta" href="#" target="_blank" rel="noopener noreferrer" hidden><span><b>Ruta por la mejor de cada cosa</b><span id="rutaTxt"></span></span><span aria-hidden="true">→</span></a>
+      <div class="marco" id="grupos" style="display:grid;gap:14px"></div>
+      <p class="nota marco" id="nota" hidden></p>
+      <p class="legal marco"><a href="/aviso-legal">Aviso legal</a><a href="/privacidad">Privacidad</a><a href="/cookies">Cookies</a></p>
+    </section>
+  </main>
+  <footer class="pie"><button class="principal" id="siguiente" type="button">Siguiente</button></footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = CZ.esc;
+const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
+CZ.registrarVisita();
+ponerRosaSimetrica($("rosaGira"));
+// Lo mismo que manda la web a /api/despensa/buscar
+const peticion = { texto: "", lat: 42.5987, lon: -5.5671, radio: 15 };
+let zonaNombre = "León", zona = null;
+
+// Los mismos atajos por producto que la web; los primeros con foto
+const PRODUCTOS = [["cecina", "Cecina", "cecina2"], ["quesos", "Quesos", "valdeon"], ["vino", "Vino", "bierzo"], ["dulces", "Mantecadas y dulces", "mantecadas"], ["botillo", "Botillo", "botillo"], ["legumbres", "Legumbres", "cocido"],
+  ["morcilla", "Morcilla"], ["embutidos", "Chorizo y embutido"], ["pan", "Pan artesano"], ["empanadas", "Empanadas"], ["pasteles", "Pastelerías"], ["chocolate", "Chocolate"], ["cerveza", "Cerveza artesana"], ["miel", "Miel"], ["pimientos", "Pimientos y conservas"], ["carne", "Carnicerías"], ["pescado", "Pescaderías"], ["fruta", "Fruta y verdura"]];
+const ponerTexto = (n) => { const v = $("texto").value.trim(); if (!v.toLowerCase().includes(n.toLowerCase())) $("texto").value = v ? `${v}, ${n.toLowerCase()}` : n; peticion.texto = $("texto").value; $("aviso").textContent = ""; };
+PRODUCTOS.forEach(([id, n, img]) => {
+  const b = document.createElement("button"); b.type = "button";
+  if (img) { b.className = "atajo"; b.innerHTML = `<img src="/inicio/img/${img}.jpg" alt="" loading="lazy"><b>${esc(n)}</b>`; b.setAttribute("aria-label", n); $("atajos").appendChild(b); }
+  else { b.className = "chip"; b.textContent = n; $("mas").appendChild(b); }
+  b.onclick = () => ponerTexto(n);
+});
+$("texto").addEventListener("input", () => { peticion.texto = $("texto").value; $("aviso").textContent = ""; });
+
+const pasos = [...document.querySelectorAll(".pasos > .paso")]; let actual = 0;
+function mostrar(i) {
+  pasos.forEach((p, k) => { p.classList.toggle("activo", k === i); p.classList.toggle("pasado", k < i); p.setAttribute("aria-hidden", k !== i); p.inert = k !== i; });
+  document.querySelectorAll(".progreso span").forEach((s, k) => s.style.setProperty("--lleno", i >= 2 ? 1 : k < i ? 1 : k === i ? .5 : 0));
+  $("atras").disabled = i === 0 || i === 2; $("siguiente").hidden = i === 2; actual = i;
+  $("siguiente").textContent = i === 0 ? "Siguiente" : i === 1 ? "Buscar tiendas" : "Nueva búsqueda";
+  if (i === 1) setTimeout(() => { if (!zona) zona = crearSelectorZona($("zona"), { fino: true, km: peticion.radio, alCambiar: (z) => { peticion.lat = z.lat; peticion.lon = z.lon; peticion.radio = z.km; zonaNombre = z.nombre; } }); else zona.repintar(); });
+  if (i === 3) setTimeout(() => mapaT && mapaT.reencuadrar());
+}
+$("siguiente").onclick = () => {
+  if (actual === 0) { if (peticion.texto.trim().length < 3) { $("aviso").textContent = "Escribe qué quieres comprar"; $("texto").focus(); return; } $("texto").blur(); mostrar(1); }
+  else if (actual === 1) buscar();
+  else if (actual === 3) { $("texto").value = ""; peticion.texto = ""; mostrar(0); }
+};
+$("atras").onclick = () => { if (actual === 3) mostrar(1); else if (actual > 0) mostrar(actual - 1); };
+
+/* ═══ Búsqueda real: /api/despensa/buscar, la IA elige entre las tiendas comprobadas ═══ */
+let buscandoYa = false;
+async function buscar() {
+  if (buscandoYa) return; buscandoYa = true;
+  mostrar(2);
+  const radio = peticion.radio >= 150 ? 200 : peticion.radio; // 150 km o más es "toda la provincia"
+  const espera = new Promise((r) => setTimeout(r, reducir ? 0 : 900)); // que se vea que busca, sin hacerlo esperar
+  try {
+    const res = await fetch("/api/despensa/buscar", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: peticion.texto, lat: peticion.lat, lon: peticion.lon, radio, presupuesto: "igual" }) });
+    const d = await res.json().catch(() => null);
+    await espera;
+    if (!d || !d.exito) { CZ.avisar((d && d.mensaje) || "No hemos podido buscar. Prueba otra vez."); mostrar(1); return; }
+    pintar(d); mostrar(3);
+  } catch { CZ.avisar("Sin conexión. Prueba otra vez en un momento."); mostrar(1); }
+  finally { buscandoYa = false; }
+}
+
+// Ruta en Google Maps por la mejor tienda de cada cosa: siempre a la más cercana desde donde estás, máximo 4 paradas
+function rutaMaps(tiendas, origen) {
+  let quedan = tiendas.filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lon)).slice(0, 4);
+  if (quedan.length < 2) return null;
+  const orden = []; let aqui = origen;
+  const d = (a, b) => CZ.distanciaKm([a.lat, a.lon], [b.lat, b.lon]);
+  while (quedan.length) { const sig = quedan.reduce((a, b) => (d(aqui, b) < d(aqui, a) ? b : a)); orden.push(sig); quedan = quedan.filter((t) => t !== sig); aqui = sig; }
+  const sitio = (t) => `${t.nombre}, ${t.localidad}`, destino = orden[orden.length - 1], intermedias = orden.slice(0, -1);
+  const p = new URLSearchParams({ api: "1", travelmode: "driving", destination: sitio(destino), origin: `${origen.lat},${origen.lon}` });
+  if (destino.placeId) p.set("destination_place_id", destino.placeId);
+  p.set("waypoints", intermedias.map(sitio).join("|"));
+  if (intermedias.every((t) => t.placeId)) p.set("waypoint_place_ids", intermedias.map((t) => t.placeId).join("|"));
+  return { url: `https://www.google.com/maps/dir/?${p}`, paradas: orden };
+}
+const enlaceMaps = (t) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${t.nombre}, ${t.localidad}`)}${t.placeId ? `&query_place_id=${encodeURIComponent(t.placeId)}` : ""}`;
+const enlaceEsTuTienda = (t) => `mailto:amago6569@cazurronics.es?subject=${encodeURIComponent(`Mi tienda en la Despensa de León: ${t.nombre}`)}&body=${encodeURIComponent(`Hola, soy de ${t.nombre}${t.localidad ? ` (${t.localidad})` : ""}. He visto mi tienda en la Despensa de León y quiero información.`)}`;
+
+let mapaT = null;
+function pintar(d) {
+  // grupos por lo que compras (máximo 3 tiendas en cada uno), numerados seguidos como sus chinchetas
+  const grupos = [];
+  for (const t of d.tiendas || []) {
+    const clave = String(t.para || "").toLowerCase();
+    let g = grupos.find((x) => x.clave === clave); if (!g) { g = { clave, titulo: t.para, tiendas: [] }; grupos.push(g); }
+    if (g.tiendas.length < 3) g.tiendas.push(t);
+  }
+  let n = 0; grupos.forEach((g) => g.tiendas.forEach((t) => (t.n = ++n)));
+  const todas = grupos.flatMap((g) => g.tiendas);
+  const radioMostrado = d.radio >= 200 ? 150 : d.radio || peticion.radio, sitio = d.sitio || zonaNombre;
+  $("para").textContent = `Para «${peticion.texto.trim()}»`;
+  $("d4").textContent = `Tus tiendas ${radioMostrado >= 150 ? "en toda la provincia" : `a ${CZ.km(radioMostrado)} de ${sitio}`}`;
+  $("frase").textContent = d.frase || ""; $("frase").hidden = !d.frase;
+  $("grupos").innerHTML = !todas.length
+    ? `<div class="vacio"><b>${d.buscamos ? `Aún no tenemos «${esc(d.buscamos)}» comprobado por aquí.` : "No hay nada que encaje en esta zona."}</b><span>${d.buscamos ? "Esta noche lo buscamos. Vuelve mañana y repite la búsqueda." : "Vuelve atrás y sube la distancia para buscar más lejos."}</span></div>`
+    : grupos.filter((g) => g.tiendas.length).map((g) => `<div class="grupo">${grupos.length > 1 ? `<h3>${esc(g.titulo)}</h3>` : ""}<ol>${g.tiendas.map((t) => {
+      const fuente = CZ.webSegura(t.fuente);
+      return `<li class="tienda"><span class="n" aria-label="Número ${t.n} en el mapa">${t.n}</span><h4>${esc(t.nombre)}</h4>
+        <span class="loc">${esc([t.localidad, t.km != null && `a ${String(t.km).replace(".", ",")} km`].filter(Boolean).join(" · "))}${t.nota && t.resenas >= 5 ? `<b aria-label="${esc(t.nota)} estrellas en Google Maps, ${esc(t.resenas)} reseñas">★ ${esc(String(t.nota).replace(".", ","))} <span style="display:inline;color:var(--gris);font-weight:500">(${esc(t.resenas)})</span></b>` : ""}</span>
+        ${(t.premios || []).slice(0, 2).map((p) => `<span class="premio">${esc(p)}</span>`).join("")}
+        ${t.motivo ? `<p>${esc(t.motivo)}</p>` : ""}
+        ${t.especialidad ? `<span class="esp"><b>Conocida por:</b> ${esc(t.especialidad)}${t.deResenas ? " · según sus reseñas de Google" : ""}</span>` : ""}
+        <div class="acc"><a class="uno" href="${esc(enlaceMaps(t))}" target="_blank" rel="noopener noreferrer">Cómo llegar</a>${fuente ? `<a class="dos" href="${esc(fuente)}" target="_blank" rel="noopener noreferrer nofollow">Fuente ↗</a>` : ""}<a class="dos" href="${esc(enlaceEsTuTienda(t))}">¿Es tu tienda? Escríbenos</a></div></li>`;
+    }).join("")}</ol></div>`).join("");
+  const pines = todas.filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lon)).map((t) => ({ lat: t.lat, lon: t.lon, n: t.n, titulo: t.nombre, alTocar: () => window.open(enlaceMaps(t), "_blank", "noopener") }));
+  $("tiendasMapa").hidden = !pines.length;
+  if (pines.length) { if (!mapaT) mapaT = crearMapa($("tiendasMapa")); setTimeout(() => mapaT.paradas(pines, { ruta: false })); }
+  // ruta por la mejor de cada cosa, solo si buscas dos o más, como siempre
+  const ruta = grupos.length > 1 ? rutaMaps(grupos.map((g) => g.tiendas[0]).filter(Boolean), { lat: peticion.lat, lon: peticion.lon }) : null;
+  $("ruta").hidden = !ruta;
+  if (ruta) { $("rutaTxt").textContent = ruta.paradas.map((t) => t.nombre).join(" → "); $("ruta").href = ruta.url; }
+  $("nota").hidden = !(todas.length && d.buscamos); $("nota").textContent = d.buscamos ? `«${d.buscamos}» lo buscamos esta noche en más tiendas. Mañana habrá más.` : "";
+  $("resultado").scrollTop = 0;
+}
+mostrar(0);
+const v = $("fondo"); v.addEventListener("loadedmetadata", () => { v.currentTime = 10.05; }); v.addEventListener("timeupdate", () => { if (v.currentTime > 11.7) v.currentTime = 10.05; });
+v.play && v.play().catch(() => {});
+</script>
+</body>
+</html>

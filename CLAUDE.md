@@ -39,6 +39,7 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 
 - Sistema visual "Vidriera": usa las clases de `src/lib/estilos.js` (`GLASS`, `BOTON_CTA`, `PRESS`…) en vez de inventar estilos nuevos.
 - Solo Tailwind y React. Mobile first: debe sentirse como una app nativa en el móvil, con los botones principales al alcance del pulgar.
+- La cara nueva (portada con la rosa, /planner y /despensa, noviembre de 2026) vive en `public/inicio/` como páginas estáticas que llaman a las mismas APIs; `next.config.mjs` las sirve con `rewrites`. Es el diseño que aprobó Alejandro tal cual: si la tocas, mantén ese aspecto (oscuro, Archivo condensada, una pregunta por pantalla). Las páginas viejas (`src/app/page.js`, `src/app/despensa/page.js`) siguen ahí por si hay que volver atrás.
 
 ## Comprobar antes de dar algo por hecho
 

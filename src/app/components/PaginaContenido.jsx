@@ -21,7 +21,7 @@ export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ct
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
         <header className={`${GLASS} sticky top-3 z-50 rounded-full pl-4 pr-2 py-2 flex items-center justify-between gap-2`}>
           <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-slate-900"><span className="text-2xl">🦁</span><span className="hidden sm:inline">Cazurronics</span></Link>
-          <Link href={`/?ref=${ctaRef}`} className={`${BOTON_CTA} h-11 px-4 text-sm`}>✨ Créame un plan</Link>
+          <Link href={`/planner?ref=${ctaRef}`} className={`${BOTON_CTA} h-11 px-4 text-sm`}>✨ Créame un plan</Link>
         </header>
 
         {arriba}
@@ -41,7 +41,7 @@ export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ct
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-8 text-center`}>
           <p className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">¿No sabes por dónde empezar?</p>
           <p className="text-slate-600 mt-2 mb-5">Dime qué te apetece, tu presupuesto y la zona, y te monto la ruta en menos de un minuto. Gratis.</p>
-          <Link href={`/?ref=${ctaRef}`} className={BOTON_CTA}>✨ Crear mi plan</Link>
+          <Link href={`/planner?ref=${ctaRef}`} className={BOTON_CTA}>✨ Crear mi plan</Link>
         </section>
 
         <nav aria-label="Más de León" className="flex flex-wrap justify-center gap-2">
