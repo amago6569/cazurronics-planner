@@ -32,7 +32,8 @@
 .paso > * { opacity: 0; transform: translateY(10px); transition: opacity 420ms var(--ease-out), transform 420ms var(--ease-out); }
 .paso.activo > * { opacity: 1; transform: none; }
 .paso.activo > :nth-child(2) { transition-delay: 60ms; } .paso.activo > :nth-child(3) { transition-delay: 120ms; } .paso.activo > :nth-child(4) { transition-delay: 180ms; }
-.marco { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+/* .paso > .marco: gana a los margin: 0 de cada bloque, que en ordenador lo pegaban a la izquierda */
+.paso > .marco { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
 
 /* 1 · fecha: Hoy / Mañana y calendario grande */
 .mes { display: flex; align-items: center; justify-content: space-between; }
