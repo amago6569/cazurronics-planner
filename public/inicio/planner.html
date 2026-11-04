@@ -36,7 +36,7 @@
 
 /* 1 · fecha: Hoy / Mañana y calendario grande */
 .mes { display: flex; align-items: center; justify-content: space-between; }
-.mes b { font-size: 20px; font-weight: 800; text-transform: capitalize; }
+.mes b { font-size: 20px; font-weight: 800; }
 .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .cal .dsem { text-align: center; font-size: 13px; font-weight: 700; color: var(--gris); padding-bottom: 2px; }
 .cal button { aspect-ratio: 1; min-width: 0; border: 0; border-radius: 14px; background: var(--vidrio); color: var(--crema); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer;
@@ -297,7 +297,8 @@ function elegirDia(d) { elegida = d; peticion.fecha = iso(d); mesVista = new Dat
 function pintarCal() {
   const cal = $("cal"); cal.innerHTML = "";
   ["L", "M", "X", "J", "V", "S", "D"].forEach((d) => cal.insertAdjacentHTML("beforeend", `<span class="dsem" aria-hidden="true">${d}</span>`));
-  $("mesNombre").textContent = mesVista.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  const mesTxt = mesVista.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  $("mesNombre").textContent = mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1);
   const hueco = (mesVista.getDay() + 6) % 7, dias = new Date(mesVista.getFullYear(), mesVista.getMonth() + 1, 0).getDate();
   for (let i = 0; i < hueco; i++) cal.insertAdjacentHTML("beforeend", `<span class="vacio"></span>`);
   for (let d = 1; d <= dias; d++) {

@@ -14,7 +14,7 @@ import { sinRomper } from './almacen';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
-import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from './agenda';
+import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
 import { filtrarMasEseDia } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 
@@ -47,7 +47,8 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
     conGoogle ? null : sinRomper(sitiosComprobados(lat, lon, radio), 'sitios comprobados'),
   ]);
 
-  const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []);
+  // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
+  const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha));
   const bloqueAgenda = eventosParaPrompt(agendaDelDia);
   const bloqueComunidad = [
     prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
