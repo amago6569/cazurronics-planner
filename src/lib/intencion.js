@@ -62,17 +62,20 @@ export function filtrarMasEseDia(agenda, plan, apetece) {
 const PIDE_MERCADO = /\b(?:mercad|mercadill|rastr|ferias?\b|compra|comprar|tipic|producto|artesan)/;
 const PLAN_ABIERTO = /\b(?:sorprend|que hacer|pasar el dia|lo que sea|cualquier cosa)/;
 const ES_MERCADO = /\b(?:mercados?|mercadillos?|rastros?|rastrillos?|ferias?)\b/;
+const TIPOS_SIN_CONCRETAR = new Set(["", "evento", "fiesta", "festival", "otro", "visita"]);
 export function quitarNoPedidas(paradas, apetece) {
   if (!Array.isArray(paradas)) return [];
   const t = ` ${quitarTildes(apetece)} `;
   const conTema = TEMAS.some(([, re]) => re.test(t));
   if (!conTema || PLAN_ABIERTO.test(t) || PIDE_MERCADO.test(t)) return paradas;
-  const palabras = palabrasClave(apetece).map((p) => new RegExp(`\\b${p}`));
+  // Sin la s final: "tapas" también vale para "Feria de la Tapa". Se mira solo el título: la descripción nombra barrios y alternativas
+  const palabras = palabrasClave(apetece).map((p) => new RegExp(`\\b${p.replace(/s$/, "")}`));
   const ajena = (p) => {
-    const titulo = quitarTildes(p?.titulo);
-    const esMercado = /^(?:mercadillo|mercado|feria)$/.test(quitarTildes(p?.tipo)) || ES_MERCADO.test(titulo);
-    return esMercado && !palabras.some((re) => re.test(`${titulo} ${quitarTildes(p?.descripcion)}`));
+    const titulo = quitarTildes(p?.titulo), tipo = quitarTildes(p?.tipo);
+    // Por el título, solo si el tipo no dice otra cosa: la Iglesia del Mercado es un monumento
+    const esMercado = /^(?:mercadillo|mercado|feria)$/.test(tipo) || (TIPOS_SIN_CONCRETAR.has(tipo) && ES_MERCADO.test(titulo));
+    return esMercado && !palabras.some((re) => re.test(titulo));
   };
-  const quedan = paradas.filter((p) => !ajena(p));
-  return quedan.length && paradas.length - quedan.length <= paradas.length / 2 ? quedan : paradas;
+  let puedenIrse = Math.floor(paradas.length / 2);
+  return paradas.filter((p) => !(ajena(p) && puedenIrse-- > 0));
 }

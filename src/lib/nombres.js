@@ -19,6 +19,15 @@ export const seParecen = (a, b) => {
   return palabras(a).some((w) => pb.has(w));
 };
 
+// Para rutas y parques "parque" o "ruta" no dicen de qué sitio se habla: "Parque de Quevedo" no es "Parque de la Granja".
+// Tienen que coincidir en el nombre propio ("Paseo por el Parque de Quevedo" y "Parque de Quevedo" sí).
+const GENERICAS_NATURALES = new Set(["parque", "ruta", "rutas", "senda", "sendero", "senderismo", "paseo", "por", "jardin", "jardines", "area", "recreativa", "natural", "picnic", "excursion", "visita", "monte", "rio", "san", "santa"]);
+const propias = (t) => palabras(t).filter((w) => !GENERICAS_NATURALES.has(w));
+export const mismoSitioNatural = (a, b) => {
+  const pb = new Set(propias(b));
+  return propias(a).some((w) => pb.has(w));
+};
+
 // Nombre de Google más presentable: si viene todo en mayúsculas, a minúsculas con inicial en cada palabra
 export const bonito = (n) => {
   const s = String(n || "").trim();

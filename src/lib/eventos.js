@@ -1021,7 +1021,7 @@ export function eventosParaPrompt(eventos, max = 30) {
     `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""}${e.porConfirmar ? " (por confirmar: dilo así si lo propones)" : ""} · fuente: ${e.fuente}`
   );
   return `AGENDA VERIFICADA DE ESE DÍA (barrido de fuentes locales: eventos, mercadillos, ferias, exposiciones y fiestas).
-OBLIGATORIO: si alguno encaja con lo que pide el usuario, el plan DEBE incluirlo (con su hora real y su campo "fuente"). Si hay varios compatibles, mezcla eventos con sitios para comer o tomar algo.
+OBLIGATORIO: si alguno encaja con lo que pide el usuario, el plan DEBE incluirlo (con su hora real y su campo "fuente"). Lo que no tenga que ver con lo pedido no entra por estar aquí. Solo en un plan abierto sin tema, mezcla eventos con sitios para comer o tomar algo.
 Si propones un teatro, auditorio o sala, di qué obra o espectáculo hay ese día según esta agenda (título, hora y precio), no solo el sitio:
 ${lineas.join("\n")}`;
 }

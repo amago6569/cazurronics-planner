@@ -41,6 +41,23 @@ describe("quitarNoPedidas", () => {
       expect(quitarNoPedidas([mercado, tapeo], pide)).toEqual([mercado, tapeo]);
     }
   });
+  it("no confunde un monumento o un restaurante con un mercado por su nombre", () => {
+    const iglesia = { titulo: "Iglesia de Nuestra Señora del Mercado", tipo: "monumento" };
+    const rest = { titulo: "Restaurante La Cocina del Mercado", tipo: "restaurante" };
+    expect(quitarNoPedidas([iglesia, rest], "ver monumentos y cenar")).toEqual([iglesia, rest]);
+  });
+  it("entiende plurales: una feria de lo pedido se queda", () => {
+    const feria = { titulo: "Feria de la Tapa", tipo: "feria" };
+    expect(quitarNoPedidas([feria, tapeo], "ir de tapas y cenar")).toEqual([feria, tapeo]);
+  });
+  it("no le salva nombrar el barrio o la alternativa en la descripción", () => {
+    const otro = { ...mercado, descripcion: "Junto al Barrio Húmedo. (Alternativa: tapeo en el centro)" };
+    expect(quitarNoPedidas([otro, tapeo, cena], "Tapeo por el Húmedo y cenar cocido")).toEqual([tapeo, cena]);
+  });
+  it("con muchos mercados quita hasta la mitad en vez de ninguno", () => {
+    const otroMercado = { titulo: "Mercadillo de Trobajo", tipo: "mercadillo" };
+    expect(quitarNoPedidas([mercado, otroMercado, tapeo], "tapeo")).toEqual([otroMercado, tapeo]);
+  });
   it("no toca lo que no es mercado ni deja el plan vacío", () => {
     const museo = { titulo: "Museo de León", tipo: "museo" };
     expect(quitarNoPedidas([museo, tapeo], "tapeo")).toEqual([museo, tapeo]);

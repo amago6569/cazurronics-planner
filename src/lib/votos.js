@@ -17,6 +17,14 @@ export async function votar(planId, indice, votante, voto) {
   ]);
 }
 
+// Los votos eran de la parada que estaba antes en ese sitio: al cambiarla empiezan de cero
+export const camposDeParada = (crudoLista, indice) => Object.keys(aObjeto(crudoLista)).filter((campo) => campo.startsWith(`${Number(indice)}|`));
+
+export async function borrarVotosParada(planId, indice) {
+  const campos = camposDeParada(await leerVotos(planId), indice);
+  if (campos.length) await comando(["HDEL", `votos:${planId}`, ...campos]);
+}
+
 // Votos en crudo (para leerlos a la vez que el plan)
 export const leerVotos = (planId) => comando(["HGETALL", `votos:${planId}`]);
 
