@@ -23,9 +23,11 @@
   const pin = (n) => L.divIcon({ className: "pin-num", html: `<span>${n}</span>`, iconSize: [32, 32], iconAnchor: [16, 16] });
   const punto = () => L.divIcon({ className: "pin-punto", html: "<span></span>", iconSize: [22, 22], iconAnchor: [11, 11] });
 
-  window.crearMapa = function (el, { contorno = false, alTocar = null } = {}) {
+  // fijo: mapas dentro de una pantalla con scroll (ruta, tiendas). En táctil el dedo desplaza la pantalla y con dos dedos se hace zoom,
+  // para que el mapa no atrape el scroll
+  window.crearMapa = function (el, { contorno = false, alTocar = null, fijo = false } = {}) {
     el.classList.add("mapa-osc");
-    const mapa = L.map(el, { zoomControl: false, attributionControl: true, maxBounds: [[41.2, -8.2], [44.0, -3.6]], maxBoundsViscosity: 1, minZoom: 7, zoomSnap: .25 })
+    const mapa = L.map(el, { zoomControl: false, attributionControl: true, maxBounds: [[41.2, -8.2], [44.0, -3.6]], maxBoundsViscosity: 1, minZoom: 7, zoomSnap: .25, dragging: !(fijo && L.Browser.mobile), scrollWheelZoom: !fijo })
       .setView([42.5987, -5.5671], 12);
     mapa.attributionControl.setPrefix(false);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(mapa);

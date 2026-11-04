@@ -15,7 +15,7 @@ window.crearSelectorZona = function (raiz, { fino = false, km = 15, alCambiar = 
     </form>
     <button class="ubicacion" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>Usar mi ubicación</button>
     <p class="estado-zona" role="status"></p>
-    <div class="mapa-zona" style="flex:1;min-height:220px"></div>
+    <div class="mapa-zona" style="flex:1 1 240px;min-height:220px"></div>
     <div class="distancia"><label for="${id}k">Distancia máxima</label><div class="km-caja"><input id="${id}k" type="number" inputmode="decimal" min="${MIN}" max="${MAX}" step="${fino ? .1 : 1}"><span>km</span></div></div>
     <input class="rango" type="range" min="${fino ? 0 : 1}" max="${fino ? 1000 : MAX}" step="1" aria-label="Distancia máxima">`;
   const $ = (s) => raiz.querySelector(s);

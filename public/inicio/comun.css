@@ -56,19 +56,20 @@ textarea:focus-visible, input:focus-visible { outline: none; }
 @media (prefers-reduced-motion: reduce) { .progreso span::after, .chip, .principal { transition-duration: 1ms !important; } }
 
 /* mapa oscuro (mapa.js) */
-.mapa-osc { position: relative; overflow: hidden; border-radius: 26px; background: #050506; border: 1px solid var(--borde); }
+/* isolation: las capas de Leaflet (z-index 400+) se quedan dentro del mapa y no tapan las sugerencias de búsqueda */
+.mapa-osc { position: relative; isolation: isolate; overflow: hidden; border-radius: 26px; background: #050506; border: 1px solid var(--borde); }
 .mapa-osc.niega { animation: niega 360ms ease; }
 @keyframes niega { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) { .mapa-osc .capa { transition-duration: 1ms; } }
 
 /* buscador de sitio + usar mi ubicación (igual que en la web actual) */
-.donde { display: grid; grid-template-columns: 1fr auto; gap: 8px; position: relative; }
+.donde { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; position: relative; }
 .campo { width: 100%; box-sizing: border-box; height: 52px; border-radius: 16px; border: 1px solid var(--borde); background: rgba(7, 6, 10, .55); color: var(--crema); font: 500 16px var(--letra); padding: 0 16px; outline: none; transition: border-color 160ms ease; }
 .campo:focus { border-color: var(--oro); }
 .campo::placeholder { color: rgba(243, 234, 216, .42); }
 .boton { height: 52px; padding: 0 18px; border-radius: 16px; border: 0; background: var(--crema); color: var(--noche); font: 800 15px var(--letra); cursor: pointer; transition: transform 120ms ease-out; }
 .boton:active { transform: scale(.96); }
-.ubicacion { justify-self: start; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--borde); background: var(--vidrio); color: var(--crema); font: 700 14px var(--letra); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: transform 120ms ease-out; }
+.ubicacion { justify-self: start; align-self: flex-start; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--borde); background: var(--vidrio); color: var(--crema); font: 700 14px var(--letra); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: transform 120ms ease-out; }
 .ubicacion:active { transform: scale(.96); }
 .ubicacion svg { width: 18px; height: 18px; }
 .estado-zona { font-size: 14px; color: var(--gris); min-height: 1.2em; margin: 0; }
@@ -76,7 +77,7 @@ textarea:focus-visible, input:focus-visible { outline: none; }
 .sugerencias button { width: 100%; height: 46px; text-align: left; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--crema); font-size: 16px; cursor: pointer; }
 .sugerencias button:active, .sugerencias button.marcada { background: var(--vidrio); }
 .sugerencias .nada { padding: 12px; color: var(--gris); font-size: 14px; }
-.distancia { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; }
+.distancia { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
 .distancia label { font-weight: 700; font-size: 15px; }
 .km-caja { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-radius: 12px; background: var(--vidrio); border: 1px solid var(--borde); }
 .km-caja input { width: 52px; background: transparent; border: 0; color: var(--crema); font: 800 17px var(--letra); text-align: right; outline: none; font-variant-numeric: tabular-nums; }
@@ -89,8 +90,8 @@ textarea:focus-visible, input:focus-visible { outline: none; }
 
 /* mapa real (Leaflet): teselas de OpenStreetMap pasadas a oscuro, chinchetas numeradas y punto elegido */
 .mapa-osc.leaflet-container { background: #0b0a0e; font-family: var(--letra); }
-.mapa-osc .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.55); }
-.mapa-osc .leaflet-control-attribution { background: rgba(7, 6, 10, .6); color: var(--gris); font-size: 10px; border-radius: 8px 0 0 0; }
+.mapa-osc .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(1.2) contrast(.92) saturate(.6); }
+.mapa-osc .leaflet-control-attribution { background: rgba(7, 6, 10, .6); color: var(--gris); font-size: 10px; border-radius: 8px 0 0 0; padding: 1px 12px 1px 6px; }
 .mapa-osc .leaflet-control-attribution a { color: var(--gris); }
 .pin-num span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--crema); color: var(--noche); font: 900 15px var(--letra); border: 3px solid var(--noche); box-sizing: border-box; box-shadow: 0 4px 14px rgba(0, 0, 0, .5); }
 .pin-punto span { display: block; width: 22px; height: 22px; border-radius: 50%; background: var(--crema); border: 5px solid rgba(7, 6, 10, .6); box-sizing: border-box; }

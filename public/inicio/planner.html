@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#07060a">
 <title>Cazurronics Planner | Tu plan en León</title>
 <meta name="description" content="Dinos qué día, qué te apetece, cuánto quieres gastar y por dónde te mueves, y te montamos el plan en la provincia de León con sitios reales, horarios y ruta.">
-<link rel="canonical" href="https://cazurronics.es/planner">
+<link rel="canonical" href="https://www.cazurronics.es/planner">
 <meta property="og:title" content="Cazurronics Planner | Tu plan en León">
 <meta property="og:description" content="Te montamos el plan en León con sitios reales, horarios y ruta.">
-<meta property="og:image" content="https://cazurronics.es/opengraph-image">
+<meta property="og:image" content="https://www.cazurronics.es/opengraph-image">
 <meta property="og:locale" content="es_ES">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.ico">
@@ -22,7 +22,7 @@
    pantalla; y el resultado de siempre (mapa de la ruta, tiempo, compartir, paradas, retocar) con la cara nueva. */
 .app { position: fixed; inset: 0; height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; }
 .pasos { position: relative; z-index: 1; overflow: hidden; }
-.paso { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overscroll-behavior: contain;
+.paso { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 16px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
   padding: 6px max(20px, env(safe-area-inset-right, 0px)) 24px max(20px, env(safe-area-inset-left, 0px));
   opacity: 0; transform: translateX(28%); pointer-events: none; visibility: hidden;
   transition: transform 520ms var(--ease-ios), opacity 360ms ease, visibility 0s 520ms; }
@@ -72,12 +72,13 @@
 .dial .valor { position: absolute; left: 0; right: 0; bottom: 2%; text-align: center; }
 .dial .valor b { display: block; font-weight: 900; font-stretch: 62%; font-size: 58px; line-height: .9; font-variant-numeric: tabular-nums; }
 .dial .valor small { color: var(--gris); font-size: 14px; }
-.cajas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cajas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .cajas label { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border-radius: 16px; background: var(--vidrio); border: 1px solid var(--borde); font-weight: 700; color: var(--gris); font-size: 14px; }
 .cajas input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--crema); font: 800 20px var(--letra); text-align: right; outline: none; font-variant-numeric: tabular-nums; }
 
 /* 4 · zona */
-.zona { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.zona { display: flex; flex-direction: column; gap: 12px; flex: 1 0 auto; }
+.zona > * { flex-shrink: 0; }
 
 /* montando */
 .montando { align-items: center; justify-content: center; text-align: center; }
@@ -94,14 +95,14 @@
 .datos span::first-letter { text-transform: uppercase; }
 .ruta-mapa { height: 300px; flex: none; }
 .tramos { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); overflow: hidden; }
-.tramos li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 14px; }
+.tramos li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; }
 .tramos li + li { border-top: 1px solid rgba(243,234,216,.08); }
 .tramos .n { display: flex; align-items: center; gap: 4px; font-weight: 900; font-stretch: 62%; font-size: 22px; }
 .tramos .n i { font-style: normal; color: var(--gris); font-size: 16px; }
 .tramos .q { font-size: 14px; color: #ddd4c4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tramos .d { text-align: right; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
 .tramos .d small { display: block; font-weight: 600; font-size: 12px; color: var(--gris); }
-.dos-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dos-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .dos-col > :only-child, .dos-col > [hidden] + :not([hidden]), .dos-col > :not([hidden]):has(+ [hidden]) { grid-column: span 2; }
 .caja-info { padding: 14px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); display: grid; gap: 4px; align-content: start; text-align: left; color: var(--crema); font: inherit; }
 .caja-info[hidden] { display: none; }
@@ -109,24 +110,33 @@
 button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } button.caja-info:active { transform: scale(.98); }
 .seccion { margin: 8px 0 0; font-size: 22px; font-weight: 800; }
 .seccion[hidden] { display: none; }
-.ficha { position: relative; display: block; width: 100%; height: 380px; border-radius: 28px; overflow: hidden; background: #111; border: 0; padding: 0; color: var(--crema); text-align: left; cursor: pointer; font: inherit; transition: transform 140ms ease-out; }
+.ficha { position: relative; display: flex; align-items: flex-end; width: 100%; min-height: 400px; border-radius: 28px; overflow: hidden; background: #111; border: 0; padding: 0; color: var(--crema); text-align: left; cursor: pointer; font: inherit; transition: transform 140ms ease-out; }
 .ficha:active { transform: scale(.985); }
 .ficha img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 700ms var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .ficha:hover img { transform: scale(1.04); } }
-.ficha::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,10,.92) 0%, rgba(7,6,10,.35) 48%, rgba(7,6,10,0) 68%); }
+.ficha::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,10,.95) 0%, rgba(7,6,10,.82) 38%, rgba(7,6,10,.2) 66%, rgba(7,6,10,0) 80%); }
+/* sin foto del sitio: la vidriera apagada, nunca una foto que no es de ese sitio */
+.ficha.sin-foto { min-height: 280px; background: radial-gradient(120% 90% at 85% 8%, rgba(233,180,76,.2), transparent 58%), #15121a; }
+.ficha.sin-foto::before { content: ""; position: absolute; top: -14%; right: -18%; width: 78%; aspect-ratio: 1; border-radius: 50%; background: url(/inicio/rosa.jpg) center / cover; opacity: .2; }
+.ficha.sin-foto::after { background: none; }
 .ficha .num { position: absolute; z-index: 1; top: 14px; left: 14px; width: 36px; height: 36px; border-radius: 50%; background: var(--crema); color: var(--noche); font-weight: 900; display: grid; place-items: center; }
-.ficha .info { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; padding: 18px; display: grid; gap: 6px; }
+.ficha .info { position: relative; z-index: 1; width: 100%; box-sizing: border-box; padding: 64px 18px 18px; display: grid; gap: 6px; }
 .ficha .hora { font-weight: 900; font-stretch: 62%; font-size: 48px; line-height: .85; font-variant-numeric: tabular-nums; }
 .ficha h3 { margin: 0; font-size: 21px; font-weight: 800; line-height: 1.15; text-wrap: balance; }
 .ficha .lugar { font-size: 14px; color: var(--oro); font-weight: 700; }
-.ficha p { margin: 0; font-size: 14px; line-height: 1.4; color: #ddd4c4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ficha p { margin: 0; font-size: 14px; line-height: 1.4; color: #ddd4c4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .ficha .pie-f { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; }
-.evento { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: start; padding: 14px; border-radius: 20px; background: var(--vidrio); border: 1px solid var(--borde); }
+.franja { margin: 8px 0 0; font-size: 14px; font-weight: 800; color: var(--gris); }
+.franja small { font-size: 13px; font-weight: 600; opacity: .8; }
+.evento { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; border-radius: 20px; background: var(--vidrio); border: 1px solid var(--borde); }
 .evento b.h { font-weight: 900; font-stretch: 62%; font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; }
 .evento b.h.larga { font-size: 14px; font-stretch: 100%; font-weight: 800; line-height: 1.2; }
 .evento > span { font-size: 14px; color: #ddd4c4; min-width: 0; } .evento strong { display: block; font-size: 15px; color: var(--crema); line-height: 1.25; margin-bottom: 2px; }
 .evento .extra { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 13px; }
 .evento .extra em { font-style: normal; color: var(--oro); font-weight: 700; }
+.evento p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--gris); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.evento .confirmar { color: #f3c98b; font-weight: 700; }
+.evento b.h small { display: block; font-size: 13px; font-weight: 700; color: var(--gris); margin-top: 2px; }
 .evento .extra a { color: var(--gris); }
 .mas-eventos { justify-self: start; }
 
@@ -146,9 +156,9 @@ button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } butt
 .sv iframe, .sv img { display: block; width: 100%; height: 220px; border: 0; object-fit: cover; }
 .sv span { position: absolute; z-index: 1; top: 10px; left: 10px; padding: 6px 10px; border-radius: 999px; background: rgba(7,6,10,.72); font-size: 12px; font-weight: 700; pointer-events: none; }
 .datos-p { display: grid; gap: 8px; margin: 0; }
-.datos-p div { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--vidrio); }
+.datos-p div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--vidrio); }
 .datos-p dt { color: var(--gris); font-size: 13px; font-weight: 700; } .datos-p dd { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
-.botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.botones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .botones > :last-child:nth-child(odd) { grid-column: span 2; }
 .botones a, .botones button { height: 50px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; font: 800 15px var(--letra); text-decoration: none; border: 0; cursor: pointer; transition: transform 120ms ease-out; }
 .botones svg { width: 18px; height: 18px; flex: none; }
@@ -158,7 +168,7 @@ button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } butt
 .fuente-ev[hidden] { display: none; }
 .retoque { padding: 14px; border-radius: 20px; background: rgba(233,180,76,.1); border: 1px solid rgba(233,180,76,.3); display: grid; gap: 10px; }
 .retoque label { font-weight: 800; font-size: 15px; }
-.retoque div { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.retoque div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .retoque .boton:disabled { opacity: .6; }
 
 .pie { position: relative; z-index: 2; padding: 12px max(20px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); }
@@ -173,7 +183,7 @@ button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } butt
 <script src="/inicio/zona.js"></script>
 </head>
 <body>
-<div class="fondo"><video id="fondo" src="/inicio/leon.mp4" poster="/inicio/leon-poster.jpg" autoplay muted loop playsinline aria-hidden="true"></video></div>
+<div class="fondo"><video id="fondo" src="/inicio/leon-fondo.mp4" poster="/inicio/leon-poster-v.jpg" autoplay muted loop playsinline aria-hidden="true"></video></div>
 
 <div class="app">
   <header class="cabeza">
@@ -249,7 +259,7 @@ button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } butt
 <div class="velo" id="velo"></div>
 <aside class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hTit" aria-hidden="true">
   <div class="asa"></div>
-  <div class="foto"><img id="hFoto" src="/inicio/leon-poster.jpg" alt=""></div>
+  <div class="foto" id="hFotoCaja"><img id="hFoto" alt=""></div>
   <div><span class="sub" id="hSub"></span><h2 id="hTit"></h2></div>
   <p id="hDesc"></p>
   <div id="hSv"></div>
@@ -405,7 +415,7 @@ async function montar() {
       body: JSON.stringify({ fecha: peticion.fecha, apetece: peticion.apetece, presupuestoMin: peticion.presupuestoMin, presupuestoMax: peticion.presupuestoMax, radio: peticion.radio || 1, lat: peticion.lat, lon: peticion.lon }) });
     const datos = await res.json().catch(() => null);
     if (datos && datos.exito && Array.isArray(datos.plan) && datos.plan.length) {
-      PLAN = datos.plan; planId = datos.planId || null;
+      PLAN = datos.plan; planId = datos.planId || null; centroPlan = [peticion.lat, peticion.lon];
       CZ.recordarPlan(planId, peticion.fecha, PLAN);
       pintarResultado(datos);
       mostrar(N + 1);
@@ -415,7 +425,15 @@ async function montar() {
 }
 
 /* ═══ Resultado ═══ */
-const conSitio = (p) => p.lat != null && p.lon != null && p.lat !== "" && Number.isFinite(+p.lat) && Number.isFinite(+p.lon);
+let centroPlan = null; // lo que el servidor no ha podido situar lleva el centro de la búsqueda: no se pinta como si estuviera ahí
+const conSitio = (p) => p.lat != null && p.lon != null && p.lat !== "" && Number.isFinite(+p.lat) && Number.isFinite(+p.lon) && !(centroPlan && +p.lat === centroPlan[0] && +p.lon === centroPlan[1]);
+// De una parada a la siguiente: andando si está cerca, en coche si no. Lo mismo en la lista y en la ficha, para que cuadre
+function tramoHasta(i) {
+  const a = PLAN[i - 1], b = PLAN[i]; if (!a || !b || !conSitio(a) || !conSitio(b)) return null;
+  const km = CZ.distanciaKm([+a.lat, +a.lon], [+b.lat, +b.lon]) * 1.3; // por las calles, algo más que en línea recta
+  const andando = km <= 2.5;
+  return { km, andando, min: Math.max(1, Math.round((km / (andando ? 4.8 : 45)) * 60)) };
+}
 function pintarResultado(datos) {
   $("datos").innerHTML = [fechaLarga(peticion.fecha), $("rangoTxt").textContent, `${peticion.radio} km · ${zonaNombre}`].map((t) => `<span>${esc(t)}</span>`).join("");
   $("prevCaja").hidden = !datos.prevision; $("prevTxt").textContent = datos.prevision || "";
@@ -429,39 +447,42 @@ function pintarResultado(datos) {
 function pintarRuta() {
   const puntos = PLAN.map((p, i) => ({ lat: +p.lat, lon: +p.lon, n: i + 1, titulo: p.titulo, alTocar: () => abrir(i), ok: conSitio(p) })).filter((p) => p.ok);
   $("rutaMapa").hidden = !puntos.length;
-  if (puntos.length) { if (!rutaMapa) rutaMapa = crearMapa($("rutaMapa")); setTimeout(() => rutaMapa.paradas(puntos)); }
-  // lo que hay de una parada a la siguiente: andando si está cerca, en coche si no
+  if (puntos.length) { if (!rutaMapa) rutaMapa = crearMapa($("rutaMapa"), { fijo: true }); setTimeout(() => rutaMapa.paradas(puntos)); }
   const filas = [];
   for (let i = 1; i < PLAN.length; i++) {
-    const a = PLAN[i - 1], b = PLAN[i]; if (!conSitio(a) || !conSitio(b)) continue;
-    const km = CZ.distanciaKm([+a.lat, +a.lon], [+b.lat, +b.lon]) * 1.3; // por las calles, algo más que en línea recta
-    const andando = km <= 2.5, min = Math.max(1, Math.round((km / (andando ? 4.8 : 45)) * 60));
-    filas.push(`<li><span class="n">${i}<i>→</i>${i + 1}</span><span class="q">${esc(b.titulo)}</span><span class="d">${CZ.km(km)}<small>${min} min ${andando ? "andando" : "en coche"}</small></span></li>`);
+    const t = tramoHasta(i); if (!t) continue;
+    filas.push(`<li><span class="n">${i}<i>→</i>${i + 1}</span><span class="q">${esc(PLAN[i].titulo)}</span><span class="d">${CZ.km(t.km)}<small>${t.min} min ${t.andando ? "andando" : "en coche"}</small></span></li>`);
   }
   $("tramos").innerHTML = filas.join(""); $("tramos").hidden = !filas.length;
 }
 function pintarFichas() {
-  $("fichas").innerHTML = PLAN.map((p, i) => `
-    <button class="ficha" type="button" data-i="${i}">
-      <img src="${esc(CZ.webSegura(p.fotoOficial) || "/inicio/leon-poster.jpg")}" alt="" decoding="async"${i ? ' loading="lazy"' : ""}><span class="num">${i + 1}</span>
+  $("fichas").innerHTML = PLAN.map((p, i) => {
+    const foto = CZ.fotoSegura(p.fotoOficial);
+    return `<button class="ficha${foto ? "" : " sin-foto"}" type="button" data-i="${i}">
+      ${foto ? `<img src="${esc(foto)}" alt="" decoding="async"${i ? ' loading="lazy"' : ""}>` : ""}<span class="num">${i + 1}</span>
       <span class="info"><span class="hora">${esc(p.hora || "")}</span><h3>${esc(p.titulo)}</h3>${CZ.hay(p.lugar) ? `<span class="lugar">${esc(p.lugar)}</span>` : ""}<p>${esc(p.descripcion || "")}</p>
       <span class="pie-f"><span>${CZ.hay(p.resenas) ? `★ ${esc(p.resenas)}` : ""}</span><span>Ver detalles →</span></span></span>
-    </button>`).join("");
+    </button>`;
+  }).join("");
   $("fichas").querySelectorAll(".ficha").forEach((b) => (b.onclick = () => abrir(+b.dataset.i)));
-  $("fichas").querySelectorAll("img").forEach((im) => im.addEventListener("error", () => { if (!im.src.endsWith("leon-poster.jpg")) im.src = "/inicio/leon-poster.jpg"; }, { once: true }));
+  // si la foto no carga, la ficha se queda sin foto en vez de enseñar una que no es
+  $("fichas").querySelectorAll("img").forEach((im) => im.addEventListener("error", () => { im.closest(".ficha").classList.add("sin-foto"); im.remove(); }, { once: true }));
 }
 function pintarEventos(lista) {
   const vistos = new Set(), ev = lista.filter((e) => { const k = String(e.titulo || "").toLowerCase(); if (!k || vistos.has(k)) return false; vistos.add(k); return true; });
   $("eventosTit").hidden = !ev.length;
   const fila = (e) => {
-    const h = String(e.hora || "").trim(), corta = /^\d{1,2}[:.]\d{2}/.test(h);
-    const donde = [e.lugar, e.localidad].filter(CZ.hay).join(" · "), fuente = CZ.webSegura(e.fuente);
-    return `<div class="evento"><b class="h${corta ? "" : " larga"}">${esc(corta ? h.slice(0, 5) : h || "Todo el día")}</b><span><strong>${esc(e.titulo)}</strong>${esc(donde)}
-      ${CZ.hay(e.precio) || fuente ? `<span class="extra">${CZ.hay(e.precio) ? `<em>${esc(e.precio)}</em>` : ""}${fuente ? `<a href="${esc(fuente)}" target="_blank" rel="noopener noreferrer nofollow">Ver fuente ↗</a>` : ""}</span>` : ""}</span></div>`;
+    const h = CZ.leerHora(e.hora), [ini, fin] = String(h.texto || "").split("–"), corta = /^\d/.test(ini);
+    const donde = [e.lugar, e.localidad].filter(CZ.hay).join(" · "), fuente = CZ.webSegura(e.fuente), cuando = CZ.esDeVariosDias(e) ? CZ.cuandoEs(e) : "";
+    const extras = [cuando ? `<span>${esc(cuando)}</span>` : "", e.porConfirmar ? '<span class="confirmar" title="Lo hemos visto en una sola web y aún no hemos podido confirmarlo">Por confirmar</span>' : "", CZ.hay(e.precio) ? `<em>${esc(e.precio)}</em>` : "", fuente ? `<a href="${esc(fuente)}" target="_blank" rel="noopener noreferrer nofollow">Ver fuente ↗</a>` : ""].filter(Boolean).join("");
+    return `<div class="evento"><b class="h${corta ? "" : " larga"}">${esc(corta ? ini : h.texto || "Todo el día")}${fin ? `<small>a ${esc(fin)}</small>` : ""}</b><span><strong>${esc(e.titulo)}</strong>${esc(donde)}${e.descripcion ? `<p>${esc(e.descripcion)}</p>` : ""}${extras ? `<span class="extra">${extras}</span>` : ""}</span></div>`;
   };
-  const VER = 6;
-  $("eventos").innerHTML = ev.slice(0, VER).map(fila).join("") + (ev.length > VER ? `<button class="chip mas-eventos" type="button" id="masEv">Ver ${ev.length - VER} más</button>` : "");
-  if (ev.length > VER) $("masEv").onclick = () => { $("eventos").innerHTML = ev.map(fila).join(""); };
+  // Agrupados por franjas y por hora, como en la agenda: todo el día, mañana, tarde y noche
+  const conHora = ev.map((e, i) => ({ e, i, h: CZ.leerHora(e.hora) }));
+  $("eventos").innerHTML = CZ.FRANJAS.map((f) => {
+    const g = conHora.filter((x) => x.h.franja === f.id).sort((a, b) => (a.h.min != null && b.h.min != null && a.h.min !== b.h.min ? a.h.min - b.h.min : a.i - b.i));
+    return g.length ? `<p class="franja">${f.titulo} <small>· ${g.length}</small></p>${g.map((x) => fila(x.e)).join("")}` : "";
+  }).join("");
 }
 
 /* ═══ Hoja de detalle: Street View, precio, horario, llamar, web, cómo llegar y "te lo cambio" ═══ */
@@ -474,18 +495,21 @@ let abierta = null;
 function abrir(i) {
   const p = PLAN[i]; if (!p) return; abierta = i;
   CZ.baliza("detalle", { lugarId: p.lugarId });
-  const foto = $("hFoto"); foto.onerror = () => { foto.onerror = null; foto.src = "/inicio/leon-poster.jpg"; };
-  foto.src = CZ.webSegura(p.fotoOficial) || "/inicio/leon-poster.jpg"; foto.alt = p.titulo || "";
+  const foto = $("hFoto"), urlFoto = CZ.fotoSegura(p.fotoOficial);
+  foto.onerror = () => { $("hFotoCaja").hidden = true; };
+  $("hFotoCaja").hidden = !urlFoto; if (urlFoto) foto.src = urlFoto; foto.alt = p.titulo || "";
   $("hSub").textContent = `Parada ${i + 1}${p.hora ? ` · ${p.hora}` : ""}`; $("hTit").textContent = p.titulo || ""; $("hDesc").textContent = p.descripcion || "";
   // Street View: la vista 360º se puede arrastrar; si solo hay foto exterior, se enseña la foto
   const sv = CZ.webSegura(p.streetView);
   $("hSv").className = sv ? "sv" : ""; $("hSv").innerHTML = !sv ? "" : sv.includes("embed")
-    ? `<span>Vista 360º · Arrastra</span><iframe src="${esc(sv)}" title="Vista 360º de ${esc(p.titulo)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
+    ? `<iframe src="${esc(sv)}" title="Vista 360º de ${esc(p.titulo)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
     : `<span>Vista exterior</span><img src="${esc(sv)}" alt="Vista exterior de ${esc(p.titulo)}" loading="lazy" decoding="async">`;
   const fuente = CZ.webSegura(p.fuente); $("hFuente").hidden = !fuente; if (fuente) $("hFuente").href = fuente;
-  $("hDatos").innerHTML = [["Precio", p.precio], ["Horario", p.horario], ["Cómo llegar", p.transporte], ["Dónde", p.lugar], ["Reseñas", CZ.hay(p.resenas) ? `★ ${p.resenas}` : ""]]
+  // Desde la parada anterior, con la misma cuenta que la lista de la ruta; en la primera no hay de dónde venir
+  const t = tramoHasta(i), llegar = t ? `${t.min} min ${t.andando ? "andando" : "en coche"} desde la parada ${i} (${CZ.km(t.km)})` : i > 0 && !conSitio(p) ? p.transporte : "";
+  $("hDatos").innerHTML = [["Precio", p.precio], ["Horario", p.horario], ["Cómo llegar", llegar], ["Dónde", p.lugar], ["Reseñas", CZ.hay(p.resenas) ? `★ ${p.resenas}` : ""]]
     .filter(([, v]) => CZ.hay(v)).map(([a, b]) => `<div><dt>${a}</dt><dd>${a === "Horario" ? esc(b).split(/\s*\|\s*/).map((l) => l.charAt(0).toUpperCase() + l.slice(1)).join("<br>") : esc(b)}</dd></div>`).join("");
-  const destino = conSitio(p) ? `${+p.lat},${+p.lon}` : `${p.titulo}, ${p.lugar || "León"}`;
+  const destino = conSitio(p) ? `${+p.lat},${+p.lon}` : `${CZ.hay(p.lugar) ? p.lugar : p.titulo}, León`;
   const web = CZ.hay(p.web) ? CZ.webSegura(p.web) : "", tel = CZ.hay(p.telefono) && String(p.telefono).replace(/\D/g, "").length >= 6;
   $("hBotones").innerHTML = [
     `<a class="uno" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}" target="_blank" rel="noopener noreferrer">${ICO.ir}Cómo llegar</a>`,
