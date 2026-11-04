@@ -55,3 +55,27 @@ export function filtrarMasEseDia(agenda, plan, apetece) {
     return palabras.some((re) => re.test(texto));
   });
 }
+
+// La IA a veces cuela un mercado o una feria porque están en la agenda ("tapeo y cenar" con el mercado a las 09:00).
+// Se quitan solo cuando el error es seguro: hay un tema pedido, no es un plan abierto, no se habla de mercados ni de
+// compras y la parada no comparte palabras con lo pedido. Nunca se quita más de la mitad. Sin IA: 0 € y sin llamadas.
+const PIDE_MERCADO = /\b(?:mercad|mercadill|rastr|ferias?\b|compra|comprar|tipic|producto|artesan)/;
+const PLAN_ABIERTO = /\b(?:sorprend|que hacer|pasar el dia|lo que sea|cualquier cosa)/;
+const ES_MERCADO = /\b(?:mercados?|mercadillos?|rastros?|rastrillos?|ferias?)\b/;
+const TIPOS_SIN_CONCRETAR = new Set(["", "evento", "fiesta", "festival", "otro", "visita"]);
+export function quitarNoPedidas(paradas, apetece) {
+  if (!Array.isArray(paradas)) return [];
+  const t = ` ${quitarTildes(apetece)} `;
+  const conTema = TEMAS.some(([, re]) => re.test(t));
+  if (!conTema || PLAN_ABIERTO.test(t) || PIDE_MERCADO.test(t)) return paradas;
+  // Sin la s final: "tapas" también vale para "Feria de la Tapa". Se mira solo el título: la descripción nombra barrios y alternativas
+  const palabras = palabrasClave(apetece).map((p) => new RegExp(`\\b${p.replace(/s$/, "")}`));
+  const ajena = (p) => {
+    const titulo = quitarTildes(p?.titulo), tipo = quitarTildes(p?.tipo);
+    // Por el título, solo si el tipo no dice otra cosa: la Iglesia del Mercado es un monumento
+    const esMercado = /^(?:mercadillo|mercado|feria)$/.test(tipo) || (TIPOS_SIN_CONCRETAR.has(tipo) && ES_MERCADO.test(titulo));
+    return esMercado && !palabras.some((re) => re.test(titulo));
+  };
+  let puedenIrse = Math.floor(paradas.length / 2);
+  return paradas.filter((p) => !(ajena(p) && puedenIrse-- > 0));
+}

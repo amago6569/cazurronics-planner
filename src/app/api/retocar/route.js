@@ -7,6 +7,7 @@ import { claveLugar, esNegocio, esPrueba, registrarApariciones, sitiosComprobado
 import { fueraDeLeon, planesConGoogle } from '../../../lib/montarPlan';
 import { enProvinciaLeon } from '../../../lib/provincia';
 import { registrar } from '../../../lib/estadisticas';
+import { borrarVotosParada } from '../../../lib/votos';
 
 export const maxDuration = 60;
 
@@ -80,6 +81,7 @@ export async function POST(request) {
           guardado.itinerario[indice] = parada;
           guardado.editado = Date.now();
           await guardarJSON(`plan:${planId}`, guardado, 120 * 24 * 3600);
+          await borrarVotosParada(planId, indice);
         }
       })(), 'actualizar plan');
     }

@@ -15,7 +15,7 @@ import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtener
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
 import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
-import { filtrarMasEseDia } from './intencion';
+import { filtrarMasEseDia, quitarNoPedidas } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 
 // Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
@@ -39,13 +39,14 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
   // En paralelo con el tiempo: 1) la agenda guardada de ese día, 2) un barrido a medida de ESTA petición
   // (eventos, mercadillos, ferias, exposiciones, pueblos cercanos...), 3) lo que la comunidad ha valorado en la zona
   // y 4) en modo ahorro, los locales reales ya comprobados del radio. Si algo falla, el plan sale igual.
-  const [previsionTiempo, eventosDia, eventosAMedida, prefs, sitios] = await Promise.all([
+  const [tiempo, eventosDia, eventosAMedida, prefs, sitios] = await Promise.all([
     obtenerPrevisionTiempo(lat, lon, fecha),
     sinRomper(eventosDelDia(fecha, { lat, lon, radio }), 'eventos'),
     sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
     sinRomper(preferenciasComunidad(lat, lon, radio), 'preferencias'),
     conGoogle ? null : sinRomper(sitiosComprobados(lat, lon, radio), 'sitios comprobados'),
   ]);
+  const previsionTiempo = tiempo?.texto || null; // lo que ve la persona; lo de "día malo" es solo para la IA
 
   // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
   const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha));
@@ -55,8 +56,9 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
     prefs?.evitar?.length ? `EVITA estos sitios (malas experiencias reales de usuarios): ${prefs.evitar.join(', ')}.` : '',
   ].filter(Boolean).join('\n');
 
+  // Manda lo que pide la persona: el tiempo decide cuánto se avisa, no qué se propone. Solo en un plan abierto elige el tiempo.
   const bloqueTiempo = previsionTiempo
-    ? `PREVISIÓN DEL TIEMPO REAL: ${previsionTiempo}. ADAPTA EL PLAN PRINCIPAL ESTRICTAMENTE A ESTE CLIMA. Al final de la descripción añade SIEMPRE una nota secundaria: "(Alternativa por si cambia el tiempo: [sitio real])".` : '';
+    ? `PREVISIÓN DEL TIEMPO REAL: ${previsionTiempo}. Si pide algo concreto, también de exterior (naturaleza, una ruta, una terraza), dáselo aunque haga mal tiempo: el tiempo no cambia el tema. Si pide un plan abierto sin tema, elige según el tiempo. Al final de la descripción añade SIEMPRE una nota secundaria: "(Alternativa por si cambia el tiempo: [sitio real])".${tiempo.dia === 'malo' ? ' ESE DÍA HACE MALO: en las paradas de exterior empieza la descripción avisando del tiempo con una frase y que la alternativa sea un sitio real a cubierto.' : ''}` : '';
 
   const instruccionBusqueda = conGoogle
     ? `1. Busca en Google Search eventos efímeros para ${fecha} (y también mercadillos, ferias, exposiciones y fiestas que estén en marcha ese día) y sitios bien valorados.`
@@ -104,10 +106,10 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
 
   // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
-  const contexto = { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal };
+  const contexto = { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal, fuentes: conGoogle ? null : new Set(agendaDelDia.map((e) => e.fuente).filter(Boolean)) };
   const enriquecidas = await Promise.all(
-    rutaBruta
-      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim())
+    quitarNoPedidas(rutaBruta
+      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece)
       .map((p) => enriquecerParada(p, contexto).catch((e) => {
         console.error('[plan] parada', e?.message || e);
         return { parada: null, problemaConfigPlaces: null };

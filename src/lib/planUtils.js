@@ -2,7 +2,7 @@
 // Usado por app/api/plan/route.js (generar plan) y app/api/retocar/route.js (cambiar una parada).
 import { comando, sinRomper } from './almacen';
 import { direccionEnLeon, enProvinciaLeon } from './provincia';
-import { bonito, seParecen } from './nombres';
+import { bonito, mismoSitioNatural, seParecen, slug } from './nombres';
 
 // Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
 // en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
@@ -182,9 +182,18 @@ export const WMO_A_TEXTO = {
 };
 
 // Consulta la previsión real del tiempo (Open-Meteo, gratis, sin API key) para el punto y fecha del plan.
+// ¿Es un día malo para estar fuera? Solo cambia cuánto se avisa en el plan, nunca lo que se propone.
+// El código del tiempo no basta ("Chubascos ligeros" pueden ser 17 horas de lluvia) y el frío no cuenta:
+// en León bloquearía los planes de naturaleza medio año. Umbrales provisionales.
+const CODIGOS_DIA_MALO = new Set([65, 67, 75, 82, 86, 95, 96, 99]); // lluvia y nieve intensas, tormenta
+export function clasificarTiempo({ codigo, lluviaMm, horasLluvia, rachaKmh } = {}) {
+  const malo = CODIGOS_DIA_MALO.has(codigo) || lluviaMm >= 5 || horasLluvia >= 10 || rachaKmh >= 50;
+  return malo ? 'malo' : 'normal';
+}
+
 export async function obtenerPrevisionTiempo(lat, lon, fecha) {
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FMadrid&start_date=${fecha}&end_date=${fecha}`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_hours,wind_gusts_10m_max&timezone=Europe%2FMadrid&start_date=${fecha}&end_date=${fecha}`;
     const res = await fetch(url, conLimite(MS.tiempo));
     const data = await res.json();
 
@@ -198,7 +207,10 @@ export async function obtenerPrevisionTiempo(lat, lon, fecha) {
       const tMax = Math.round(data.daily.temperature_2m_max[0]);
       const tMin = Math.round(data.daily.temperature_2m_min[0]);
       const descripcion = WMO_A_TEXTO[codigo] || 'Previsión no disponible';
-      return `${descripcion}, entre ${tMin}°C y ${tMax}°C`;
+      return {
+        texto: `${descripcion}, entre ${tMin}°C y ${tMax}°C`,
+        dia: clasificarTiempo({ codigo, lluviaMm: data.daily.precipitation_sum?.[0], horasLluvia: data.daily.precipitation_hours?.[0], rachaKmh: data.daily.wind_gusts_10m_max?.[0] }),
+      };
     }
   } catch (e) {
     console.error("Error obteniendo la previsión del tiempo (Open-Meteo):", e);
@@ -306,8 +318,9 @@ export function descripcionReal(objetivo, tipo, nombreZona) {
 // Dado UNA parada (tal cual la devuelve Gemini) y el contexto de la búsqueda, la enriquece con datos
 // reales: coordenadas verificadas, teléfono, web, horario, reseñas, foto real y Street View.
 // Devuelve la parada enriquecida, o null si debe descartarse (bar/restaurante/discoteca sin ficha real).
+const TIPOS_DE_COMER = ['restaurant', 'bar', 'cafe', 'food', 'meal_takeaway', 'meal_delivery', 'bakery', 'night_club'];
 export async function enriquecerParada(paradaOriginal, contexto) {
-  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite } = contexto;
+  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite, fuentes } = contexto;
   let parada = { ...paradaOriginal };
   parada.precio = limpiarPrecio(parada.precio);
 
@@ -320,6 +333,13 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   let fotoRealEncontrada = null;
   let ubicacionResuelta = false;
   let problemaConfigPlaces = null;
+  // Rutas y parques que propone la IA por su cuenta solo valen si existen de verdad. Los de la agenda sí se quedan:
+  // su fuente está en la lista de la agenda (sin lista, como en los retoques, vale que traiga un enlace)
+  const fuenteParada = String(parada.fuente || '');
+  const deLaAgenda = fuentes ? fuentes.has(fuenteParada) : /^https?:\/\//i.test(fuenteParada);
+  const sitioNatural = ['parque', 'ruta'].includes(String(parada.tipo || '').toLowerCase()) && !deLaAgenda;
+  const paraComer = necesitaFicha(parada.tipo);
+  let googleRespondio = false; // si Google falla o tarda, no se puede decir que el sitio no exista
 
   try {
     const radioMetros = Number(radio) * 1000;
@@ -331,11 +351,17 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     if (dataSearch.status && dataSearch.status !== 'OK' && dataSearch.status !== 'ZERO_RESULTS') {
       console.error(`[Google Places] status="${dataSearch.status}" para "${queryBusquedaReal}": ${dataSearch.error_message || '(sin mensaje adicional)'}`);
       problemaConfigPlaces = `${dataSearch.status}: ${dataSearch.error_message || 'revisa que la Places API esté activada y la clave sea correcta'}`;
+    } else {
+      googleRespondio = true;
     }
 
     if (dataSearch.results && dataSearch.results.length > 0) {
       const candidatosEnZona = dataSearch.results.filter(r => {
         if (!r.geometry || r.business_status === 'CLOSED_PERMANENTLY') return false;
+        // "Restaurante en Vegacervera" no puede acabar en las Hoces de Vegacervera: donde se come, tiene que ser de comer
+        if (paraComer && r.types?.length && !r.types.some((t) => TIPOS_DE_COMER.includes(t))) return false;
+        // Y al revés: "Ruta por Boñar" no se queda con los datos del Bar Boñar ni de un hostal
+        if (sitioNatural && r.types?.some((t) => TIPOS_DE_COMER.includes(t) || t === 'lodging')) return false;
         // Solo sitios que Google sitúa en la provincia de León (por mapa y por código postal 24xxx)
         if (!enProvinciaLeon(r.geometry.location.lat, r.geometry.location.lng) || !direccionEnLeon(r.formatted_address)) return false;
         const distanciaKm = haversineKm(lat, lon, r.geometry.location.lat, r.geometry.location.lng);
@@ -347,8 +373,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
           objetivo = candidatosEnZona[0];
         } else {
           // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota
-          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && seParecen(parada.titulo, r.name));
-          const listaCandidatos = mismoNombre ? [mismoNombre] : candidatosEnZona.slice(0, 5);
+          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (sitioNatural ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
+          // Una ruta o un parque que Google no conoce no se cambia por otro sitio: se queda sin ubicar y se descarta abajo
+          const listaCandidatos = mismoNombre ? [mismoNombre] : sitioNatural ? [] : candidatosEnZona.slice(0, 5);
           objetivo = listaCandidatos.reduce((mejor, actual) => {
             const puntuacionActual = puntuarCandidato(actual, parada.tipo, lat, lon, priceLevelObjetivo, radio);
             const puntuacionMejor = mejor ? puntuarCandidato(mejor, parada.tipo, lat, lon, priceLevelObjetivo, radio) : -Infinity;
@@ -372,10 +399,15 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       // En los pueblos la IA a veces se inventa un bar ("Mesón El Rincón, famoso por su cecina") y Google
       // devuelve otro que sí existe. La ubicación ya es la del real: el nombre y lo que se cuenta, también.
       if (necesitaFicha(parada.tipo) && objetivo.name && !seParecen(parada.titulo, objetivo.name)) {
+        // La alternativa por si cambia el tiempo no depende del local: se conserva
+        const alternativa = String(parada.descripcion || '').match(/\(Alternativa[^)]*\)\s*$/)?.[0] || '';
         parada.titulo = bonito(objetivo.name);
-        parada.descripcion = descripcionReal(objetivo, parada.tipo, nombreZona);
+        parada.descripcion = `${descripcionReal(objetivo, parada.tipo, nombreZona)}${alternativa ? ` ${alternativa.trim()}` : ''}`;
         parada.lugar = null;
         parada.fuente = null;
+      } else if (necesitaFicha(parada.tipo) && objetivo.name && !slug(parada.titulo).includes(slug(objetivo.name))) {
+        // Se parecen en alguna palabra pero no es el mismo nombre ("La Casona de Ciñera" y "La Casona de Babia"): manda el de Google
+        parada.titulo = bonito(objetivo.name);
       }
 
       if (objetivo.place_id) {
@@ -410,6 +442,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   } catch (e) {
     console.error("Error buscando lugar real en Google Places:", e);
   }
+
+  if (!ubicacionResuelta && sitioNatural && googleRespondio) return { parada: null, problemaConfigPlaces };
 
   if (!ubicacionResuelta && (TIPOS_UBICACION_FLEXIBLE.includes(parada.tipo) || !necesitaFicha(parada.tipo))) {
     const latIA = Number(parada.lat);
