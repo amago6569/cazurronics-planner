@@ -1,6 +1,21 @@
 // npm test — Presupuesto, precios y datos que llegan del formulario
 import { describe, expect, it } from "vitest";
-import { ajustarAlPresupuesto, haversineKm, leerPeticionPlan, parsePrecio, presupuestoAPriceLevel } from "../src/lib/planUtils";
+import { ajustarAlPresupuesto, haversineKm, leerPeticionPlan, limpiarPrecio, parsePrecio, presupuestoAPriceLevel } from "../src/lib/planUtils";
+
+describe("limpiarPrecio", () => {
+  it("deja solo el importe", () => {
+    expect(limpiarPrecio("3,50€ (estimado por 1 consumición con tapa, pero se espera un gasto mayor)")).toBe("3,50€");
+    expect(limpiarPrecio("10€ (estimado)")).toBe("10€");
+    expect(limpiarPrecio("10-15€")).toBe("10-15€");
+    expect(limpiarPrecio("Unos 20€ por persona si pides el menú del día completo")).toBe("20€");
+  });
+  it("unifica lo gratis y respeta lo que no es precio", () => {
+    expect(limpiarPrecio("Entrada libre hasta completar aforo")).toBe("Gratis");
+    expect(limpiarPrecio("0€")).toBe("Gratis");
+    expect(limpiarPrecio("No disponible")).toBe("No disponible");
+    expect(limpiarPrecio(null)).toBe(null);
+  });
+});
 
 describe("parsePrecio", () => {
   it("entiende los formatos habituales", () => {
