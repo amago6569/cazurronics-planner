@@ -182,9 +182,18 @@ export const WMO_A_TEXTO = {
 };
 
 // Consulta la previsión real del tiempo (Open-Meteo, gratis, sin API key) para el punto y fecha del plan.
+// ¿Es un día malo para estar fuera? Solo cambia cuánto se avisa en el plan, nunca lo que se propone.
+// El código del tiempo no basta ("Chubascos ligeros" pueden ser 17 horas de lluvia) y el frío no cuenta:
+// en León bloquearía los planes de naturaleza medio año. Umbrales provisionales.
+const CODIGOS_DIA_MALO = new Set([65, 67, 75, 82, 86, 95, 96, 99]); // lluvia y nieve intensas, tormenta
+export function clasificarTiempo({ codigo, lluviaMm, horasLluvia, rachaKmh } = {}) {
+  const malo = CODIGOS_DIA_MALO.has(codigo) || lluviaMm >= 5 || horasLluvia >= 10 || rachaKmh >= 50;
+  return malo ? 'malo' : 'normal';
+}
+
 export async function obtenerPrevisionTiempo(lat, lon, fecha) {
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FMadrid&start_date=${fecha}&end_date=${fecha}`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_hours,wind_gusts_10m_max&timezone=Europe%2FMadrid&start_date=${fecha}&end_date=${fecha}`;
     const res = await fetch(url, conLimite(MS.tiempo));
     const data = await res.json();
 
@@ -198,7 +207,10 @@ export async function obtenerPrevisionTiempo(lat, lon, fecha) {
       const tMax = Math.round(data.daily.temperature_2m_max[0]);
       const tMin = Math.round(data.daily.temperature_2m_min[0]);
       const descripcion = WMO_A_TEXTO[codigo] || 'Previsión no disponible';
-      return `${descripcion}, entre ${tMin}°C y ${tMax}°C`;
+      return {
+        texto: `${descripcion}, entre ${tMin}°C y ${tMax}°C`,
+        dia: clasificarTiempo({ codigo, lluviaMm: data.daily.precipitation_sum?.[0], horasLluvia: data.daily.precipitation_hours?.[0], rachaKmh: data.daily.wind_gusts_10m_max?.[0] }),
+      };
     }
   } catch (e) {
     console.error("Error obteniendo la previsión del tiempo (Open-Meteo):", e);
