@@ -337,7 +337,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // su fuente está en la lista de la agenda (sin lista, como en los retoques, vale que traiga un enlace)
   const fuenteParada = String(parada.fuente || '');
   const deLaAgenda = fuentes ? fuentes.has(fuenteParada) : /^https?:\/\//i.test(fuenteParada);
-  const sitioNatural = ['parque', 'ruta'].includes(String(parada.tipo || '').toLowerCase()) && !deLaAgenda;
+  const sitioNatural = ['parque', 'ruta', 'deporte'].includes(String(parada.tipo || '').toLowerCase()) && !deLaAgenda;
   const paraComer = necesitaFicha(parada.tipo);
   let googleRespondio = false; // si Google falla o tarda, no se puede decir que el sitio no exista
 

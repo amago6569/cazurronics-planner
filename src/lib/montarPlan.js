@@ -85,6 +85,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
       - Cada parada a su hora natural: comer entre 13:30 y 15:30, cenar entre 20:30 y 22:30, copas y fiesta desde las 23:00, salvo que pida otra hora. "Comer" o "cenar" es un sitio donde se come (restaurante, mesón o bar de comidas): un evento de la agenda no lo sustituye. Deja tiempo real entre paradas (lo que dura cada una más el camino) y un orden que no obligue a ir y volver. En "transporte" pon cómo se llega desde la parada anterior.
       - La alternativa por si cambia el tiempo va dentro de la descripción, nunca como parada extra.
       - Si no hay nada real que cumpla lo pedido ese día, devuelve [] en vez de rellenar con otras cosas.
+      - Una ruta para caminar o en bici no es una carrera, ni al revés. Si pide caminar o una ruta y no hay ninguna guiada en la agenda, propón una ruta real que se pueda hacer cualquier día (tipo "ruta", con el nombre con el que se conoce). Una carrera, un trail o un torneo solo si está en la agenda.
       - Antes de responder, repasa la lista: cada parada tiene que corresponder a algo que ha pedido. Si pide "tapeo y cenar", son esas dos: no añadas mercados, visitas ni exposiciones porque estén en la agenda.
       INSTRUCCIONES:
       ${instruccionBusqueda}
