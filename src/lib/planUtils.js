@@ -69,6 +69,18 @@ export function parsePrecio(precioStr) {
   return valores.reduce((a, b) => a + b, 0) / valores.length;
 }
 
+// Deja el precio que escribe la IA en lo que se lee de un vistazo: "3,50€ (estimado por 1 consumición...)" → "3,50€".
+// También evita que los números de la nota cuenten en parsePrecio y que el catálogo guarde esos textos.
+export function limpiarPrecio(precio) {
+  if (precio == null) return precio;
+  const texto = String(precio).trim();
+  if (/gratis|gratuit|entrada libre|^0\s*€?$/i.test(texto)) return 'Gratis';
+  const sinNota = texto.replace(/\s*[([].*$/s, '').trim() || texto;
+  if (sinNota.length <= 24) return sinNota;
+  const importe = sinNota.match(/\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?\s*€/);
+  return importe ? importe[0] : sinNota;
+}
+
 // Puntúa un candidato de Google Places según valoración, popularidad, encaje de presupuesto y distancia real
 export function puntuarCandidato(candidato, tipo, lat, lon, priceLevelObjetivo, radio) {
   if (!candidato || !candidato.geometry) return -Infinity;
@@ -297,6 +309,7 @@ export function descripcionReal(objetivo, tipo, nombreZona) {
 export async function enriquecerParada(paradaOriginal, contexto) {
   const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite } = contexto;
   let parada = { ...paradaOriginal };
+  parada.precio = limpiarPrecio(parada.precio);
 
   parada.titulo = String(parada.titulo || '').replace(/,?\s*León,?\s*España/gi, '').trim();
   parada.lugar = typeof parada.lugar === 'string' ? parada.lugar.trim().slice(0, 100) : null;
