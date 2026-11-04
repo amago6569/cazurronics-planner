@@ -156,12 +156,12 @@ export function agruparPorFranja(lista) {
 // ---------- Temporada ----------
 // Lo que anuncia una estación o una fiesta en el título y no toca en esa fecha ("Actividades Verano 2026" en noviembre)
 const TEMPORADAS = [
-  [/verano|estival(es)?/, [6, 7, 8, 9]],
-  [/invierno/, [12, 1, 2, 3]],
-  [/primavera/, [3, 4, 5, 6]],
-  [/otono/, [9, 10, 11, 12]],
-  [/navidad(es)?|navidenos?|navidenas?/, [11, 12, 1]],
-  [/semana santa/, [3, 4]],
+  [/\bverano\b|\bestival(es)?\b/, [6, 7, 8, 9]],
+  [/\binvierno\b/, [12, 1, 2, 3]],
+  [/\bprimavera\b/, [3, 4, 5, 6]],
+  [/\botono\b/, [9, 10, 11, 12]],
+  [/\bnavidad(es)?\b|\bnavidenos?\b|\bnavidenas?\b/, [11, 12, 1]],
+  [/\bsemana santa\b/, [3, 4]],
 ];
 export function fueraDeTemporada(e, fecha) {
   const mes = Number(String(fecha || "").slice(5, 7));
