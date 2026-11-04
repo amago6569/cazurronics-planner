@@ -153,6 +153,23 @@ export function agruparPorFranja(lista) {
   return FRANJAS.map((f) => ({ ...f, eventos: ordenada.filter((e) => leerHora(e.hora).franja === f.id) })).filter((g) => g.eventos.length);
 }
 
+// ---------- Temporada ----------
+// Lo que anuncia una estación o una fiesta en el título y no toca en esa fecha ("Actividades Verano 2026" en noviembre)
+const TEMPORADAS = [
+  [/\bverano\b|\bestival(es)?\b/, [6, 7, 8, 9]],
+  [/\binvierno\b/, [12, 1, 2, 3]],
+  [/\bprimavera\b/, [3, 4, 5, 6]],
+  [/\botono\b/, [9, 10, 11, 12]],
+  [/\bnavidad(es)?\b|\bnavidenos?\b|\bnavidenas?\b/, [11, 12, 1]],
+  [/\bsemana santa\b/, [3, 4]],
+];
+export function fueraDeTemporada(e, fecha) {
+  const mes = Number(String(fecha || "").slice(5, 7));
+  if (!mes) return false;
+  const titulo = normalizar(e?.titulo);
+  return TEMPORADAS.some(([re, meses]) => re.test(titulo) && !meses.includes(mes));
+}
+
 // ---------- Agenda de varios días ----------
 const DIAS_SEMANA = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
 export const esDeVariosDias = (e) => Boolean(e?.permanente || e?.diasSemana?.length || (e?.fechaFin && e.fechaFin > e.fecha));

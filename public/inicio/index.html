@@ -6,16 +6,17 @@
 <meta name="theme-color" content="#07060a">
 <title>Cazurronics | Planes y producto de León</title>
 <meta name="description" content="Dinos qué te apetece y te montamos el plan en León, o encuentra las mejores tiendas de cecina, quesos, pan y vino de la provincia. Gratis y hecho en León.">
-<link rel="canonical" href="https://cazurronics.es/">
+<link rel="canonical" href="https://www.cazurronics.es/">
 <meta property="og:title" content="Cazurronics | Planes y producto de León">
 <meta property="og:description" content="Te montamos el plan en León y te decimos dónde comprar lo mejor de la tierra.">
-<meta property="og:image" content="https://cazurronics.es/opengraph-image">
-<meta property="og:url" content="https://cazurronics.es/">
+<meta property="og:image" content="https://www.cazurronics.es/opengraph-image">
+<meta property="og:url" content="https://www.cazurronics.es/">
 <meta property="og:locale" content="es_ES">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="google-site-verification" content="95sdW_hUNT20HILlfi8C5gDdRjUkOPfVnULlE8AYuAI">
 <link rel="icon" href="/favicon.ico">
+<script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebSite","name":"Cazurronics Planner","alternateName":"Cazurronics","url":"https://www.cazurronics.es","inLanguage":"es-ES"},{"@context":"https://schema.org","@type":"Organization","name":"Cazurronics","url":"https://www.cazurronics.es","logo":"https://www.cazurronics.es/roseton.png","sameAs":["https://www.instagram.com/cazurronics"],"areaServed":{"@type":"AdministrativeArea","name":"Provincia de León"}}]</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
 <style>
@@ -85,9 +86,22 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 .entrar:disabled { opacity: .35; cursor: default; transform: none; }
 .entrar:focus-visible, .punto:focus-visible, #o:focus-visible, .desliza:focus-visible { outline: 2px solid var(--oro); outline-offset: 4px; }
 .pista { font-size: 13px; color: var(--gris); }
-.creditos { position: absolute; z-index: 3; left: 0; right: 0; bottom: max(2px, env(safe-area-inset-bottom, 0px)); margin: 0; padding: 0 16px; text-align: center; font-size: 10px; line-height: 2.4; color: #6d675e; opacity: 0; pointer-events: none; }
-.creditos a { color: inherit; text-decoration: none; padding: 8px 2px; }
-@media (hover: hover) and (pointer: fine) { .creditos a:hover { color: var(--gris); text-decoration: underline; } }
+/* créditos de las imágenes y avisos legales: en una "i" discreta arriba a la derecha, fuera del camino del pulgar */
+.info { position: absolute; z-index: 5; top: max(10px, env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent;
+  color: var(--gris); display: grid; place-items: center; cursor: pointer; opacity: 0; pointer-events: none; transition: transform 140ms ease-out, color 160ms ease; }
+.info svg { width: 22px; height: 22px; }
+.info:active { transform: scale(.92); }
+.info[aria-expanded="true"] { color: var(--crema); }
+@media (hover: hover) and (pointer: fine) { .info:hover { color: var(--crema); } }
+.info-caja { position: absolute; z-index: 5; top: calc(max(10px, env(safe-area-inset-top, 0px)) + 50px); right: max(12px, env(safe-area-inset-right, 0px)); width: min(280px, calc(100vw - 24px)); box-sizing: border-box;
+  padding: 14px 16px; border-radius: 18px; background: #15131b; border: 1px solid rgba(243,234,216,.14); box-shadow: 0 18px 40px rgba(0,0,0,.5); font-size: 13px; line-height: 1.45; color: var(--gris);
+  transform-origin: top right; animation: abre 220ms var(--ease-out); }
+.info-caja[hidden] { display: none; }
+@keyframes abre { from { opacity: 0; transform: scale(.96) translateY(-4px); } }
+.info-caja p { margin: 0 0 10px; }
+.info-caja nav { display: grid; }
+.info-caja a { color: var(--crema); text-decoration: none; font-weight: 600; padding: 9px 0; border-top: 1px solid rgba(243,234,216,.08); }
+@media (hover: hover) and (pointer: fine) { .info-caja a:hover { color: var(--oro); } }
 
 @media (prefers-reduced-motion: reduce) { .desliza svg { animation: none; } .frase span { transition: none; } }
 </style>
@@ -97,8 +111,8 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 <div class="recorrido" id="recorrido"></div>
 <div class="escena" id="escena">
   <div class="video" id="video">
-    <img src="/inicio/leon-poster.jpg" alt="">
-    <video id="clip" src="/inicio/leon.mp4" poster="/inicio/leon-poster.jpg" autoplay muted loop playsinline preload="auto" aria-hidden="true"></video>
+    <picture><source media="(min-aspect-ratio: 1/1)" srcset="/inicio/leon-poster-h.jpg"><img src="/inicio/leon-poster-v.jpg" alt=""></picture>
+    <video id="clip" muted loop playsinline aria-hidden="true"></video>
   </div>
 
   <div class="plano" id="plano">
@@ -117,7 +131,8 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
       <span class="pista">Gira la rosa o toca una opción</span>
     </section>
   </main>
-  <p class="creditos" id="creditos">Imágenes: Wikimedia Commons (CC BY-SA / CC BY), Pexels y Pixabay · <a href="/aviso-legal">Aviso legal</a> · <a href="/privacidad">Privacidad</a> · <a href="/cookies">Cookies</a></p>
+  <button class="info" id="info" type="button" aria-label="Créditos y avisos legales" aria-expanded="false" aria-controls="infoCaja"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg></button>
+  <div class="info-caja" id="infoCaja" hidden><p>Imágenes y vídeo: Wikimedia Commons (CC BY-SA / CC BY), Pexels y Pixabay.</p><nav><a href="/aviso-legal">Aviso legal</a><a href="/privacidad">Privacidad</a><a href="/cookies">Cookies</a></nav></div>
 </div>
 
 <script src="/inicio/comun.js"></script>
@@ -202,10 +217,10 @@ function pintar(p, forzar) {
   $("rosa").style.boxShadow = `0 0 0 ${.012 * (1 - t)}em rgba(243,234,216,.9)`;
   const ui = tramo(p, .86, 1);
   $("panel").style.opacity = ui; $("panel").style.transform = `translateY(${(1 - ui) * 12}px)`;
-  $("aguja").style.opacity = ui; dial.style.opacity = tramo(p, .7, .95); $("sombra").style.opacity = ui; $("creditos").style.opacity = ui;
+  $("aguja").style.opacity = ui; dial.style.opacity = tramo(p, .7, .95); $("sombra").style.opacity = ui; $("info").style.opacity = ui;
   const ahora = p > .97;
   if (ahora !== lista) {
-    lista = ahora; $("panel").style.pointerEvents = $("creditos").style.pointerEvents = lista ? "auto" : "none"; o.tabIndex = lista ? 0 : -1; o.style.cursor = lista ? "grab" : "";
+    lista = ahora; $("panel").style.pointerEvents = $("info").style.pointerEvents = lista ? "auto" : "none"; if (!lista) abrirInfo(false); o.tabIndex = lista ? 0 : -1; o.style.cursor = lista ? "grab" : "";
     if (lista) { try { localStorage.setItem("cz-portada-vista", "1"); } catch {} pistaGiro(); }
   }
 }
@@ -326,11 +341,18 @@ addEventListener("pageshow", (e) => { if (e.persisted) $("escena").getAnimations
 
 /* ═══════════ Arranque ═══════════ */
 addEventListener("resize", medir);
+// la "i": abre y cierra la cajita de créditos; se cierra al tocar fuera o con Escape
+function abrirInfo(si) { $("infoCaja").hidden = !si; $("info").setAttribute("aria-expanded", si); }
+$("info").onclick = (e) => { e.stopPropagation(); abrirInfo($("infoCaja").hidden); };
+addEventListener("pointerdown", (e) => { if (!$("infoCaja").hidden && !e.target.closest("#infoCaja, #info")) abrirInfo(false); });
+addEventListener("keydown", (e) => { if (e.key === "Escape") abrirInfo(false); });
 CZ.registrarVisita();
 (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
   medir(); girar();
   alScroll();
-  const v = $("clip"); v.play && v.play().catch(() => {});
+  // Un vídeo para pantallas verticales y otro para horizontales, cada uno a su resolución real. Con ahorro de datos o sin movimiento, se queda la foto
+  const v = $("clip"), ahorra = navigator.connection && navigator.connection.saveData;
+  if (!reducir && !ahorra) { v.src = matchMedia("(min-aspect-ratio: 1/1)").matches ? "/inicio/leon-h.mp4" : "/inicio/leon-v.mp4"; v.play().catch(() => {}); }
 });
 </script>
 </body>

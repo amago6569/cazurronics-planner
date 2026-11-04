@@ -14,7 +14,7 @@ import { sinRomper } from './almacen';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
-import { deduplicar, leerHora, mismoEvento, ordenarPorHora } from './agenda';
+import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
 import { filtrarMasEseDia } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 
@@ -47,7 +47,8 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
     conGoogle ? null : sinRomper(sitiosComprobados(lat, lon, radio), 'sitios comprobados'),
   ]);
 
-  const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []);
+  // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
+  const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha));
   const bloqueAgenda = eventosParaPrompt(agendaDelDia);
   const bloqueComunidad = [
     prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
@@ -61,9 +62,16 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
     ? `1. Busca en Google Search eventos efímeros para ${fecha} (y también mercadillos, ferias, exposiciones y fiestas que estén en marcha ese día) y sitios bien valorados.`
     : `1. Los eventos (conciertos, mercadillos, ferias, exposiciones, fiestas...) salen SOLO de la AGENDA VERIFICADA de arriba: no añadas eventos que no estén en ella. Los sitios (bares, restaurantes, cafeterías, museos, monumentos, parques...) elígelos entre los SITIOS REALES COMPROBADOS cuando encajen, o entre sitios reales y bien valorados que conozcas con seguridad en esa zona. Antes de decidir, compara varias opciones de cada tipo y quédate con la mejor combinación de calidad, precio, distancia y lo que pide el usuario.`;
 
+  // Si el plan es para hoy, la IA tiene que saber qué hora es: un plan con paradas ya pasadas no sirve
+  const ahora = new Date();
+  const hoyEnLeon = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(ahora);
+  const horaEnLeon = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' }).format(ahora);
+  const bloqueHoy = fecha === hoyEnLeon ? `EL PLAN ES PARA HOY Y SON LAS ${horaEnLeon}: todas las paradas empiezan después de esta hora.` : '';
+
   const prompt = `
       Eres Cazurronics Planner. Crea un plan en León (solo León capital y provincia, España).
       DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: "${apetece}". Fecha: ${fecha}.
+      ${bloqueHoy}
       ${bloqueTiempo}
       ${bloqueAgenda}
       ${conGoogle ? '' : sitiosParaPrompt(sitios)}
@@ -72,6 +80,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
       - Si pide algo CONCRETO (por ejemplo "una charla", "un concierto", "dónde ver el partido", "un sitio para comer cocido"), devuelve SOLO eso: normalmente 1 parada, y como mucho 2 o 3 si son opciones del mismo tipo a distintas horas. NO añadas comidas, copas, paseos ni visitas que no ha pedido.
       - Si pide varias cosas (por ejemplo "comer y luego salir de fiesta"), una parada por cada cosa pedida, en ese orden.
       - Solo si pide un plan abierto SIN tema concreto ("un plan", "qué hacer", "sorpréndeme", "pasar el día") monta un plan completo de varias paradas. Si menciona un tema concreto, manda el tema aunque diga "plan" (por ejemplo "un plan con charla" = solo la charla).
+      - Cada parada a su hora natural: comer entre 13:30 y 15:30, cenar entre 20:30 y 22:30, copas y fiesta desde las 23:00, salvo que pida otra hora. "Comer" o "cenar" es un sitio donde se come (restaurante, mesón o bar de comidas): un evento de la agenda no lo sustituye. Deja tiempo real entre paradas (lo que dura cada una más el camino) y un orden que no obligue a ir y volver. En "transporte" pon cómo se llega desde la parada anterior.
       - La alternativa por si cambia el tiempo va dentro de la descripción, nunca como parada extra.
       - Si no hay nada real que cumpla lo pedido ese día, devuelve [] en vez de rellenar con otras cosas.
       INSTRUCCIONES:
