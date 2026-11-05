@@ -27,6 +27,6 @@ describe("avisoCercano", () => {
     expect(avisoCercano({ ...base, apetece: "clases de kintsugi", plan: [{ lat: 42.6, lon: -5.56, parecido: true }] })).toBe("No hemos encontrado «clases de kintsugi». Lo más parecido que hay es esto.");
   });
   it("si está dentro de la zona no habla de distancia", () => {
-    expect(avisoCercano({ ...base, plan: [{ lat: 42.6, lon: -5.56 }] })).toBe("Ese día no hay «un trail» tal cual en tu zona. Lo más cercano es esto.");
+    expect(avisoCercano({ ...base, plan: [{ lat: 42.6, lon: -5.56 }] })).toBe("Ese día no hay «un trail» tal cual. Lo más cercano es esto.");
   });
 });
