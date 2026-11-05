@@ -53,6 +53,7 @@
 .cabecera-r small { color: var(--oro); font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cabecera-r .pregunta { font-size: clamp(40px, 12vw, 64px); }
 .cabecera-r p { margin: 0; color: #ddd4c4; font-size: 15px; line-height: 1.45; }
+.aviso-zona { margin: 0; padding: 14px 16px; border-radius: 18px; background: rgba(233,180,76,.12); border: 1px solid rgba(233,180,76,.4); font-size: 15px; font-weight: 600; line-height: 1.4; }
 .tiendas-mapa { height: 280px; flex: none; }
 .ruta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 16px; border-radius: 22px; background: var(--crema); color: var(--noche); text-decoration: none; transition: transform 120ms ease-out; }
 .ruta:active { transform: scale(.98); }
@@ -116,6 +117,7 @@
     </section>
     <section class="paso" id="resultado" aria-labelledby="d4">
       <div class="cabecera-r marco"><small id="para"></small><h1 class="pregunta" id="d4"></h1><p id="frase"></p></div>
+      <p class="aviso-zona marco" id="avisoZona" role="status" hidden></p>
       <div class="tiendas-mapa marco" id="tiendasMapa"></div>
       <a class="ruta marco" id="ruta" href="#" target="_blank" rel="noopener noreferrer" hidden><span><b>Ruta por la mejor de cada cosa</b><span id="rutaTxt"></span></span><span aria-hidden="true">→</span></a>
       <div class="marco" id="grupos" style="display:grid;gap:14px"></div>
@@ -171,9 +173,14 @@ async function buscar() {
   const radio = peticion.radio >= 150 ? 200 : peticion.radio; // 150 km o más es "toda la provincia"
   const espera = new Promise((r) => setTimeout(r, reducir ? 0 : 900)); // que se vea que busca, sin hacerlo esperar
   try {
-    const res = await fetch("/api/despensa/buscar", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texto: peticion.texto, lat: peticion.lat, lon: peticion.lon, radio, presupuesto: "igual" }) });
-    const d = await res.json().catch(() => null);
+    const pedir = async (r) => { const res = await fetch("/api/despensa/buscar", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: peticion.texto, lat: peticion.lat, lon: peticion.lon, radio: r, presupuesto: "igual" }) }); return res.json().catch(() => null); };
+    let d = await pedir(radio);
+    // Nada en la zona: se busca en toda la provincia y se avisa de que es lo más cercano
+    if (d && d.exito && !(d.tiendas || []).length && radio < 200) {
+      const amplio = await pedir(200).catch(() => null);
+      if (amplio && amplio.exito && (amplio.tiendas || []).length) d = { ...amplio, avisoZona: `A ${CZ.km(radio)} de ${d.sitio || zonaNombre} no hay tiendas de «${peticion.texto.trim().slice(0, 60)}». Lo más cercano es esto.` };
+    }
     await espera;
     if (!d || !d.exito) { CZ.avisar((d && d.mensaje) || "No hemos podido buscar. Prueba otra vez."); mostrar(1); return; }
     pintar(d); mostrar(3);
@@ -212,6 +219,7 @@ function pintar(d) {
   const radioMostrado = d.radio >= 200 ? 150 : d.radio || peticion.radio, sitio = d.sitio || zonaNombre;
   $("para").textContent = `Para «${peticion.texto.trim()}»`;
   $("d4").textContent = `Tus tiendas ${radioMostrado >= 150 ? "en toda la provincia" : `a ${CZ.km(radioMostrado)} de ${sitio}`}`;
+  $("avisoZona").hidden = !d.avisoZona; $("avisoZona").textContent = d.avisoZona || "";
   $("frase").textContent = d.frase || ""; $("frase").hidden = !d.frase;
   $("grupos").innerHTML = !todas.length
     ? `<div class="vacio"><b>${d.buscamos ? `Aún no tenemos «${esc(d.buscamos)}» comprobado por aquí.` : "No hay nada que encaje en esta zona."}</b><span>${d.buscamos ? "Esta noche lo buscamos. Vuelve mañana y repite la búsqueda." : "Vuelve atrás y sube la distancia para buscar más lejos."}</span></div>`

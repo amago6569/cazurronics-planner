@@ -31,7 +31,7 @@ const FAMILIAS = [
   ["fiesta", /fiesta|romeria|verbena|patron|san froilan|carnaval/],
   ["feria", /feria|festival|jornada|semana|congreso/],
   ["visita", /visita|ruta|guiad|senderismo|excursion/],
-  ["deporte", /deporte|partido|carrera|maraton|futbol|baloncesto|balonmano|cultural leonesa|ademar/],
+  ["deporte", /deporte|partido|carrera|cross\b|trail|maraton|duatlon|triatlon|btt|mtb|mountain bike|ciclis|marcha|futbol|baloncesto|balonmano|cultural leonesa|ademar/],
   ["gastro", /cata|degustacion|gastronom|tapa|vino|cerveza|cocido|cecina/],
   ["infantil", /infantil|ninos|familia|cuentacuentos|ludoteca/],
 ];

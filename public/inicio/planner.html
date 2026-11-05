@@ -94,6 +94,7 @@
 .datos { display: flex; flex-wrap: wrap; gap: 6px; }
 .datos span { font-size: 13px; font-weight: 700; padding: 7px 11px; border-radius: 999px; background: var(--vidrio); border: 1px solid var(--borde); }
 .datos span::first-letter { text-transform: uppercase; }
+.aviso-zona { margin: 0; padding: 14px 16px; border-radius: 18px; background: rgba(233,180,76,.12); border: 1px solid rgba(233,180,76,.4); font-size: 15px; font-weight: 600; line-height: 1.4; }
 .ruta-mapa { height: 300px; flex: none; }
 .tramos { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); overflow: hidden; }
 .tramos li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; }
@@ -240,6 +241,7 @@ button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } butt
     <section class="paso resultado" id="resultado" aria-labelledby="p6">
       <h1 class="pregunta marco" id="p6">Tu planazo</h1>
       <div class="datos marco" id="datos"></div>
+      <p class="aviso-zona marco" id="avisoZona" role="status" hidden></p>
       <div class="ruta-mapa marco" id="rutaMapa"></div>
       <ol class="tramos marco" id="tramos"></ol>
       <div class="dos-col marco" id="dosCol">
@@ -438,6 +440,7 @@ function tramoHasta(i) {
 }
 function pintarResultado(datos) {
   $("datos").innerHTML = [fechaLarga(peticion.fecha), $("rangoTxt").textContent, `${peticion.radio} km · ${zonaNombre}`].map((t) => `<span>${esc(t)}</span>`).join("");
+  $("avisoZona").hidden = !datos.aviso; $("avisoZona").textContent = datos.aviso || "";
   $("prevCaja").hidden = !datos.prevision; $("prevTxt").textContent = datos.prevision || "";
   $("compartirCaja").hidden = !planId;
   $("dosCol").hidden = !datos.prevision && !planId;

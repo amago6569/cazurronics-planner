@@ -11,12 +11,13 @@
 // plan paga búsquedas. PLANES_CON_GOOGLE=1 en Vercel vuelve al modo con búsqueda.
 import { llamarGemini, extraerJSON } from './gemini';
 import { sinRomper } from './almacen';
-import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada } from './planUtils';
+import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
 import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
 import { filtrarMasEseDia, quitarNoPedidas } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
+import { dentroDelTopeDiario } from './freno';
 
 // Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
 export function fueraDeLeon({ lat, lon, texto }) {
@@ -27,8 +28,35 @@ export function fueraDeLeon({ lat, lon, texto }) {
 
 export const planesConGoogle = () => /^(1|si|sí|true)$/i.test(String(process.env.PLANES_CON_GOOGLE || '').trim());
 
-// Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso } o { exito: false, mensaje }
-export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000 } = {}) {
+// Si en la zona no sale nada, un segundo intento con toda la provincia (una llamada más a la IA y a Google, solo en ese caso).
+// Tope diario para toda la web: PLANES_AMPLIADOS_MAX_DIA en Vercel (0 = sin tope). Sin 20 s por delante no se intenta.
+const MS_MINIMO_AMPLIAR = 20000;
+const RADIO_PROVINCIA = 150;
+
+// El aviso que ve la persona encima del plan
+export function avisoCercano({ apetece, radio, lat, lon, plan }) {
+  const pedido = String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas';
+  if (plan.some((p) => p.parecido)) return `No hemos encontrado «${pedido}». Lo más parecido que hay es esto.`;
+  const km = Math.min(...plan.map((p) => haversineKm(lat, lon, Number(p.lat), Number(p.lon))).filter(Number.isFinite));
+  if (km > radio) return `En ${radio} km a la redonda no hay nada de «${pedido}». Lo más cercano es esto, a ${Math.round(km)} km.`;
+  return `Ese día no hay «${pedido}» tal cual en tu zona. Lo más cercano es esto.`;
+}
+
+// Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso, aviso? } o { exito: false, mensaje, vacio? }
+export async function montarPlan(peticion, opciones = {}) {
+  const { inicio = Date.now(), msIA = 55000 } = opciones;
+  const primero = await intentoPlan(peticion, { ...opciones, inicio });
+  if (primero.exito || !primero.vacio || inicio + msIA - Date.now() < MS_MINIMO_AMPLIAR) return primero;
+  if (!(await dentroDelTopeDiario('plan-ampliado', Number(process.env.PLANES_AMPLIADOS_MAX_DIA ?? 20)))) return primero;
+  const amplio = await intentoPlan({ ...peticion, radio: Math.max(Number(peticion.radio) || 0, RADIO_PROVINCIA) }, { ...opciones, inicio, ampliado: true }).catch((e) => {
+    console.error('[plan] intento ampliado', e?.message || e);
+    return null;
+  });
+  if (!amplio?.exito) return primero;
+  return { ...amplio, ampliado: true, aviso: avisoCercano({ ...peticion, plan: amplio.plan }) };
+}
+
+async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000, ampliado = false } = {}) {
   const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
   const fuera = fueraDeLeon({ lat, lon, texto: apetece });
   if (fuera) return { exito: false, mensaje: fuera };
@@ -42,7 +70,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
   const [tiempo, eventosDia, eventosAMedida, prefs, sitios] = await Promise.all([
     obtenerPrevisionTiempo(lat, lon, fecha),
     sinRomper(eventosDelDia(fecha, { lat, lon, radio }), 'eventos'),
-    sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
+    ampliado ? null : sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
     sinRomper(preferenciasComunidad(lat, lon, radio), 'preferencias'),
     conGoogle ? null : sinRomper(sitiosComprobados(lat, lon, radio), 'sitios comprobados'),
   ]);
@@ -84,7 +112,9 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
       - Solo si pide un plan abierto SIN tema concreto ("un plan", "qué hacer", "sorpréndeme", "pasar el día") monta un plan completo de varias paradas. Si menciona un tema concreto, manda el tema aunque diga "plan" (por ejemplo "un plan con charla" = solo la charla).
       - Cada parada a su hora natural: comer entre 13:30 y 15:30, cenar entre 20:30 y 22:30, copas y fiesta desde las 23:00, salvo que pida otra hora. "Comer" o "cenar" es un sitio donde se come (restaurante, mesón o bar de comidas): un evento de la agenda no lo sustituye. Deja tiempo real entre paradas (lo que dura cada una más el camino) y un orden que no obligue a ir y volver. En "transporte" pon cómo se llega desde la parada anterior.
       - La alternativa por si cambia el tiempo va dentro de la descripción, nunca como parada extra.
-      - Si no hay nada real que cumpla lo pedido ese día, devuelve [] en vez de rellenar con otras cosas.
+      ${ampliado
+    ? '- En la zona que eligió no había nada, así que ahora vale toda la provincia: dale lo pedido, lo más cerca posible de ese punto. Si lo que pide no existe en ninguna parte, propón la cosa real más parecida (la misma clase de actividad) y pon "parecido": true en esa parada. Nunca inventes un sitio ni un evento; si no hay nada ni parecido, devuelve [].'
+    : '- Si no hay nada real que cumpla lo pedido ese día, devuelve [] en vez de rellenar con otras cosas.'}
       - Una ruta para caminar o en bici no es una carrera, ni al revés. Si pide caminar o una ruta y no hay ninguna guiada en la agenda, propón una ruta real que se pueda hacer cualquier día (tipo "ruta", con el nombre con el que se conoce). Una carrera, un trail o un torneo solo si está en la agenda.
       - Antes de responder, repasa la lista: cada parada tiene que corresponder a algo que ha pedido. Si pide "tapeo y cenar", son esas dos: no añadas mercados, visitas ni exposiciones porque estén en la agenda.
       INSTRUCCIONES:
@@ -103,7 +133,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
   const rutaBruta = extraerJSON(textoIA, '[');
   if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
   // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas
-  if (rutaBruta.length === 0) return { exito: false, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
+  if (rutaBruta.length === 0) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
 
   // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
@@ -128,7 +158,7 @@ export async function montarPlan(peticion, { conGoogle = planesConGoogle(), inic
 
   // Si todo lo que salió era de fuera, el plan no es de León: se dice claro
   if (rutaValidada.length === 0 && fueraDeProvincia) return { exito: false, uso, mensaje: AVISO_MAPA.replace('Mueve el punto del mapa dentro de la provincia', 'Pide algo de la provincia') };
-  if (rutaValidada.length === 0) return { exito: false, uso, mensaje: problemaGlobal ? `Error en Google Places: ${problemaGlobal}` : "No encontramos locales reales en esa zona. Amplía el radio." };
+  if (rutaValidada.length === 0) return { exito: false, vacio: !problemaGlobal, uso, mensaje: problemaGlobal ? `Error en Google Places: ${problemaGlobal}` : "No encontramos locales reales en esa zona. Amplía el radio." };
 
   const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax);
   if (rutaFinal.length === 0) return { exito: false, uso, mensaje: "Presupuesto muy bajo para esta zona." };

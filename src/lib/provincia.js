@@ -64,6 +64,7 @@ const FUERA = [
   "murcia", "alicante", "castellon", "toledo", "albacete", "guadalajara", "badajoz", "caceres", "extremadura", "andalucia",
   "cataluna", "girona", "tarragona", "lleida", "mallorca", "ibiza", "menorca", "tenerife", "canarias", "las palmas",
   // Fuera de España
+  "merida", "ciudad real", "valdepenas", "obregon",
   "portugal", "braganza", "braganca", "oporto", "porto", "lisboa", "francia", "paris", "londres", "roma", "andorra",
 ];
 const ANTES = "(?:en|a|por|hacia|hasta|para ir a|cerca de|junto a|al lado de|alrededor de|alrededores de|zona de|provincia de|ciudad de|viaje a|escapada a)";
@@ -84,6 +85,26 @@ export function sitioFueraEnTexto(texto) {
 // ¿Este nombre de localidad es de fuera? ("Benavente" sí; "Valencia de Don Juan" o "Astorga" no)
 const SET_FUERA = new Set([...FUERA, "valencia"]);
 export const esSitioDeFuera = (nombre) => SET_FUERA.has(normalizar(nombre));
+
+// ¿Este evento de la agenda es de fuera de León? La IA a veces trae cosas de otras provincias con la localidad "León".
+// Se mira el texto y el enlace. Solo aparta lo seguro: si el enlace nombra León, se le da por bueno.
+const OTROS_PAISES = /\.(mx|ar|cl|co|pe|ve|ec|uy|bo|py|do|cr|gt)$/;
+const FUERA_EN_ENLACE = new Set([...FUERA, "merida", "ciudad real", "valdepenas", "mexico", "obregon", "argentina", "colombia", "chile", "peru"].filter((n) => !["porto", "roma", "paris", "granada", "cordoba", "toledo", "avila", "soria", "guadalajara", "francia", "potes", "guardo", "madrid", "barcelona", "sevilla", "bilbao"].includes(n)));
+export function eventoDeFuera(e) {
+  if (!e) return false;
+  if (esSitioDeFuera(e.localidad)) return true;
+  if (sitioFueraEnTexto(`${e.titulo || ""} . ${e.lugar || ""}`)) return true;
+  let url;
+  try { url = new URL(e.fuente); } catch { return false; }
+  if (OTROS_PAISES.test(url.hostname)) return true;
+  let ruta = url.pathname;
+  try { ruta = decodeURIComponent(ruta); } catch { /* enlace raro: se mira tal cual */ }
+  const camino = normalizar(`${url.hostname} ${ruta}`.replace(/[-_/.]+/g, " "));
+  if (/\bleon(es|esa)?\b/.test(camino)) return false;
+  const palabras = ` ${camino} `;
+  for (const n of FUERA_EN_ENLACE) if (palabras.includes(` ${n} `)) return true;
+  return false;
+}
 
 // Código postal de la dirección de Google: los de León empiezan por 24. Sin código postal no se juzga.
 export function direccionEnLeon(direccion) {
