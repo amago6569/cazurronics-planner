@@ -337,7 +337,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // su fuente está en la lista de la agenda (sin lista, como en los retoques, vale que traiga un enlace)
   const fuenteParada = String(parada.fuente || '');
   const deLaAgenda = fuentes ? fuentes.has(fuenteParada) : /^https?:\/\//i.test(fuenteParada);
-  const sitioNatural = ['parque', 'ruta', 'deporte'].includes(String(parada.tipo || '').toLowerCase()) && !deLaAgenda;
+  // Vengan de donde vengan, nunca toman los datos de otro sitio: la "Marcha de la Amistad" no está en un pub de León
+  const alAireLibre = ['parque', 'ruta', 'deporte'].includes(String(parada.tipo || '').toLowerCase());
+  const sitioNatural = alAireLibre && !deLaAgenda;
   const paraComer = necesitaFicha(parada.tipo);
   let googleRespondio = false; // si Google falla o tarda, no se puede decir que el sitio no exista
 
@@ -361,7 +363,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
         // "Restaurante en Vegacervera" no puede acabar en las Hoces de Vegacervera: donde se come, tiene que ser de comer
         if (paraComer && r.types?.length && !r.types.some((t) => TIPOS_DE_COMER.includes(t))) return false;
         // Y al revés: "Ruta por Boñar" no se queda con los datos del Bar Boñar ni de un hostal
-        if (sitioNatural && r.types?.some((t) => TIPOS_DE_COMER.includes(t) || t === 'lodging')) return false;
+        if (alAireLibre && r.types?.some((t) => TIPOS_DE_COMER.includes(t) || t === 'lodging')) return false;
         // Solo sitios que Google sitúa en la provincia de León (por mapa y por código postal 24xxx)
         if (!enProvinciaLeon(r.geometry.location.lat, r.geometry.location.lng) || !direccionEnLeon(r.formatted_address)) return false;
         const distanciaKm = haversineKm(lat, lon, r.geometry.location.lat, r.geometry.location.lng);
@@ -373,9 +375,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
           objetivo = candidatosEnZona[0];
         } else {
           // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota
-          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (sitioNatural ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
+          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (alAireLibre ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
           // Una ruta o un parque que Google no conoce no se cambia por otro sitio: se queda sin ubicar y se descarta abajo
-          const listaCandidatos = mismoNombre ? [mismoNombre] : sitioNatural ? [] : candidatosEnZona.slice(0, 5);
+          const listaCandidatos = mismoNombre ? [mismoNombre] : alAireLibre ? [] : candidatosEnZona.slice(0, 5);
           objetivo = listaCandidatos.reduce((mejor, actual) => {
             const puntuacionActual = puntuarCandidato(actual, parada.tipo, lat, lon, priceLevelObjetivo, radio);
             const puntuacionMejor = mejor ? puntuarCandidato(mejor, parada.tipo, lat, lon, priceLevelObjetivo, radio) : -Infinity;
