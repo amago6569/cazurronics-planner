@@ -74,6 +74,16 @@ describe("rutas y parques: lo que dijo la revisión", () => {
   });
 });
 
+describe("eventos de deporte de la agenda", () => {
+  it("una marcha no toma los datos de un pub que sale en la búsqueda", async () => {
+    simularGoogle([{ ...ficha("Pub Luna 9"), types: ["bar", "night_club"] }, ficha("Centro Comercial Espacio León")]);
+    const { parada } = await enriquecerParada({ titulo: "Marcha de la Amistad", tipo: "deporte", fuente: "https://aytoleon.es/marcha", lat: 42.39, lon: -5.76 }, { ...contexto, radio: 60 });
+    expect(parada.titulo).toBe("Marcha de la Amistad");
+    expect(parada.nombreGoogle).toBeUndefined();
+    expect(parada.lat).toBe(42.39);
+  });
+});
+
 describe("nombres de locales", () => {
   const local = (name) => ({ ...ficha(name), types: ["restaurant", "food"] });
   it("si solo se parecen en una palabra, manda el nombre de Google", async () => {
