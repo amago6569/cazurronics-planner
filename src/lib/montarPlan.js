@@ -18,6 +18,7 @@ import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } f
 import { filtrarMasEseDia, quitarNoPedidas } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 import { dentroDelTopeDiario } from './freno';
+import { rutasParaPrompt } from './rutas';
 
 // Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
 export function fueraDeLeon({ lat, lon, texto }) {
@@ -105,6 +106,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
       ${bloqueTiempo}
       ${bloqueAgenda}
       ${conGoogle ? '' : sitiosParaPrompt(sitios)}
+      ${rutasParaPrompt(apetece, lat, lon, radio)}
       ${bloqueComunidad}
       ALCANCE (lo más importante): dale a la persona EXACTAMENTE lo que pide, ni más ni menos.
       - Si pide algo CONCRETO (por ejemplo "una charla", "un concierto", "dónde ver el partido", "un sitio para comer cocido"), devuelve SOLO eso: normalmente 1 parada, y como mucho 2 o 3 si son opciones del mismo tipo a distintas horas. NO añadas comidas, copas, paseos ni visitas que no ha pedido.
