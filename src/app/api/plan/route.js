@@ -28,11 +28,12 @@ export async function POST(request) {
     if (!(await dentroDelLimite(request, 'plan', MAX_PLANES, VENTANA_S))) {
       return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos planes seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
     }
-    // Techo de gasto por día: por conexión y para toda la web (se cambian con PLANES_MAX_IP_DIA y PLANES_MAX_DIA en Vercel; 0 = sin tope)
+    // Techo de gasto por día: por conexión y para toda la web (se cambian con PLANES_MAX_IP_DIA y PLANES_MAX_DIA en Vercel; 0 = sin tope).
+    // 25 al día para no pasar de 30 € al mes aunque haya un pico: decisión de Alejandro y del council (5-11-2026)
     if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 100), request))) {
       return NextResponse.json({ exito: false, mensaje: 'Hoy has montado muchos planes 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
     }
-    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 600)))) {
+    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 25)))) {
       return NextResponse.json({ exito: false, mensaje: 'Hoy se han agotado los planes gratuitos 🦁 Vuelve mañana y te montamos el planazo.' }, { status: 429 });
     }
     const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;

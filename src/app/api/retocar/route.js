@@ -36,7 +36,7 @@ export async function POST(request) {
       return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos cambios seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
     }
     // Techo de gasto por día (RETOQUES_MAX_IP_DIA y RETOQUES_MAX_DIA en Vercel; 0 = sin tope)
-    if (!(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_IP_DIA ?? 200), request)) || !(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_DIA ?? 1500)))) {
+    if (!(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_IP_DIA ?? 200), request)) || !(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_DIA ?? 15)))) {
       return NextResponse.json({ exito: false, mensaje: 'Hoy se han hecho muchos cambios 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
     }
     const { fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;

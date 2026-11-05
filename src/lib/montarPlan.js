@@ -44,6 +44,9 @@ export function avisoCercano({ apetece, radio, lat, lon, plan }) {
   return `Ese día no hay «${pedido}» tal cual. Lo más cercano es esto.`;
 }
 
+// Sin cupo de Google o con la clave mal: el detalle técnico va al registro (planUtils), no a la persona
+export const MENSAJE_GOOGLE_NO_RESPONDE = 'Ahora mismo no podemos comprobar los sitios 🦁 Prueba otra vez en un rato.';
+
 export const mensajeSinNadaEnProvincia = (apetece) => `No hemos encontrado «${String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas'}» en toda la provincia ese día 🦁 Prueba con otra fecha o pídelo con menos detalle.`;
 
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso, aviso? } o { exito: false, mensaje, vacio? }
@@ -165,7 +168,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
 
   // Si todo lo que salió era de fuera, el plan no es de León: se dice claro
   if (rutaValidada.length === 0 && fueraDeProvincia) return { exito: false, uso, mensaje: AVISO_MAPA.replace('Mueve el punto del mapa dentro de la provincia', 'Pide algo de la provincia') };
-  if (rutaValidada.length === 0) return { exito: false, vacio: !problemaGlobal, uso, mensaje: problemaGlobal ? `Error en Google Places: ${problemaGlobal}` : "No encontramos locales reales en esa zona. Amplía el radio." };
+  if (rutaValidada.length === 0) return { exito: false, vacio: !problemaGlobal, uso, mensaje: problemaGlobal ? MENSAJE_GOOGLE_NO_RESPONDE : "No encontramos locales reales en esa zona. Amplía el radio." };
 
   const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax);
   if (rutaFinal.length === 0) return { exito: false, uso, mensaje: "Presupuesto muy bajo para esta zona." };
