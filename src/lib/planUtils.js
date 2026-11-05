@@ -3,6 +3,7 @@
 import { comando, sinRomper } from './almacen';
 import { direccionEnLeon, enProvinciaLeon } from './provincia';
 import { bonito, mismoSitioNatural, seParecen, slug } from './nombres';
+import { rutaConocida } from './rutas';
 
 // Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
 // en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
@@ -445,6 +446,13 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     console.error("Error buscando lugar real en Google Places:", e);
   }
 
+  // Una ruta señalizada de nuestra lista es real aunque Google no la tenga como sitio: va con sus coordenadas
+  const deLaLista = !ubicacionResuelta && sitioNatural ? rutaConocida(parada.titulo) : null;
+  if (deLaLista) {
+    parada.lat = deLaLista.lat;
+    parada.lon = deLaLista.lon;
+    ubicacionResuelta = true;
+  }
   if (!ubicacionResuelta && sitioNatural && googleRespondio) return { parada: null, problemaConfigPlaces };
 
   if (!ubicacionResuelta && (TIPOS_UBICACION_FLEXIBLE.includes(parada.tipo) || !necesitaFicha(parada.tipo))) {

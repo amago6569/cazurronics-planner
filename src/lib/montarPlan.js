@@ -41,7 +41,7 @@ export function avisoCercano({ apetece, radio, lat, lon, plan }) {
   if (plan.some((p) => p.parecido)) return `No hemos encontrado «${pedido}». Lo más parecido que hay es esto.`;
   const km = Math.min(...plan.map((p) => haversineKm(lat, lon, Number(p.lat), Number(p.lon))).filter(Number.isFinite));
   if (km > radio) return `En ${radio} km a la redonda no hay nada de «${pedido}». Lo más cercano es esto, a ${Math.round(km)} km.`;
-  return `Ese día no hay «${pedido}» tal cual en tu zona. Lo más cercano es esto.`;
+  return `Ese día no hay «${pedido}» tal cual. Lo más cercano es esto.`;
 }
 
 export const mensajeSinNadaEnProvincia = (apetece) => `No hemos encontrado «${String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas'}» en toda la provincia ese día 🦁 Prueba con otra fecha o pídelo con menos detalle.`;

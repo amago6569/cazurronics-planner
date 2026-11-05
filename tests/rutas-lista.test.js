@@ -1,6 +1,6 @@
 // npm test — La lista de rutas solo entra en la petición cuando se pide salir a caminar o en bici
 import { describe, expect, it } from "vitest";
-import { RUTAS, rutasParaPrompt } from "../src/lib/rutas";
+import { RUTAS, TODAS_LAS_RUTAS, rutaConocida, rutasParaPrompt } from "../src/lib/rutas";
 import { enProvinciaLeon } from "../src/lib/provincia";
 import { mensajeSinNadaEnProvincia } from "../src/lib/montarPlan";
 
@@ -16,7 +16,17 @@ describe("mensaje cuando no hay nada ni en toda la provincia", () => {
 
 describe("rutasParaPrompt", () => {
   it("todas están en la provincia", () => {
-    for (const r of RUTAS) expect(enProvinciaLeon(r.lat, r.lon), r.nombre).toBe(true);
+    expect(TODAS_LAS_RUTAS.length).toBeGreaterThan(RUTAS.length + 50);
+    for (const r of TODAS_LAS_RUTAS) expect(enProvinciaLeon(r.lat, r.lon), r.nombre).toBe(true);
+  });
+  it("reconoce una ruta de la lista dentro del título y no inventa", () => {
+    expect(rutaConocida("Ruta por las Hoces de Vegacervera").nombre).toBe("Hoces de Vegacervera");
+    expect(rutaConocida("Ruta de Valinventada")).toBe(null);
+  });
+  it("si pide bici da rutas de bici", () => {
+    const bici = TODAS_LAS_RUTAS.filter((r) => r.tipo === "b");
+    expect(bici.length).toBeGreaterThan(10);
+    expect(rutasParaPrompt("ruta en bici", bici[0].lat, bici[0].lon, 20)).toContain(bici[0].nombre);
   });
   it("da las cercanas si se pide caminar", () => {
     const t = rutasParaPrompt("una ruta para caminar", ...LEON, 30);
