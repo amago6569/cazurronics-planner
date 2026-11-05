@@ -30,6 +30,16 @@ const PIDE_BICI = /\b(?:bici|mtb|btt|mountain|ciclis)/;
 // "Ruta de tapas" no es salir a caminar; "ruta por la montaña y comer tapas" sí, por eso solo se quita esa expresión
 const RUTA_DE_COMER = /\brutas? (?:(?:de|del|por)(?: los| las| la| el)? )?(?:tapas?|tapeo|pinchos?|vinos?|bar|bares|cervezas?|copas?|bodegas?|gastronomicas?)\b/g;
 
+// Quien pide salir a caminar o en bici quiere una ruta, no apuntarse a una prueba: esas no se le ofrecen a la IA,
+// salvo que las pida. Sin esto, la regla de la agenda ("si encaja, DEBE incluirlo") ganaba a la lista de rutas.
+const PIDE_PRUEBA = /\b(?:marcha|carrera|cross|trail|maraton|duatlon|triatlon|torneo|competicion|prueba|evento|guiada|guiadas)/;
+const ES_PRUEBA = /\b(?:marcha|carrera|cross|trail|maraton|media maraton|duatlon|triatlon|\d+ ?k)\b/;
+export function agendaParaRutas(agenda, apetece) {
+  const pide = ` ${quitarTildes(apetece).replace(RUTA_DE_COMER, " ")} `;
+  if (!PIDE_RUTA.test(pide) || PIDE_PRUEBA.test(pide)) return agenda;
+  return agenda.filter((e) => !ES_PRUEBA.test(quitarTildes(e?.titulo)));
+}
+
 // Distancia sencilla en km (aquí no hace falta más precisión, y así este archivo no depende de planUtils)
 const km = (la1, lo1, la2, lo2) => Math.hypot((la1 - la2) * 111.2, (lo1 - lo2) * 111.2 * Math.cos((la1 * Math.PI) / 180));
 

@@ -84,6 +84,20 @@ describe("eventos de deporte de la agenda", () => {
   });
 });
 
+describe("eventos y fichas de Google", () => {
+  it("un evento no toma la ficha de un sitio que solo coincide en «ruta»", async () => {
+    simularGoogle([{ ...ficha("Restaurante Parrilla Ruta 987"), types: ["restaurant"] }]);
+    const { parada } = await enriquecerParada({ titulo: "VI Ruta de la Morcilla San Froilán", tipo: "evento", lat: 42.6, lon: -5.56 }, contexto);
+    expect(parada.nombreGoogle).toBeUndefined();
+    expect(parada.lat).toBe(42.6);
+  });
+  it("sí toma la de su lugar", async () => {
+    simularGoogle([{ ...ficha("Restaurante Cocinandos"), types: ["restaurant"] }]);
+    const { parada } = await enriquecerParada({ titulo: "Jornadas Micológicas", tipo: "gastronomia", lugar: "Cocinandos" }, contexto);
+    expect(parada.nombreGoogle).toBe("Restaurante Cocinandos");
+  });
+});
+
 describe("nombres de locales", () => {
   const local = (name) => ({ ...ficha(name), types: ["restaurant", "food"] });
   it("si solo se parecen en una palabra, manda el nombre de Google", async () => {

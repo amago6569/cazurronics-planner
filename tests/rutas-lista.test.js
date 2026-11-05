@@ -1,6 +1,6 @@
 // npm test — La lista de rutas solo entra en la petición cuando se pide salir a caminar o en bici
 import { describe, expect, it } from "vitest";
-import { RUTAS, TODAS_LAS_RUTAS, rutaConocida, rutasParaPrompt } from "../src/lib/rutas";
+import { RUTAS, TODAS_LAS_RUTAS, agendaParaRutas, rutaConocida, rutasParaPrompt } from "../src/lib/rutas";
 import { enProvinciaLeon } from "../src/lib/provincia";
 import { mensajeSinNadaEnProvincia } from "../src/lib/montarPlan";
 
@@ -11,6 +11,19 @@ describe("mensaje cuando no hay nada ni en toda la provincia", () => {
     const m = mensajeSinNadaEnProvincia("torneo de pádel en Sahagún");
     expect(m).toContain("«torneo de pádel en Sahagún» en toda la provincia");
     expect(m).not.toContain("radio");
+  });
+});
+
+describe("agendaParaRutas", () => {
+  const agenda = [{ titulo: "MARCHA DE LA AMISTAD" }, { titulo: "VIII Cross Popular de Sariegos" }, { titulo: "IV 10K de Astorga" }, { titulo: "Ruta guiada por Las Médulas" }, { titulo: "Concierto en el Auditorio" }];
+  it("quien pide caminar no recibe pruebas de la agenda, pero sí rutas guiadas", () => {
+    expect(agendaParaRutas(agenda, "una ruta para caminar").map((e) => e.titulo)).toEqual(["Ruta guiada por Las Médulas", "Concierto en el Auditorio"]);
+  });
+  it("si pide una prueba, o no pide ruta, la agenda queda igual", () => {
+    expect(agendaParaRutas(agenda, "una marcha o una carrera")).toHaveLength(5);
+    expect(agendaParaRutas(agenda, "un trail por la montaña")).toHaveLength(5);
+    expect(agendaParaRutas(agenda, "cenar y un concierto")).toHaveLength(5);
+    expect(agendaParaRutas(agenda, "ruta de tapas")).toHaveLength(5);
   });
 });
 

@@ -18,7 +18,7 @@ import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } f
 import { filtrarMasEseDia, quitarNoPedidas } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 import { dentroDelTopeDiario } from './freno';
-import { rutasParaPrompt } from './rutas';
+import { agendaParaRutas, rutasParaPrompt } from './rutas';
 
 // Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
 export function fueraDeLeon({ lat, lon, texto }) {
@@ -87,7 +87,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
 
   // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
   const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha));
-  const bloqueAgenda = eventosParaPrompt(agendaDelDia);
+  const bloqueAgenda = eventosParaPrompt(agendaParaRutas(agendaDelDia, apetece));
   const bloqueComunidad = [
     prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
     prefs?.evitar?.length ? `EVITA estos sitios (malas experiencias reales de usuarios): ${prefs.evitar.join(', ')}.` : '',
