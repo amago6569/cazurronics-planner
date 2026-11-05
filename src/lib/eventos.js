@@ -16,7 +16,7 @@ import { llamarGemini as llamarGeminiConPlanB, extraerJSON, motivoClaro } from "
 import { fuentesPara } from "./intencion";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
-import { enProvinciaLeon, esSitioDeFuera } from "./provincia";
+import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
 import { esOficial } from "./fiables";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
@@ -169,6 +169,7 @@ export function validarEventoIA(e, desde, hasta) {
   // Solo León: fuera lo que está en otra provincia (por coordenadas o por el nombre del pueblo)
   if (!coords && Number.isFinite(lat) && Number.isFinite(lon) && enLaPeninsula(lat, lon)) return null;
   if (esSitioDeFuera(e.localidad)) return null;
+  if (eventoDeFuera({ titulo, lugar: e.lugar, localidad: e.localidad, fuente })) return null;
   return {
     titulo, fecha, fechaFin,
     hora: e.hora ? String(e.hora).slice(0, 20) : null,
@@ -247,8 +248,8 @@ export const TIPOS = [
   { id: "mercados", tema: "mercados, mercadillos, rastros, ferias de muestras, de ganado y de artesanía", capital: "Mercado de la Plaza Mayor, Mercado del Conde Luna, ferias en la ciudad", provincia: "mercados semanales de los pueblos, ferias comarcales, ferias de ganado y de artesanía" },
   { id: "gastro", tema: "jornadas gastronómicas, catas, degustaciones, matanzas, rutas de tapas y ferias del producto", capital: "hostelería de León, rutas de tapas, catas en vinotecas, Diario de León gastronomía", provincia: "jornadas del botillo, la cecina y el cocido, D.O. Bierzo y León, ferias de producto de los pueblos" },
   { id: "deporte", tema: "deporte en directo: partidos, torneos y competiciones (fútbol, baloncesto, balonmano, lucha leonesa, bolos)", capital: "Cultural Leonesa, Ademar, Baloncesto León, Palacio de los Deportes, federaciones", provincia: "SD Ponferradina, clubes de los pueblos, corros de lucha leonesa, concursos de bolo leonés" },
-  { id: "carreras", tema: "carreras populares, marchas, trails, rutas en bici y pruebas deportivas abiertas a todos", capital: "carreras populares de León, clubes de atletismo, inscripciones online", provincia: "trails y marchas de montaña, carreras de los pueblos, calendarios de la Diputación y de federaciones" },
-  { id: "naturaleza", tema: "rutas de senderismo guiadas, salidas a la naturaleza, micología, observación de fauna y astronomía", capital: "clubes de montaña de León, Aula de la Naturaleza, ayuntamiento", provincia: "Picos de Europa, Babia y Luna, Ancares, Riaño, parques y reservas de la biosfera, casas del parque, guías de montaña" },
+  { id: "carreras", tema: "carreras populares, cross, trails, marchas a pie y en bici, mountain bike (MTB y BTT), duatlones y pruebas deportivas abiertas a todos", capital: "carreras populares de León, clubes de atletismo y de ciclismo, Federación de Atletismo de Castilla y León, webs de inscripción y cronometraje (Orycronsport, Championchip Norte, Sportmaniacs, Runedia)", provincia: "Copa Diputación de León de Carreras Populares, circuitos de BTT y marchas cicloturistas, Federación de Ciclismo y Federación de Deportes de Montaña de Castilla y León, trails y carreras de los pueblos, clubes de montaña y de BTT" },
+  { id: "naturaleza", tema: "rutas de senderismo guiadas, marchas a pie, salidas a la naturaleza, micología, observación de fauna y astronomía", capital: "clubes de montaña de León, Aula de la Naturaleza, ayuntamiento", provincia: "Picos de Europa, Babia y Luna, Ancares, Riaño, parques y reservas de la biosfera, casas del parque, guías de montaña" },
   { id: "familia", tema: "planes para niños y familias: cuentacuentos, talleres infantiles, ludotecas, teatro infantil y granjas escuela", capital: "bibliotecas, centros cívicos, ludotecas municipales, actividades infantiles del ayuntamiento", provincia: "bibliotecas y casas de cultura de los pueblos, granjas escuela, actividades de verano e invierno" },
   { id: "talleres", tema: "talleres, cursos cortos, charlas, conferencias, presentaciones de libros y clubes de lectura", capital: "Universidad de León, Club de Prensa, Instituto Leonés de Cultura, bibliotecas, centros cívicos, librerías", provincia: "casas de cultura, asociaciones culturales, bibliotecas municipales" },
   { id: "noche", tema: "ocio nocturno: fiestas temáticas, sesiones de DJ, karaokes, salas y discotecas", capital: "pubs y discotecas del Húmedo, el Romántico y la calle Ancha, salas de León", provincia: "salas de Ponferrada, Astorga y La Bañeza, fiestas nocturnas de los pueblos" },
@@ -964,7 +965,7 @@ export function partesPorEmpleado(informes) {
 // ---------- Lectura ----------
 export async function eventosDelDia(fecha, { lat, lon, radio } = {}) {
   if (!esFecha(fecha)) return [];
-  const lista = (await leerJSON(`eventos:${fecha}`)) || [];
+  const lista = ((await leerJSON(`eventos:${fecha}`)) || []).filter((e) => !eventoDeFuera(e)); // también limpia lo ya guardado
   if (lat == null || lon == null || !radio) return lista;
   return lista.filter((e) => cercaDe(e, Number(lat), Number(lon), Number(radio)));
 }
@@ -990,7 +991,7 @@ export async function eventosProximos(dias = DIAS_VENTANA) {
   const res = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
   return fechas.map((fecha, i) => {
     let eventos = [];
-    try { eventos = JSON.parse(res[i] || "[]"); } catch {}
+    try { eventos = JSON.parse(res[i] || "[]").filter((e) => !eventoDeFuera(e)); } catch {}
     return { fecha, eventos };
   });
 }

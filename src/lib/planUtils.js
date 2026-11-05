@@ -324,7 +324,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   let parada = { ...paradaOriginal };
   parada.precio = limpiarPrecio(parada.precio);
 
-  parada.titulo = String(parada.titulo || '').replace(/,?\s*León,?\s*España/gi, '').trim();
+  parada.titulo = String(parada.titulo || '').replace(/,?\s*León,?\s*España/gi, '').replace(/\s*\(parecido\)/gi, '').trim();
   parada.lugar = typeof parada.lugar === 'string' ? parada.lugar.trim().slice(0, 100) : null;
   if (!parada.lugar || /^(null|no|n\/a|no disponible|ninguno)$/i.test(parada.lugar) || parada.lugar.toLowerCase() === parada.titulo.toLowerCase()) parada.lugar = null;
   const queryBusquedaReal = `${parada.titulo}, ${nombreZona}, provincia de León, España`;
@@ -337,7 +337,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // su fuente está en la lista de la agenda (sin lista, como en los retoques, vale que traiga un enlace)
   const fuenteParada = String(parada.fuente || '');
   const deLaAgenda = fuentes ? fuentes.has(fuenteParada) : /^https?:\/\//i.test(fuenteParada);
-  const sitioNatural = ['parque', 'ruta'].includes(String(parada.tipo || '').toLowerCase()) && !deLaAgenda;
+  const sitioNatural = ['parque', 'ruta', 'deporte'].includes(String(parada.tipo || '').toLowerCase()) && !deLaAgenda;
   const paraComer = necesitaFicha(parada.tipo);
   let googleRespondio = false; // si Google falla o tarda, no se puede decir que el sitio no exista
 

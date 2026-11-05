@@ -40,8 +40,10 @@ export async function POST(request) {
     after(() => sinRomper(asegurarBarridoReciente(), 'barrido diario'));
     // Todo el trabajo (agenda, IA, comprobación en Google Places) está en lib/montarPlan.js
     const montado = await montarPlan(peticion, { inicio, msIA: MS_IA, msTotal: MS_TOTAL });
+    // Cuántos planes salen vacíos y cuántos se salvan con toda la provincia (para decidir con datos el tope de ampliados)
+    if (montado.vacio || montado.ampliado) enSegundoPlano(() => registrar(montado.ampliado ? 'plan_ampliado' : 'plan_vacio'), 'estadísticas');
     if (!montado.exito) return NextResponse.json({ exito: false, mensaje: montado.mensaje }, { status: 200 });
-    const { plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona } = montado;
+    const { plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, aviso } = montado;
 
     // NUEVO: cada parada lleva su identificador de lugar (para estadísticas y valoraciones)
     for (const parada of rutaFinal) parada.lugarId = esNegocio(parada) ? claveLugar(parada) : null; // un evento no cuenta como local
@@ -51,13 +53,13 @@ export async function POST(request) {
     const guardado = await sinRomper(guardarJSON(`plan:${planId}`, {
       id: planId, creado: Date.now(), fecha, apetece, zona: nombreZona,
       centro: [lat, lon], radio, presupuesto: { min: presupuestoMin, max: presupuestoMax },
-      prevision: previsionTiempo, itinerario: rutaFinal, masEseDia,
+      prevision: previsionTiempo, itinerario: rutaFinal, masEseDia, ...(aviso ? { aviso } : {}),
     }, 120 * 24 * 3600), 'guardar plan');
     // Rankings y estadísticas en segundo plano: la respuesta no los espera
     if (!esPrueba(request)) enSegundoPlano(() => registrarApariciones(rutaFinal), 'apariciones');
     enSegundoPlano(() => registrar('plan'), 'estadísticas');
 
-    return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia });
+    return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia, ...(aviso ? { aviso } : {}) });
   } catch (error) {
     console.error('[plan]', error?.message || error);
     const mensaje = mensajeParaUsuario(error);

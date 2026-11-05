@@ -22,7 +22,7 @@ export function palabrasClave(apetece) {
 const TEMAS = [
   ["charlas y cultura", /\b(?:charla|conferencia|coloquio|ponencia|presentacion|libro|lectura|mesa redonda|debate|seminario|jornada|cine ?forum|club de lectura)/,
     "Universidad de León y su agenda cultural, bibliotecas municipales y públicas, Instituto Leonés de Cultura, centros cívicos, casas de cultura de los pueblos, librerías, fundaciones, colegios profesionales y asociaciones culturales"],
-  ["deporte", /\b(?:deporte|partido|futbol|baloncesto|balonmano|carrera|maraton|trail|senderismo|ruta|bici|ciclismo|escalada|padel|tenis|esqui|natacion|yoga|gimnasio|cultural leonesa|ademar)/,
+  ["deporte", /\b(?:deporte|partido|futbol|baloncesto|balonmano|carrera|maraton|trail|senderismo|ruta|bici|ciclismo|caminar|caminata|andar|excursion|montana|marcha|cross|mtb|btt|mountain|duatlon|triatlon|correr|running|escalada|padel|tenis|esqui|natacion|yoga|gimnasio|cultural leonesa|ademar)/,
     "webs y redes de los clubes (Cultural Leonesa, Ademar León, clubes de baloncesto y de montaña), federaciones de Castilla y León, calendarios de carreras populares y trails, la concejalía de deportes y la Diputación, estaciones de esquí de la provincia"],
   ["comida y bebida", /\b(?:comer|comida|cena\b|cenar|almuerzo|desayun|tapa|tapeo|vinos?\b|vermu|cerveza|cocido|cecina|botillo|gastro|restaurante|bar\b|bares|cata\b|catas\b|menu\b|brunch|vegano|vegetariano)/,
     "jornadas gastronómicas, consejos reguladores (D.O. León, Cecina de León, Botillo del Bierzo), webs y redes de los restaurantes, guías y reseñas (Guía Repsol, TripAdvisor, Google), foros y blogs gastronómicos locales"],
