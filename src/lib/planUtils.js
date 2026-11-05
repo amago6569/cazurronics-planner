@@ -341,6 +341,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // Vengan de donde vengan, nunca toman los datos de otro sitio: la "Marcha de la Amistad" no está en un pub de León
   const alAireLibre = ['parque', 'ruta', 'deporte'].includes(String(parada.tipo || '').toLowerCase());
   const sitioNatural = alAireLibre && !deLaAgenda;
+  // Un evento solo toma la ficha de un sitio si es el suyo: "Ruta de la Morcilla" no es "Parrilla Ruta 987"
+  const esEvento = ['evento', 'gastronomia'].includes(String(parada.tipo || '').toLowerCase());
   const paraComer = necesitaFicha(parada.tipo);
   let googleRespondio = false; // si Google falla o tarda, no se puede decir que el sitio no exista
 
@@ -376,9 +378,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
           objetivo = candidatosEnZona[0];
         } else {
           // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota
-          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (alAireLibre ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
+          const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (esEvento ? mismoSitioNatural(`${parada.titulo} ${parada.lugar || ''}`, r.name) : alAireLibre ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
           // Una ruta o un parque que Google no conoce no se cambia por otro sitio: se queda sin ubicar y se descarta abajo
-          const listaCandidatos = mismoNombre ? [mismoNombre] : alAireLibre ? [] : candidatosEnZona.slice(0, 5);
+          const listaCandidatos = mismoNombre ? [mismoNombre] : alAireLibre || esEvento ? [] : candidatosEnZona.slice(0, 5);
           objetivo = listaCandidatos.reduce((mejor, actual) => {
             const puntuacionActual = puntuarCandidato(actual, parada.tipo, lat, lon, priceLevelObjetivo, radio);
             const puntuacionMejor = mejor ? puntuarCandidato(mejor, parada.tipo, lat, lon, priceLevelObjetivo, radio) : -Infinity;
