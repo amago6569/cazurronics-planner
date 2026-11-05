@@ -30,7 +30,8 @@ export function fueraDeLeon({ lat, lon, texto }) {
 export const planesConGoogle = () => /^(1|si|sí|true)$/i.test(String(process.env.PLANES_CON_GOOGLE || '').trim());
 
 // Si en la zona no sale nada, un segundo intento con toda la provincia (una llamada más a la IA y a Google, solo en ese caso).
-// Tope diario para toda la web: PLANES_AMPLIADOS_MAX_DIA en Vercel (0 = sin tope). Sin 20 s por delante no se intenta.
+// Tope diario para toda la web: 5, unos 0,50 $ al día como mucho (se cambia con PLANES_AMPLIADOS_MAX_DIA en Vercel; ojo, 0 = sin tope).
+// Sin 20 s por delante no se intenta.
 const MS_MINIMO_AMPLIAR = 20000;
 const RADIO_PROVINCIA = 150;
 
@@ -43,16 +44,20 @@ export function avisoCercano({ apetece, radio, lat, lon, plan }) {
   return `Ese día no hay «${pedido}» tal cual en tu zona. Lo más cercano es esto.`;
 }
 
+export const mensajeSinNadaEnProvincia = (apetece) => `No hemos encontrado «${String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas'}» en toda la provincia ese día 🦁 Prueba con otra fecha o pídelo con menos detalle.`;
+
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso, aviso? } o { exito: false, mensaje, vacio? }
 export async function montarPlan(peticion, opciones = {}) {
   const { inicio = Date.now(), msIA = 55000 } = opciones;
   const primero = await intentoPlan(peticion, { ...opciones, inicio });
   if (primero.exito || !primero.vacio || inicio + msIA - Date.now() < MS_MINIMO_AMPLIAR) return primero;
-  if (!(await dentroDelTopeDiario('plan-ampliado', Number(process.env.PLANES_AMPLIADOS_MAX_DIA ?? 20)))) return primero;
+  if (!(await dentroDelTopeDiario('plan-ampliado', Number(process.env.PLANES_AMPLIADOS_MAX_DIA ?? 5)))) return primero;
   const amplio = await intentoPlan({ ...peticion, radio: Math.max(Number(peticion.radio) || 0, RADIO_PROVINCIA) }, { ...opciones, inicio, ampliado: true }).catch((e) => {
     console.error('[plan] intento ampliado', e?.message || e);
     return null;
   });
+  // Ya se ha buscado en toda la provincia: "amplía el radio" no serviría de nada
+  if (amplio?.vacio) return { ...primero, mensaje: mensajeSinNadaEnProvincia(peticion.apetece) };
   if (!amplio?.exito) return primero;
   return { ...amplio, ampliado: true, aviso: avisoCercano({ ...peticion, plan: amplio.plan }) };
 }

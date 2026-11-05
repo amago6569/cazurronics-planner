@@ -22,9 +22,12 @@ export const RUTAS = [
 const quitarTildes = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const PIDE_RUTA = /\b(?:caminar|caminata|andar|senderismo|sendero|senda|ruta|rutas|excursion|naturaleza|montana|bici|mtb|btt|mountain)/;
 
+// "Ruta de tapas" no es salir a caminar; "ruta por la montaña y comer tapas" sí, por eso solo se quita esa expresión
+const RUTA_DE_COMER = /\brutas? (?:(?:de|del|por)(?: los| las| la| el)? )?(?:tapas?|tapeo|pinchos?|vinos?|bar|bares|cervezas?|copas?|bodegas?|gastronomicas?)\b/g;
+
 // Las más cercanas al punto elegido, solo si se pide salir a caminar o en bici
 export function rutasParaPrompt(apetece, lat, lon, radio, cuantas = 6) {
-  if (!PIDE_RUTA.test(` ${quitarTildes(apetece)} `)) return "";
+  if (!PIDE_RUTA.test(` ${quitarTildes(apetece).replace(RUTA_DE_COMER, " ")} `)) return "";
   const cerca = RUTAS.map((r) => ({ ...r, km: haversineKm(lat, lon, r.lat, r.lon) }))
     .filter((r) => r.km <= Number(radio) * 1.1)
     .sort((a, b) => a.km - b.km)
