@@ -40,17 +40,43 @@ function Rosa() {
 
 const SECCIONES = [["/panel", "Inicio"], ["/panel/negocios", "Negocios"], ["/panel/oficina", "Oficina"], ["/panel/mas", "Más datos"]];
 
-export function Navegacion({ negocios = 0 }) {
+// El globo de Negocios: lo calcula Inicio y lo recuerdan las demás pantallas, para que no cambie al moverte
+export function Navegacion({ negocios }) {
   const ruta = usePathname();
+  const [guardado, setGuardado] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (negocios != null) sessionStorage.setItem("cz-negocios", String(negocios));
+        setGuardado(Number(sessionStorage.getItem("cz-negocios")) || 0);
+      } catch { setGuardado(negocios || 0); }
+    }, 0);
+    return () => clearTimeout(t);
+  }, [negocios]);
   return (
     <nav className="pn-nav" aria-label="Secciones del panel">
       {SECCIONES.map(([href, texto]) => (
         <Link key={href} href={href} aria-current={ruta === href ? "page" : undefined}>
-          {texto}{href === "/panel/negocios" && negocios > 0 && <span className="pn-globo tabular-nums">{negocios}</span>}
+          {texto}{href === "/panel/negocios" && guardado > 0 && <span className="pn-globo tabular-nums">{guardado}</span>}
         </Link>
       ))}
     </nav>
   );
+}
+
+// Letra grande: sube el tamaño de todo el panel y se recuerda
+function BotonLetra() {
+  const [grande, setGrande] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => { try { if (localStorage.getItem("cz-letra") === "1") setGrande(true); } catch {} }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    document.documentElement.style.fontSize = grande ? "115%" : "";
+    return () => { document.documentElement.style.fontSize = ""; };
+  }, [grande]);
+  const cambiar = () => setGrande((g) => { try { localStorage.setItem("cz-letra", g ? "0" : "1"); } catch {} return !g; });
+  return <button onClick={cambiar} aria-pressed={grande} aria-label="Letra grande" className={`pn-boton ${grande ? "" : "flojo"}`} style={{ minHeight: 40, width: 44, padding: 0, fontSize: 13 }}>A+</button>;
 }
 
 export function Marco({ negocios, derecha, children }) {
@@ -60,7 +86,7 @@ export function Marco({ negocios, derecha, children }) {
       <div className="pn-marco">
         <header className="pn-cabecera">
           <h1 className="pn-marca">Cazurronics</h1>
-          {derecha}
+          <div className="flex items-center gap-2"><BotonLetra />{derecha}</div>
         </header>
         <Navegacion negocios={negocios} />
         <main>{children}</main>

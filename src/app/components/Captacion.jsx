@@ -48,12 +48,13 @@ function Tarjeta({ l, vista, onGuardar, onCopiar, clave }) {
     : l.email ? "correo" : l.instagram ? "instagram" : null;
   const asunto = l.toca ? m?.asuntoRecordatorio : corto ? m?.asuntoCorto : m?.asunto;
   const cuerpo = l.toca ? m?.recordatorioCorreo : corto ? m?.correoCorto : m?.correo;
-  const [propio, setPropio] = useState(null); // el mensaje retocado por ti o por la IA
+  const [propioCorreo, setPropioCorreo] = useState(null); // el mensaje retocado por ti, canal a canal
+  const [propioChat, setPropioChat] = useState(null);
   const [indicacion, setIndicacion] = useState("");
   const [reescribiendo, setReescribiendo] = useState(false);
   const [avisoIA, setAvisoIA] = useState("");
-  const chat = propio ?? (l.toca ? m?.recordatorioChat : m?.chat);
-  const cuerpoFinal = propio ?? cuerpo;
+  const chat = propioChat ?? (l.toca ? m?.recordatorioChat : m?.chat);
+  const cuerpoFinal = propioCorreo ?? cuerpo;
   // Solo si lo pides: la IA reescribe el mensaje con tu indicación (~0,0001 $)
   const pedirIA = async (ev) => {
     ev.preventDefault();
@@ -62,7 +63,7 @@ function Tarjeta({ l, vista, onGuardar, onCopiar, clave }) {
     try {
       const r = await fetch("/api/panel/oficina", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ local: l.clave, accion: "cambiar", texto: indicacion.trim() }) });
       const d = await r.json().catch(() => null);
-      if (d?.exito) { setPropio(d.texto); setIndicacion(""); } else setAvisoIA(d?.mensaje || "No se ha podido cambiar.");
+      if (d?.exito) { setPropioChat(d.texto); setIndicacion(""); } else setAvisoIA(d?.mensaje || "No se ha podido cambiar.");
     } catch { setAvisoIA("No se pudo conectar."); } finally { setReescribiendo(false); }
   };
 
@@ -148,11 +149,11 @@ function Tarjeta({ l, vista, onGuardar, onCopiar, clave }) {
           {canal && (
             <details className="text-xs">
               <summary className="cursor-pointer text-slate-500 hover:text-slate-800">Ver y retocar el mensaje</summary>
-              <textarea value={canal === "correo" ? cuerpoFinal : chat} onChange={(e) => setPropio(e.target.value)} rows={10} aria-label={`Mensaje para ${l.nombre}`} className="mt-2 w-full bg-white/70 rounded-xl ring-1 ring-slate-900/5 p-2.5 text-[12px] leading-relaxed text-slate-700 outline-none resize-y" />
-              <form onSubmit={pedirIA} className="flex gap-2 mt-2">
+              <textarea value={canal === "correo" ? cuerpoFinal : chat} onChange={(e) => (canal === "correo" ? setPropioCorreo : setPropioChat)(e.target.value)} rows={10} aria-label={`Mensaje para ${l.nombre}`} className="mt-2 w-full bg-white/70 rounded-xl ring-1 ring-slate-900/5 p-2.5 text-[12px] leading-relaxed text-slate-700 outline-none resize-y" />
+              {canal === "instagram" && <form onSubmit={pedirIA} className="flex gap-2 mt-2">
                 <input value={indicacion} onChange={(e) => setIndicacion(e.target.value.slice(0, 300))} placeholder="Pedir a la IA: «más corto», «tutéales»…" aria-label="Indicación para reescribir el mensaje" className={INPUT} />
                 <button disabled={reescribiendo} className={`${B_CLARO} shrink-0 disabled:opacity-60`}>{reescribiendo ? "…" : "Cambiar"}</button>
-              </form>
+              </form>}
               {avisoIA && <p className="mt-1 text-rose-600">{avisoIA}</p>}
             </details>
           )}
@@ -302,7 +303,7 @@ export default function Captacion({ clave }) {
 
       {lista.length ? (
         <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {lista.map((l) => <Tarjeta key={l.clave} l={l} vista={vista} onGuardar={guardarLocal} onCopiar={copiar} clave={clave} />)}
+          {lista.map((l) => <Tarjeta key={`${l.clave}-${l.toca ? "r" : "m"}`} l={l} vista={vista} onGuardar={guardarLocal} onCopiar={copiar} clave={clave} />)}
         </ul>
       ) : <p className="text-sm text-slate-500">{VACIO[vista]}</p>}
 

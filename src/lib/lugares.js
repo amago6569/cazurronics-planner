@@ -75,7 +75,7 @@ export async function registrarAccionLugar(k, accion) {
 // Las tiendas de la Despensa no pasan por los planes: se apunta su nombre al primer gesto y se ordenan por interés.
 // Solo se guarda lo que manda el navegador con formato válido: el panel lo pinta como texto, nunca como HTML.
 const ID_TIENDA = /^[\w-]{1,160}$/;
-const MAX_TIENDAS = 2000, VIDA_TIENDA = 120 * 24 * 3600;
+const MAX_TIENDAS = 2000;
 export async function registrarAccionTienda(t, accion) {
   const id = String(t?.id || "");
   if (!ID_TIENDA.test(id) || !["como_llegar", "web_tienda"].includes(accion)) return;
@@ -89,7 +89,6 @@ export async function registrarAccionTienda(t, accion) {
     ["HSETNX", `tienda:${id}`, "nombre", nombre],
     ["HSETNX", `tienda:${id}`, "localidad", localidad],
     ["HINCRBY", `tienda:${id}`, accion, 1],
-    ["EXPIRE", `tienda:${id}`, VIDA_TIENDA],
     ["ZINCRBY", "ranking:tiendas", 1, id],
   ]);
 }

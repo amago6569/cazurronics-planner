@@ -211,7 +211,6 @@ export default function Oficina() {
   const cerrarFicha = () => setElegido(null);
   if (!acceso.lista || !datos) return <Entrada acceso={acceso} />;
 
-  const locales = datos.captacion?.length || 0;
   const fallos = fallosQueTeTocan(datos.departamentos, datos.fallanSeguido).fallos.length;
   const plegable = (id, titulo, contenido) => (
     <details id={id} className="pn-plegable scroll-mt-4" open={abiertos.has(id)} onToggle={(e) => { const a = e.currentTarget.open; setAbiertos((s) => { if (s.has(id) === a) return s; const n = new Set(s); if (a) n.add(id); else n.delete(id); return n; }); }}>
@@ -221,7 +220,7 @@ export default function Oficina() {
   );
 
   return (
-    <Marco negocios={locales} derecha={<button onClick={() => setAyuda(true)} className="pn-boton flojo" style={{ minHeight: 40, padding: "0 14px", fontSize: 13 }}>¿Qué estoy viendo?</button>}>
+    <Marco derecha={<button onClick={() => setAyuda(true)} className="pn-boton flojo" style={{ minHeight: 40, padding: "0 14px", fontSize: 13 }}>¿Qué estoy viendo?</button>}>
       <div className="space-y-3">
         <section ref={planta} className="space-y-2.5 scroll-mt-20">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -233,7 +232,7 @@ export default function Oficina() {
           {modo === "3d" && (
             <Oficina3D departamentos={datos.departamentos} charla={datos.charla || []} golpes={datos.golpes || []} bandeja={datos.bandeja} flujo={datos.flujo || {}}
               alElegir={setElegido} vista={vista} setVista={setVista} repeticion={repeticion > 0 ? repeticion : 0} alAcabarRepeticion={() => { setRepeticion((n) => -Math.abs(n)); setVista("todo"); }}
-              movimiento={movimiento} reunion={escena} alAcabarReunion={() => setVista("todo")} />
+              movimiento={movimiento} reunion={escena} alAcabarReunion={() => { setVista("todo"); setEscena(null); }} />
           )}
           {modo === "lista" && datos.departamentos.map((d) => (
             <section key={d.id} className="space-y-3" aria-label={d.nombre}>

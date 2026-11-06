@@ -77,7 +77,7 @@ export default function Inicio() {
     if (d.exito) {
       setDatos(d);
       // La oficina va aparte: Inicio se ve al momento aunque ella tarde un poco
-      pedir("/api/panel/oficina", c).then((o) => { if (o.exito) setOficina(o); });
+      pedir("/api/panel/oficina", c).then((o) => setOficina(o.exito ? o : { error: true }));
     }
     return d;
   }, []);
@@ -88,8 +88,9 @@ export default function Inicio() {
   if (!acceso.lista || !datos) return <Entrada acceso={acceso} />;
 
   const solicitudes = (datos.solicitudes || []).filter((s) => !s.atendida).length;
+  const oficinaBien = !!oficina && !oficina.error;
   const locales = oficina?.captacion?.length || 0;
-  const fallos = oficina ? fallosQueTeTocan(oficina.departamentos, oficina.fallanSeguido).fallos.length : 0;
+  const fallos = oficinaBien ? fallosQueTeTocan(oficina.departamentos, oficina.fallanSeguido).fallos.length : 0;
   const negocios = solicitudes + locales;
   const pendiente = negocios + fallos;
   const gasto = oficina?.jefe?.cifras?.gasto;
@@ -98,11 +99,11 @@ export default function Inicio() {
   const midiendo = c.planner + c.despensa > 0;
 
   return (
-    <Marco negocios={negocios}>
+    <Marco negocios={oficina ? negocios : undefined}>
       <Link href={negocios || !fallos ? "/panel/negocios" : "/panel/oficina"} className="pn-bloque pn-estado">
         <span className={`pn-punto ${pendiente ? "" : "bien"}`} aria-hidden="true" />
         <span style={{ flex: 1, minWidth: 0 }}>
-          <b>{oficina ? fraseHoy({ solicitudes, locales, fallos }) : "Mirando qué tienes hoy…"}</b>
+          <b>{oficina?.error ? "No se ha podido leer la oficina. Recarga dentro de un rato." : oficina ? fraseHoy({ solicitudes, locales, fallos }) : "Mirando qué tienes hoy…"}</b>
           <span className="pn-apunte">
             {gasto ? `Gasto de IA: ${euros(gasto.mes)} de ${PRESUPUESTO_IA_MES} € este mes.` : "Sin datos de gasto todavía."}
             {datos.almacen === "memoria" ? " Datos en memoria: falta conectar Upstash." : ""}
@@ -152,7 +153,7 @@ export default function Inicio() {
 
         <Link href="/panel/oficina" className="pn-bloque pn-a4 pn-enlace flex flex-col">
           <span className="flex justify-between"><span className="pn-titulo">Oficina</span><span aria-hidden="true">→</span></span>
-          <span className="pn-apunte" style={{ marginTop: 2 }}>{oficina ? (oficina.enCurso?.length ? `${oficina.enCurso.length} trabajando ahora mismo.` : "Nadie trabajando ahora mismo.") : "Encendiendo las luces…"}</span>
+          <span className="pn-apunte" style={{ marginTop: 2 }}>{oficina?.error ? "No se ha podido leer." : oficina ? (oficina.enCurso?.length ? `${oficina.enCurso.length} trabajando ahora mismo.` : "Nadie trabajando ahora mismo.") : "Encendiendo las luces…"}</span>
           <span className="pn-mini">
             <span><b>{flujo ? fmt(flujo.buscan) : "…"}</b><em>búsquedas</em></span>
             <span><b>{flujo ? fmt(flujo.entran) : "…"}</b><em>nuevos</em></span>

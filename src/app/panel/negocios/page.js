@@ -51,7 +51,7 @@ export default function Negocios() {
   const atendidas = solicitudes.filter((s) => s.atendida);
 
   return (
-    <Marco negocios={pendientes.length}>
+    <Marco>
       <section className="mb-5">
         <h2 className="pn-titulo mb-2">Te han escrito ellos</h2>
         {aviso && <p className="text-sm mb-2" style={{ color: "var(--mal)" }} role="alert">{aviso}</p>}

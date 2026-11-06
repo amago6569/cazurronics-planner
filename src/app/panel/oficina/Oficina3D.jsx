@@ -9,7 +9,7 @@
 // Calidad: personas con articulaciones (personaje.js, posturas.js), suelos pintados (texturas.js), sombras y luz según
 // la hora de León. Lo que no se mueve se junta en una sola malla (Horneado) para que vaya fluido en el móvil.
 // Un dedo mueve la planta, dos dedos (o la rueda) acercan, y tocar a alguien abre su ficha. Ver esto no gasta IA.
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -133,7 +133,9 @@ function Ambiente({ dia, sombras }) {
   const { gl, scene } = useThree();
   useEffect(() => {
     const pm = new THREE.PMREMGenerator(gl);
-    const entorno = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    const sala = new RoomEnvironment();
+    const entorno = pm.fromScene(sala, 0.04).texture;
+    sala.dispose();
     // three.js se maneja así: la escena es un objeto que se cambia directamente
     // eslint-disable-next-line react-hooks/immutability
     scene.environment = entorno;
@@ -656,6 +658,7 @@ function Persona({ e, poses, aspecto, camisa, alTocar, semilla, jefe, rotulo }) 
   const [humos] = useState(() => [0, 1, 2].map(() => new THREE.MeshLambertMaterial({ color: "#64748b", transparent: true, opacity: 0.4, depthWrite: false })));
   const cuerpo = useMemo(() => crearCuerpo({ ...aspecto, camisa, jefe, peinado: jefe ? "entradas" : aspecto.peinado, barba: jefe ? false : aspecto.barba, gafas: jefe ? true : aspecto.gafas }), [aspecto, camisa, jefe]);
   useEffect(() => () => liberarCuerpo(cuerpo), [cuerpo]);
+  useEffect(() => () => humos.forEach((m) => m.dispose()), [humos]);
   // El estado de cada articulación vive aquí: cambia 60 veces por segundo y no debe pasar por React
   const movil = useRef({ a: null, x: null, z: null, giro: 0, fase: 0, veloz: 0, parpadeo: 2 });
 
@@ -931,7 +934,16 @@ const nombreDe = (id, porId) => (id === "jefe" ? "👔 Jefe" : id === "tu" ? "�
 const horaMadrid = (ms) => new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
 const SALAS_BOTONES = [["todo", "Todo"], ["busqueda", "🔎 Búsqueda"], ["control", "🧐 Control"], ["archivo", "🗄️ Archivo"], ["despacho", "👔 Jefe"], ["cafe", "☕ Cafetería"], ["despensa", "🧺 Despensa"], ["negocio", "📣 Negocio"], ["escaparate", "🪟 Escaparate"]];
 
-// Rótulos de cada sala, y los contadores del archivo, tu buzón y la papelera
+// Los nombres de las salas no cambian nunca: van aparte para no repintarlos durante la repetición
+const NombresSalas = memo(function NombresSalas() {
+  return Object.entries(SALAS).map(([id, sala]) => (
+    <Etiqueta key={id} position={[sala.rotulo[0], sala.rotulo[1] < 0 ? ALTO + 0.4 : 0.5, sala.rotulo[1]]} center>
+      <span className="select-none whitespace-nowrap pn-rotulo rounded-full px-2 py-0.5 text-[9px] sm:text-[11px] font-bold shadow-sm">{sala.emoji} <span className="sm:hidden">{sala.corto}</span><span className="hidden sm:inline">{sala.nombre}</span></span>
+    </Etiqueta>
+  ));
+});
+
+// Los contadores del archivo, tu buzón y la papelera
 function Rotulos({ rep, reloj, repitiendo, flujo, bandeja }) {
   const s = useSegundo(reloj);
   const c = repitiendo && rep ? contadores(rep, s) : null;
@@ -943,12 +955,6 @@ function Rotulos({ rep, reloj, repitiendo, flujo, bandeja }) {
   };
   return (
     <>
-      {/* Las de atrás, en lo alto de su pared del fondo; las de delante, en su borde de la calle */}
-      {Object.entries(SALAS).map(([id, sala]) => (
-        <Etiqueta key={id} position={[sala.rotulo[0], sala.rotulo[1] < 0 ? ALTO + 0.4 : 0.5, sala.rotulo[1]]} center>
-          <span className="select-none whitespace-nowrap pn-rotulo rounded-full px-2 py-0.5 text-[9px] sm:text-[11px] font-bold shadow-sm">{sala.emoji} <span className="sm:hidden">{sala.corto}</span><span className="hidden sm:inline">{sala.nombre}</span></span>
-        </Etiqueta>
-      ))}
       {[["archivo", "📅", "bg-emerald-500"], ["buzon", "📥", "bg-amber-500"], ["papelera", "🗑", "bg-slate-500"]].map(([id, icono, color]) => (
         <Etiqueta key={id} position={[DESTINOS[id][0], DESTINOS[id][1] + 0.9, DESTINOS[id][2]]} center>
           <span className={`select-none whitespace-nowrap rounded-full ${color} px-2 py-0.5 text-[10px] sm:text-[11px] font-bold shadow tabular-nums`}>{icono} {cifras[id][0]}<span className="hidden sm:inline">{cifras[id][1]}</span></span>
@@ -1019,7 +1025,9 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
   const sitios = useMemo(() => planta(departamentos), [departamentos]);
   const empleados = useMemo(() => departamentos.flatMap((d) => d.empleados.map((e, i) => ({ ...e, dep: d.id, i }))), [departamentos]);
   const porId = useMemo(() => Object.fromEntries(empleados.map((e) => [e.id, e])), [empleados]);
-  const aspectos = useMemo(() => Object.fromEntries([...empleados.map((e, i) => [e.id, aspectoDe(i, { pieles: PIELES, pelos: PELOS })]), ["jefe", { ...aspectoDe(30, { pieles: PIELES, pelos: PELOS }), pelo: "#8d8d8c", pantalon: "#16181f", zapatos: "#1b1a20", ancho: 1.03, alto: 1 }]]), [empleados]);
+  // Cada refresco de datos trae objetos nuevos: el aspecto depende solo de quiénes son, para no rehacer los cuerpos
+  const plantilla = empleados.map((e) => e.id).join();
+  const aspectos = useMemo(() => Object.fromEntries([...plantilla.split(",").map((id, i) => [id, aspectoDe(i, { pieles: PIELES, pelos: PELOS })]), ["jefe", { ...aspectoDe(30, { pieles: PIELES, pelos: PELOS }), pelo: "#8d8d8c", pantalon: "#16181f", zapatos: "#1b1a20", ancho: 1.03, alto: 1 }]]), [plantilla]);
   const [poses] = useState(() => new Map());
   const [reloj] = useState(crearReloj);
   const [tablon] = useState(crearTablon);
@@ -1128,6 +1136,7 @@ export default function Oficina3D({ departamentos, charla = [], golpes = [], ban
             ))}
             <Persona e={{ id: "jefe" }} jefe poses={poses} semilla={3} camisa="#1b1e27" aspecto={aspectos.jefe} rotulo={repitiendo ? null : { texto: "👔 El jefe", color: "bg-rose-600/90", soloGrande: true }} alTocar={() => alElegir({ jefe: true })} />
             <Carpetas rep={rep} reloj={reloj} />
+            <NombresSalas />
             <Rotulos rep={rep} reloj={reloj} repitiendo={repitiendo} flujo={flujo} bandeja={bandeja.length} />
             {rep && !rep.vacia && <Bocadillos rep={rep} reloj={reloj} poses={poses} porId={porId} sitios={sitios} />}
             {!repitiendo && <BocadillosVivos tablon={tablon} poses={poses} porId={porId} />}
