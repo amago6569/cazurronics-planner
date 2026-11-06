@@ -34,6 +34,13 @@
     escribir("cz-ultima-visita", hoy);
   };
 
+  // Una visita por sección y sesión: así se separan el Planner y la Despensa
+  C.registrarSeccion = (seccion) => {
+    const k = `cz-visita-${seccion}`;
+    try { if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, "1"); } catch {}
+    C.baliza(`visita_${seccion}`);
+  };
+
   // Horas y franjas de la agenda: las mismas de src/lib/agenda.js (un test comprueba que no se separan)
   const normalizar = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const franjaDe = (min) => (min < 14 * 60 ? "manana" : min < 20 * 60 ? "tarde" : "noche");

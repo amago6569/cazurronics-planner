@@ -277,6 +277,7 @@ const $ = (id) => document.getElementById(id);
 const esc = CZ.esc;
 const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
 CZ.registrarVisita();
+CZ.registrarSeccion("planner");
 ponerRosaSimetrica($("rosaGira"));
 // Los mismos datos que manda la web a /api/plan
 const peticion = { fecha: "", apetece: "", presupuestoMin: 10, presupuestoMax: 50, radio: 15, lat: 42.5987, lon: -5.5671 };

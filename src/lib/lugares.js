@@ -72,6 +72,37 @@ export async function registrarAccionLugar(k, accion) {
   await comando(["HINCRBY", `lugarstats:${k}`, accion, 1]);
 }
 
+// Las tiendas de la Despensa no pasan por los planes: se apunta su nombre al primer gesto y se ordenan por interés.
+// Solo se guarda lo que manda el navegador con formato válido: el panel lo pinta como texto, nunca como HTML.
+const ID_TIENDA = /^[\w-]{1,160}$/;
+const MAX_TIENDAS = 2000;
+export async function registrarAccionTienda(t, accion) {
+  const id = String(t?.id || "");
+  if (!ID_TIENDA.test(id) || !["como_llegar", "web_tienda"].includes(accion)) return;
+  const nombre = String(t.nombre || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const localidad = String(t.localidad || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!nombre || /https?:|\.[a-z]{2,}/i.test(`${nombre} ${localidad}`)) return;
+  // Un tope para que nadie llene el almacén con tiendas inventadas; el nombre no se puede cambiar una vez apuntado
+  const [yaEsta, total] = await varios([["ZSCORE", "ranking:tiendas", id], ["ZCARD", "ranking:tiendas"]]);
+  if (yaEsta == null && Number(total) >= MAX_TIENDAS) return;
+  await varios([
+    ["HSETNX", `tienda:${id}`, "nombre", nombre],
+    ["HSETNX", `tienda:${id}`, "localidad", localidad],
+    ["HINCRBY", `tienda:${id}`, accion, 1],
+    ["ZINCRBY", "ranking:tiendas", 1, id],
+  ]);
+}
+
+export async function topTiendas(cuantas = 10) {
+  const ids = (await comando(["ZREVRANGE", "ranking:tiendas", 0, cuantas - 1])) || [];
+  if (!ids.length) return [];
+  const filas = await varios(ids.map((id) => ["HGETALL", `tienda:${id}`]));
+  return ids.map((id, i) => {
+    const o = aObjeto(filas[i]);
+    return { id, nombre: o.nombre, localidad: o.localidad || "", llegar: Number(o.como_llegar) || 0, web: Number(o.web_tienda) || 0 };
+  }).filter((t) => t.nombre);
+}
+
 // "¿Fuiste? ¿Qué tal?" — una valoración por persona y parada (HSETNX evita duplicados)
 export async function registrarValoracion({ planId, indice, votante, valor, lugarId }) {
   if (!["bien", "mal", "nofui"].includes(valor) || !claveValida(lugarId)) return false;

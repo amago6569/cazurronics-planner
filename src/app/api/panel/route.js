@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { comando, leerJSON, usaRedis, varios } from "../../../lib/almacen";
 import { leerGastoIA, leerResumen } from "../../../lib/estadisticas";
-import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares } from "../../../lib/lugares";
+import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares, topTiendas } from "../../../lib/lugares";
 import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
 import { barrerDespensa, resumenDespensa } from "../../../lib/despensa";
 import { barrerTiendas, resumenTiendas } from "../../../lib/despensaTiendas";
@@ -20,7 +20,8 @@ function faltaConfiguracion() {
   return null;
 }
 
-// GET /api/panel (cabecera x-clave = PANEL_CLAVE) → todo lo que ve el equipo en /panel
+// GET /api/panel (cabecera x-clave = PANEL_CLAVE) → lo básico de Inicio (/panel): contadores de 60 días, locales, tiendas y solicitudes
+// GET /api/panel?mas=1 → lo de /panel/mas: barridos, gasto por tarea, Despensa y fuentes
 export async function GET(request) {
   const falta = faltaConfiguracion();
   if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
@@ -34,6 +35,10 @@ export async function GET(request) {
   }
 }
 
+const SOLICITUDES_ATENDIDAS = "negocios:atendidas";
+const leerSolicitudes = (lista) => (lista || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean);
+const idSolicitud = (s) => `${s.fecha}|${s.nombreLocal}`.slice(0, 200);
+
 async function datosDelPanel(request) {
   // GET /api/panel?buscar=nombre → solo la búsqueda de locales
   const buscar = new URL(request.url).searchParams.get("buscar");
@@ -41,13 +46,30 @@ async function datosDelPanel(request) {
     const lugares = await buscarLugares(buscar);
     return NextResponse.json({ exito: true, lugares: lugares.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })) }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda, solicitudes, despensa, despensaTiendas, mercadillos, fichas, gastoIA] = await Promise.all([
+  if (!new URL(request.url).searchParams.has("mas")) {
+    const [resumen, apariciones, tiendas, solicitudes, atendidas] = await Promise.all([
+      leerResumen(60),
+      topLugares("ranking:apariciones", 10),
+      topTiendas(10).catch(() => []),
+      comando(["LRANGE", "negocios:solicitudes", 0, 99]).catch(() => []),
+      comando(["SMEMBERS", SOLICITUDES_ATENDIDAS]).catch(() => []),
+    ]);
+    const hechas = new Set(atendidas || []);
+    return NextResponse.json({
+      exito: true,
+      almacen: usaRedis ? "redis" : "memoria",
+      resumen,
+      lugares: apariciones.map((l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) })),
+      tiendas,
+      solicitudes: leerSolicitudes(solicitudes).map((s) => ({ ...s, atendida: hechas.has(idSolicitud(s)), id: idSolicitud(s) })),
+    }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const [resumen, apariciones, gusta, barrido, agenda, despensa, despensaTiendas, mercadillos, fichas, gastoIA] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
     leerJSON("eventos:ultimoBarrido"),
     eventosProximos(21),
-    comando(["LRANGE", "negocios:solicitudes", 0, 99]).catch(() => []),
     resumenDespensa().catch(() => null),
     resumenTiendas().catch(() => null),
     resumenMercadillos().catch(() => null),
@@ -65,7 +87,6 @@ async function datosDelPanel(request) {
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
     gastoIA,
     despensa: despensa ? { ...despensa, google: despensaTiendas, mercadillos, fichas } : null,
-    solicitudes: (solicitudes || []).map((t) => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean),
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -75,7 +96,17 @@ export async function POST(request) {
   if (falta) return NextResponse.json({ exito: false, mensaje: falta }, { status: 503 });
   const acceso = await claveConFreno(request, autorizado(request));
   if (acceso !== "ok") return respuestaClave(acceso);
-  const { accion, tramo } = await request.json().catch(() => ({}));
+  const { accion, tramo, id: idDeSolicitud, atendida } = await request.json().catch(() => ({}));
+  // Una solicitud de negocio ya contestada (o que vuelve a estar pendiente)
+  if (accion === "solicitud") {
+    if (typeof idDeSolicitud !== "string" || !idDeSolicitud || idDeSolicitud.length > 200) return NextResponse.json({ exito: false }, { status: 400 });
+    try {
+      await comando([atendida === false ? "SREM" : "SADD", SOLICITUDES_ATENDIDAS, idDeSolicitud]);
+      return NextResponse.json({ exito: true });
+    } catch (e) {
+      return NextResponse.json({ exito: false, mensaje: e.message }, { status: 500 });
+    }
+  }
   // Empezar de cero las estadísticas de locales (apariciones, fichas, llamadas, valoraciones). No toca captación ni la agenda.
   if (accion === "reiniciar-locales") {
     try {

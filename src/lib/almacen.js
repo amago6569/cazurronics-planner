@@ -99,6 +99,11 @@ function ejecutarEnMemoria([cmd, ...a]) {
       const tramo = orden.slice(Number(a[1]), fin);
       return String(a[3] || "").toUpperCase() === "WITHSCORES" ? tramo.flatMap(([m, s]) => [m, String(s)]) : tramo.map(([m]) => m);
     }
+    case "ZSCORE": { const z = vivo(a[0]); return z instanceof Map && z.has(a[1]) ? String(z.get(a[1])) : null; }
+    case "ZCARD": { const z = vivo(a[0]); return z instanceof Map ? z.size : 0; }
+    case "SADD": { let s = vivo(a[0]); if (!(s instanceof Set)) { s = new Set(); mem.kv.set(a[0], s); } let n = 0; for (const x of a.slice(1)) if (!s.has(String(x))) { s.add(String(x)); n++; } return n; }
+    case "SREM": { const s = vivo(a[0]); if (!(s instanceof Set)) return 0; let n = 0; for (const x of a.slice(1)) if (s.delete(String(x))) n++; return n; }
+    case "SMEMBERS": { const s = vivo(a[0]); return s instanceof Set ? [...s] : []; }
     case "LPUSH": {
       let l = vivo(a[0]); if (!Array.isArray(l)) { l = []; mem.kv.set(a[0], l); }
       l.unshift(...a.slice(1).map(String).reverse()); return l.length;

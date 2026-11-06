@@ -4,7 +4,6 @@
 // (sin búsqueda: agenda verificada + locales comprobados), y los enseña lado a lado con lo que cuesta cada uno.
 // No guarda los planes ni suma estadísticas.
 import { useEffect, useState } from "react";
-import Fondo from "../../components/Fondo";
 import { GLASS, BOTON_OSCURO, TITULO_GRADIENTE } from "../../../lib/estilos";
 
 const CASOS = [
@@ -100,7 +99,6 @@ export default function Comparar() {
 
   return (
     <main className="min-h-[100dvh] px-4 py-8 sm:py-12">
-      <Fondo />
       <div className="mx-auto max-w-5xl space-y-5">
         <header className={`${GLASS} rounded-[2rem] p-6`}>
           <p className="text-3xl mb-1">⚖️</p>
