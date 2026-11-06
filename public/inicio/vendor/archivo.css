@@ -1,0 +1,9 @@
+/* Archivo (licencia SIL OFL 1.1), alojada aquí para que abrir la web no avise a Google de cada visita */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url("/inicio/vendor/archivo-latin.woff2") format("woff2");
+}

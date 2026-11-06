@@ -28,7 +28,8 @@ Van en `.env.local` en local y en Vercel → Settings → Environment Variables.
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Sí | Clave de Google AI Studio (Gemini). Solo se usa en el servidor. |
 | `GOOGLE_MAPS_API_KEY` | Sí | Places, Geocoding y fotos de Google Maps. |
-| `STREET_VIEW_API_KEY` | No | Clave para la vista 360º. **Acaba en el navegador** (va dentro del iframe), así que restríngela por dominio en Google Cloud. Si falta, se usa `GOOGLE_MAPS_API_KEY` (nunca la de Gemini). |
+| `STREET_VIEW_API_KEY` | No | Clave para la vista 360º. **Acaba en el navegador** (va dentro del iframe), así que restríngela por dominio y a Maps Embed en Google Cloud. Si falta, no hay vista 360º: la clave de Maps nunca sale del servidor. |
+| `FOTOS_MAX_DIA` | No | Fotos de pago al día en toda la web (300 de serie; 0 = sin tope). Pasado el tope sale el rosetón. |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | En producción | Redis de Upstash (Vercel → Storage → Upstash for Redis). También valen `UPSTASH_REDIS_REST_URL` / `_TOKEN`. |
 | `PANEL_CLAVE` | Para `/panel` | Contraseña del panel del equipo. |
 | `NEGOCIOS_SECRETO` | Recomendada | Firma los enlaces privados de cada local (`/negocio/…`). Si falta, se usa `PANEL_CLAVE`. |

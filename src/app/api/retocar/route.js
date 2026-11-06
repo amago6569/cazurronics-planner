@@ -36,32 +36,36 @@ export async function POST(request) {
       return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos cambios seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
     }
     // Techo de gasto por día (RETOQUES_MAX_IP_DIA y RETOQUES_MAX_DIA en Vercel; 0 = sin tope)
-    if (!(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_IP_DIA ?? 200), request)) || !(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_DIA ?? 15)))) {
+    if (!(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_IP_DIA ?? 6), request)) || !(await dentroDelTopeDiario('retoque', Number(process.env.RETOQUES_MAX_DIA ?? 15), null, false))) {
       return NextResponse.json({ exito: false, mensaje: 'Hoy se han hecho muchos cambios 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
     }
     const { fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
+    // Lo que llega del navegador entra en la petición a la IA: con textos enormes, cada retoque costaría más
+    const recortar = (texto, largo = 120) => String(texto ?? '').slice(0, largo);
+    const tituloAntiguo = recortar(paradaAntigua.titulo);
+    const horaAntigua = recortar(paradaAntigua.hora, 20);
 
     const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
     const priceLevelObjetivo = presupuestoAPriceLevel(presupuestoMin, presupuestoMax);
     const nombreZona = await obtenerLocalidad(lat, lon, MAPS_KEY) || 'un punto de León';
     const sumaOtras = itinerarioActual.reduce((suma, p, i) => i === indice ? suma : suma + parsePrecio(p?.precio), 0);
     const presDisp = Math.max(Number(presupuestoMax) - sumaOtras, 3);
-    const nombresYa = itinerarioActual.filter((p, i) => i !== indice && p?.titulo).map(p => p.titulo);
+    const nombresYa = itinerarioActual.filter((p, i) => i !== indice && p?.titulo).map(p => recortar(p.titulo));
     // Modo ahorro (el de serie; PLANES_CON_GOOGLE=1 lo apaga): sin búsqueda en Google; la IA elige entre los locales comprobados del radio
     // y lo que conoce, y Google Places lo comprueba después igual que siempre
     const conGoogle = planesConGoogle();
     const sitios = conGoogle ? null : await sinRomper(sitiosComprobados(lat, lon, radio, 30), 'sitios comprobados');
-    const bloqueSitios = conGoogle ? '' : sitiosParaPrompt((sitios || []).filter((x) => !nombresYa.includes(x.n) && x.n !== paradaAntigua.titulo));
+    const bloqueSitios = conGoogle ? '' : sitiosParaPrompt((sitios || []).filter((x) => !nombresYa.includes(x.n) && x.n !== tituloAntiguo));
 
     const prompt = `
-      Cazurronics Planner. Cambia la parada "${paradaAntigua.titulo}" (${paradaAntigua.hora}).
+      Cazurronics Planner. Cambia la parada "${tituloAntiguo}" (${horaAntigua}).
       El usuario pide: "${instruccion}".
       RESTRICCIONES: Solo provincia de León (España). Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
       ${bloqueSitios}
       Si es un bar o restaurante y no conoces uno real con seguridad, no inventes el nombre: pon el tipo y el pueblo ("Bar en Boñar") y lo buscamos en Google Maps. No inventes especialidades ni historia.
       Devuelve SOLO un JSON así:
       "lugar": solo si es un evento o ruta: el local, plaza o recinto concreto donde es; si es un negocio normal, null.
-      {"hora": "${paradaAntigua.hora}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${paradaAntigua.tipo}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
+      {"hora": "${horaAntigua}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${recortar(paradaAntigua.tipo, 30)}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
     const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', tarea: 'retoques', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
