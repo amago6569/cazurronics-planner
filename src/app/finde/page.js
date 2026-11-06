@@ -40,7 +40,7 @@ export default async function Finde() {
       {p.hayContenido && (
         <div className="flex flex-wrap gap-2 px-1">
           <a href={wa} target="_blank" rel="noopener noreferrer" className={`${PRESS} inline-flex items-center gap-2 h-11 px-5 rounded-full bg-emerald-500 text-white text-sm font-bold shadow-[0_10px_24px_-8px_rgba(16,185,129,0.7)] hover:bg-emerald-600`}>💬 Mandar al grupo</a>
-          <Link href="/agenda-leon" className={`${PRESS} inline-flex items-center h-11 px-5 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:bg-white`}>📅 Ver toda la agenda</Link>
+          <Link href="/agenda-leon" className={`${PRESS} inline-flex items-center h-11 px-5 rounded-full bg-white/80 ring-1 ring-slate-900/10 text-sm font-semibold text-slate-700 hover:bg-white`}>Ver toda la agenda</Link>
         </div>
       )}
 
@@ -53,7 +53,7 @@ export default async function Finde() {
 
       {p.provincia.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">🏔️ Por la provincia</h2>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">Por la provincia</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {p.provincia.map((e, i) => (
               <div key={i}>
@@ -67,7 +67,7 @@ export default async function Finde() {
 
       {p.enMarcha.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">📌 Todo el finde</h2>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">Todo el finde</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">{p.enMarcha.map((e, i) => <TarjetaEvento key={i} e={e} mostrarCuando />)}</div>
         </section>
       )}
@@ -76,7 +76,7 @@ export default async function Finde() {
         <section className={`${GLASS} rounded-[2rem] p-6 text-center`}>
           <p className="font-bold text-slate-900 text-lg">¿Ninguno te convence?</p>
           <p className="text-slate-600 mt-1 mb-4 text-sm">Dime qué te apetece y tu presupuesto, y te monto el finde a tu medida.</p>
-          <Link href="/?ref=finde" className={BOTON_CTA}>✨ Montar mi plan</Link>
+          <Link href="/?ref=finde" className={BOTON_CTA}>Montar mi plan</Link>
         </section>
       )}
     </PaginaContenido>

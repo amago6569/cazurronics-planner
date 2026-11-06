@@ -44,7 +44,7 @@ export default async function Agenda() {
         <div className="flex flex-wrap gap-2">
           {ZONAS.map((z) => (
             <Link key={z.id} href={rutaZona(z.id)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/60 ring-1 ring-white text-[13px] font-medium text-slate-700 hover:bg-white hover:text-rose-600 transition-colors">
-              <span aria-hidden>{z.emoji}</span>{z.corto}
+              {z.corto}
             </Link>
           ))}
         </div>

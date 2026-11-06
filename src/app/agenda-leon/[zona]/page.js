@@ -62,7 +62,7 @@ export default async function AgendaDeZona({ params }) {
 
       {agenda.enMarcha.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">📌 En marcha estos días</h2>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">En marcha estos días</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">{agenda.enMarcha.map((e, i) => <TarjetaEvento key={i} e={e} mostrarCuando />)}</div>
         </section>
       )}
@@ -85,10 +85,9 @@ export default async function AgendaDeZona({ params }) {
         <section>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">Imprescindibles de la zona</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {seo.imprescindibles.map(([icono, nombre, texto]) => (
+            {seo.imprescindibles.map(([, nombre, texto]) => (
               <div key={nombre} className={`${GLASS} rounded-[1.5rem] p-4`}>
-                <p className="text-2xl">{icono}</p>
-                <h3 className="font-semibold text-slate-900 mt-2">{nombre}</h3>
+                  <h3 className="font-semibold text-slate-900">{nombre}</h3>
                 <p className="text-sm text-slate-600 mt-0.5">{texto}</p>
               </div>
             ))}
@@ -101,7 +100,7 @@ export default async function AgendaDeZona({ params }) {
         <div className="flex flex-wrap gap-2">
           {ZONAS.filter((o) => o.id !== z.id).map((o) => (
             <Link key={o.id} href={rutaZona(o.id)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/60 ring-1 ring-white text-[13px] font-medium text-slate-700 hover:bg-white hover:text-rose-600 transition-colors">
-              <span aria-hidden>{o.emoji}</span>{o.corto}
+              {o.corto}
             </Link>
           ))}
         </div>
