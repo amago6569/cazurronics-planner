@@ -11,9 +11,9 @@ export default function TarjetaLugar({ l, posicion }) {
       <div className="px-2.5 pt-3 pb-2">
         <h3 className="font-semibold text-slate-900 leading-snug">{l.nombre}</h3>
         <p className="text-xs text-slate-500 mt-1">
-          {[l.tipo, l.precio, l.resenas && `⭐ ${l.resenas}`].filter(Boolean).join(" · ")}
+          {[l.tipo, l.precio, l.resenas].filter(Boolean).join(" · ")}
         </p>
-        {valoradas > 0 && <p className="text-xs font-semibold text-emerald-700 mt-1.5">😍 {Math.round((l.stats.bien / valoradas) * 100)} % de quienes fueron lo recomiendan</p>}
+        {valoradas > 0 && <p className="text-xs font-semibold text-emerald-700 mt-1.5">{Math.round((l.stats.bien / valoradas) * 100)} % de quienes fueron lo recomiendan</p>}
       </div>
     </article>
   );

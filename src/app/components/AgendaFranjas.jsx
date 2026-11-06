@@ -10,7 +10,7 @@ export default function AgendaFranjas({ eventos, mostrarCuando = false, columnas
       {grupos.map((g) => (
         <div key={g.id}>
           <p className="flex items-center gap-2 text-sm font-semibold text-slate-700 px-1 mb-2">
-            <span aria-hidden>{g.emoji}</span>{g.titulo}
+            {g.titulo}
             <span className="font-normal text-slate-500">· {g.eventos.length}</span>
           </p>
           <div className={`grid grid-cols-1 ${columnas} gap-2.5`}>

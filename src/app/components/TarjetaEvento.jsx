@@ -1,8 +1,6 @@
 import { GLASS } from "../../lib/estilos";
-import { cuandoEs, esDeVariosDias, familia, leerHora } from "../../lib/agenda";
+import { cuandoEs, esDeVariosDias, leerHora } from "../../lib/agenda";
 
-const ICONOS = { mercado: "🧺", musica: "🎶", expo: "🖼️", escena: "🎭", fiesta: "🎉", feria: "🎪", visita: "🚶", deporte: "⚽", gastro: "🍷", infantil: "🧸" };
-export const iconoEvento = (e) => ICONOS[familia(typeof e === "string" ? { categoria: e } : e)] || "📍";
 export const fechaLarga = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
 
 // Fila de agenda: la hora a la izquierda (se lee como un horario) y el resto a la derecha
@@ -13,13 +11,12 @@ export default function TarjetaEvento({ e, mostrarCuando = false }) {
   return (
     <article className={`${GLASS} rounded-[1.25rem] p-3 flex gap-3 items-start`}>
       <div className="w-[4.25rem] shrink-0 rounded-xl bg-white/80 ring-1 ring-slate-900/5 py-2 text-center">
-        <div className="text-lg leading-none">{iconoEvento(e)}</div>
         {inicio ? (
-          <div className="mt-1 text-[13px] font-bold text-slate-900 tabular-nums leading-tight">
+          <div className="text-[13px] font-bold text-slate-900 tabular-nums leading-tight">
             {inicio}{fin && <span className="block text-[11px] font-medium text-slate-500">a {fin}</span>}
           </div>
         ) : (
-          <div className="mt-1 text-[10px] font-semibold text-slate-500 leading-tight">{h.franja === "todo" ? "Todo el día" : "Sin hora"}</div>
+          <div className="text-[10px] font-semibold text-slate-500 leading-tight">{h.franja === "todo" ? "Todo el día" : "Sin hora"}</div>
         )}
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
