@@ -72,7 +72,7 @@ function Local({ l, clave, alQuitar }) {
         {l.enlace ? (
           <a href={l.enlace} target="_blank" rel="noopener noreferrer" onClick={enviar} className={`${PRESS} flex-1 h-11 inline-flex items-center justify-center rounded-full bg-emerald-500 text-white text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(16,185,129,0.7)] ${ocupado ? "pointer-events-none opacity-50" : ""}`}>✅ Enviar</a>
         ) : (
-          <a href="/panel#captacion" className={`${PRESS} flex-1 h-11 inline-flex items-center justify-center rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold`}>Apuntar contacto</a>
+          <a href="/panel/negocios" className={`${PRESS} flex-1 h-11 inline-flex items-center justify-center rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold`}>Apuntar contacto</a>
         )}
         <button onClick={() => setEditando((x) => !x)} disabled={ocupado} className={`${PRESS} h-11 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold disabled:opacity-50`} aria-label="Cambiar el mensaje">✏️</button>
         <button onClick={no} disabled={ocupado} className={`${PRESS} h-11 px-4 rounded-full bg-white ring-1 ring-slate-900/10 text-slate-700 text-sm font-semibold disabled:opacity-50`} aria-label="No escribirle">✖</button>

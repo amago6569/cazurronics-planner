@@ -7,12 +7,12 @@ import { CAFE_SITIOS, entrega, largo, puntoEn, ruta } from "./guion";
 
 export const DURACION = 60; // segundos en pantalla
 const SEP_MIN = 1.6, SEP_MAX = 4.5, INICIO = 1.5, COLA = 7;
-const TECLEA = 1.5, EN_MOSTRADOR = 0.5, VUELO = 1.1, VEL = 11, BOCADILLO = 2.6;
+const TECLEA = 2.4, EN_MOSTRADOR = 0.7, VUELO = 1.1, VEL = 6.5, BOCADILLO = 2.6;
 const DIA = 864e5;
 
 // La Despensa y Negocio no van por tramos del barrido
 const sinTramo = (e) => e.id.startsWith("despensa-") || e.id === "captacion" || e.id === "finde";
-const andar = (puntos) => Math.min(1.8, Math.max(0.5, largo(puntos) / VEL));
+const andar = (puntos) => Math.min(2.6, Math.max(0.7, largo(puntos) / VEL));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 // Pasa de hora real a segundo de pantalla (y al revés) por tramos rectos entre los golpes
@@ -130,7 +130,7 @@ export function poseEn(rep, id, s) {
     const dv = andar(t.vuelta);
     if (s < t.sVuelta + dv) return { ...puntoEn(t.vuelta, (s - t.sVuelta) * (largo(t.vuelta) / dv)), modo: "anda" };
   }
-  return { x: enCafe.pos[0], z: enCafe.pos[1], giro: enCafe.giro, modo: "sentado" };
+  return { x: enCafe.pos[0], z: enCafe.pos[1], giro: enCafe.giro, modo: "sentado", asiento: enCafe.tipo === "barra" ? "alto" : "bajo" };
 }
 
 // Lo que ya ha caído en cada sitio en el segundo s: { archivo, buzon, papelera }

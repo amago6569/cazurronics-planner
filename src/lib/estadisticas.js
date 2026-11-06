@@ -6,6 +6,7 @@ import { comando, varios, aObjeto } from "./almacen";
 export const METRICAS = [
   "visita", "vuelve", "plan", "retoque", "compartir", "abre_compartido",
   "voto", "valoracion", "detalle", "llamar", "web", "despensa", "plan_vacio", "plan_ampliado",
+  "visita_planner", "visita_despensa", "como_llegar", "web_tienda",
 ];
 
 const DIAS_GUARDADOS = 120 * 24 * 3600;

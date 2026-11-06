@@ -132,6 +132,7 @@ const $ = (id) => document.getElementById(id);
 const esc = CZ.esc;
 const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
 CZ.registrarVisita();
+CZ.registrarSeccion("despensa");
 ponerRosaSimetrica($("rosaGira"));
 // Lo mismo que manda la web a /api/despensa/buscar
 const peticion = { texto: "", lat: 42.5987, lon: -5.5671, radio: 15 };
@@ -205,7 +206,15 @@ function rutaMaps(tiendas, origen) {
 const enlaceMaps = (t) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${t.nombre}, ${t.localidad}`)}${t.placeId ? `&query_place_id=${encodeURIComponent(t.placeId)}` : ""}`;
 const enlaceEsTuTienda = (t) => `mailto:amago6569@cazurronics.es?subject=${encodeURIComponent(`Mi tienda en la Despensa de León: ${t.nombre}`)}&body=${encodeURIComponent(`Hola, soy de ${t.nombre}${t.localidad ? ` (${t.localidad})` : ""}. He visto mi tienda en la Despensa de León y quiero información.`)}`;
 
-let mapaT = null;
+let mapaT = null, tiendasPintadas = [];
+// Qué tiendas interesan: el identificador de Google o, si no lo tiene, su nombre y pueblo
+const gestoTienda = (tipo, t) => CZ.baliza(tipo, { tienda: { id: t.placeId || `${t.nombre}-${t.localidad || ""}`.toLowerCase().normalize("NFD").replace(/[^\w-]+/g, "-").slice(0, 160), nombre: t.nombre, localidad: t.localidad } });
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.("#grupos a[data-gesto]");
+  if (!a) return;
+  const t = tiendasPintadas.find((x) => String(x.n) === a.dataset.n);
+  if (t) gestoTienda(a.dataset.gesto, t);
+});
 function pintar(d) {
   // grupos por lo que compras (máximo 3 tiendas en cada uno), numerados seguidos como sus chinchetas
   const grupos = [];
@@ -230,9 +239,10 @@ function pintar(d) {
         ${(t.premios || []).slice(0, 2).map((p) => `<span class="premio">${esc(p)}</span>`).join("")}
         ${t.motivo ? `<p>${esc(t.motivo)}</p>` : ""}
         ${t.especialidad ? `<span class="esp"><b>Conocida por:</b> ${esc(t.especialidad)}${t.deResenas ? " · según sus reseñas de Google" : ""}</span>` : ""}
-        <div class="acc"><a class="uno" href="${esc(enlaceMaps(t))}" target="_blank" rel="noopener noreferrer">Cómo llegar</a>${fuente ? `<a class="dos" href="${esc(fuente)}" target="_blank" rel="noopener noreferrer nofollow">Fuente ↗</a>` : ""}<a class="dos" href="${esc(enlaceEsTuTienda(t))}">¿Es tu tienda? Escríbenos</a></div></li>`;
+        <div class="acc"><a class="uno" data-gesto="como_llegar" data-n="${t.n}" href="${esc(enlaceMaps(t))}" target="_blank" rel="noopener noreferrer">Cómo llegar</a>${fuente ? `<a class="dos" data-gesto="web_tienda" data-n="${t.n}" href="${esc(fuente)}" target="_blank" rel="noopener noreferrer nofollow">Fuente ↗</a>` : ""}<a class="dos" href="${esc(enlaceEsTuTienda(t))}">¿Es tu tienda? Escríbenos</a></div></li>`;
     }).join("")}</ol></div>`).join("");
-  const pines = todas.filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lon)).map((t) => ({ lat: t.lat, lon: t.lon, n: t.n, titulo: t.nombre, alTocar: () => window.open(enlaceMaps(t), "_blank", "noopener") }));
+  const pines = todas.filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lon)).map((t) => ({ lat: t.lat, lon: t.lon, n: t.n, titulo: t.nombre, alTocar: () => { gestoTienda("como_llegar", t); window.open(enlaceMaps(t), "_blank", "noopener"); } }));
+  tiendasPintadas = todas;
   $("tiendasMapa").hidden = !pines.length;
   if (pines.length) { if (!mapaT) mapaT = crearMapa($("tiendasMapa"), { fijo: true }); setTimeout(() => mapaT.paradas(pines, { ruta: false })); }
   // ruta por la mejor de cada cosa, solo si buscas dos o más, como siempre

@@ -30,7 +30,7 @@ const urlGmail = (para, asunto, cuerpo) => `https://mail.google.com/mail/?view=c
 const urlMailto = (para, asunto, cuerpo) => `mailto:${para}?subject=${enc(asunto)}&body=${enc(cuerpo)}`;
 const urlBuscar = (nombre) => `https://www.google.com/search?q=${enc(`${nombre} León Instagram`)}`;
 
-function Tarjeta({ l, vista, onGuardar, onCopiar }) {
+function Tarjeta({ l, vista, onGuardar, onCopiar, clave }) {
   const [edit, setEdit] = useState({ email: null, ig: null }); // null = sin tocar (se muestra lo guardado)
   const [corto, setCorto] = useState(false);
   const [abierto, setAbierto] = useState(null); // canal que acabas de abrir: "correo" | "instagram"
@@ -48,7 +48,23 @@ function Tarjeta({ l, vista, onGuardar, onCopiar }) {
     : l.email ? "correo" : l.instagram ? "instagram" : null;
   const asunto = l.toca ? m?.asuntoRecordatorio : corto ? m?.asuntoCorto : m?.asunto;
   const cuerpo = l.toca ? m?.recordatorioCorreo : corto ? m?.correoCorto : m?.correo;
-  const chat = l.toca ? m?.recordatorioChat : m?.chat;
+  const [propio, setPropio] = useState(null); // el mensaje retocado por ti o por la IA
+  const [indicacion, setIndicacion] = useState("");
+  const [reescribiendo, setReescribiendo] = useState(false);
+  const [avisoIA, setAvisoIA] = useState("");
+  const chat = propio ?? (l.toca ? m?.recordatorioChat : m?.chat);
+  const cuerpoFinal = propio ?? cuerpo;
+  // Solo si lo pides: la IA reescribe el mensaje con tu indicación (~0,0001 $)
+  const pedirIA = async (ev) => {
+    ev.preventDefault();
+    if (indicacion.trim().length < 3) return;
+    setReescribiendo(true); setAvisoIA("");
+    try {
+      const r = await fetch("/api/panel/oficina", { method: "POST", headers: { "x-clave": clave, "Content-Type": "application/json" }, body: JSON.stringify({ local: l.clave, accion: "cambiar", texto: indicacion.trim() }) });
+      const d = await r.json().catch(() => null);
+      if (d?.exito) { setPropio(d.texto); setIndicacion(""); } else setAvisoIA(d?.mensaje || "No se ha podido cambiar.");
+    } catch { setAvisoIA("No se pudo conectar."); } finally { setReescribiendo(false); }
+  };
 
   const guardarContacto = async () => {
     setOcupado(true);
@@ -102,10 +118,10 @@ function Tarjeta({ l, vista, onGuardar, onCopiar }) {
           {canal === "correo" && (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <a href={urlGmail(l.email, asunto, cuerpo)} target="_blank" rel="noopener noreferrer" onClick={() => setAbierto("correo")} className={B_OSCURO}>✉️ Abrir en Gmail</a>
-                <button onClick={() => onCopiar(`Asunto: ${asunto}\n\n${cuerpo}`, "Correo copiado")} className={B_CLARO}>📋 Copiar</button>
+                <a href={urlGmail(l.email, asunto, cuerpoFinal)} target="_blank" rel="noopener noreferrer" onClick={() => setAbierto("correo")} className={B_OSCURO}>✉️ Abrir en Gmail</a>
+                <button onClick={() => onCopiar(`Asunto: ${asunto}\n\n${cuerpoFinal}`, "Correo copiado")} className={B_CLARO}>📋 Copiar</button>
                 {l.instagram && <a href={`https://ig.me/m/${l.instagram}`} target="_blank" rel="noopener noreferrer" onClick={abrirInstagram} className={B_CLARO}>📸 O por Instagram</a>}
-                <a href={urlMailto(l.email, asunto, cuerpo)} onClick={() => setAbierto("correo")} className="text-xs text-slate-500 hover:text-rose-600 underline underline-offset-2">otro programa de correo</a>
+                <a href={urlMailto(l.email, asunto, cuerpoFinal)} onClick={() => setAbierto("correo")} className="text-xs text-slate-500 hover:text-rose-600 underline underline-offset-2">otro programa de correo</a>
               </div>
               {!l.toca && (
                 <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
@@ -131,8 +147,13 @@ function Tarjeta({ l, vista, onGuardar, onCopiar }) {
 
           {canal && (
             <details className="text-xs">
-              <summary className="cursor-pointer text-slate-500 hover:text-slate-800">Ver el mensaje</summary>
-              <textarea readOnly value={canal === "correo" ? `Asunto: ${asunto}\n\n${cuerpo}` : chat} rows={10} aria-label={`Mensaje para ${l.nombre}`} className="mt-2 w-full bg-white/70 rounded-xl ring-1 ring-slate-900/5 p-2.5 text-[12px] leading-relaxed text-slate-700 outline-none resize-y" />
+              <summary className="cursor-pointer text-slate-500 hover:text-slate-800">Ver y retocar el mensaje</summary>
+              <textarea value={canal === "correo" ? cuerpoFinal : chat} onChange={(e) => setPropio(e.target.value)} rows={10} aria-label={`Mensaje para ${l.nombre}`} className="mt-2 w-full bg-white/70 rounded-xl ring-1 ring-slate-900/5 p-2.5 text-[12px] leading-relaxed text-slate-700 outline-none resize-y" />
+              <form onSubmit={pedirIA} className="flex gap-2 mt-2">
+                <input value={indicacion} onChange={(e) => setIndicacion(e.target.value.slice(0, 300))} placeholder="Pedir a la IA: «más corto», «tutéales»…" aria-label="Indicación para reescribir el mensaje" className={INPUT} />
+                <button disabled={reescribiendo} className={`${B_CLARO} shrink-0 disabled:opacity-60`}>{reescribiendo ? "…" : "Cambiar"}</button>
+              </form>
+              {avisoIA && <p className="mt-1 text-rose-600">{avisoIA}</p>}
             </details>
           )}
 
@@ -281,7 +302,7 @@ export default function Captacion({ clave }) {
 
       {lista.length ? (
         <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {lista.map((l) => <Tarjeta key={l.clave} l={l} vista={vista} onGuardar={guardarLocal} onCopiar={copiar} />)}
+          {lista.map((l) => <Tarjeta key={l.clave} l={l} vista={vista} onGuardar={guardarLocal} onCopiar={copiar} clave={clave} />)}
         </ul>
       ) : <p className="text-sm text-slate-500">{VACIO[vista]}</p>}
 

@@ -5,10 +5,10 @@
 // El tiempo t va en segundos de reloj (el de three.js). Nada de esto llama al servidor.
 import { largo, puntoEn, ruta, sitioReunion, visita } from "./guion";
 
-export const VEL = 2.6;           // metros por segundo andando
+export const VEL = 1.9;           // metros por segundo andando
 export const HABLA = 4.2;         // segundos que dura un bocadillo
-export const CADA = 7;            // un paseo nuevo cada tantos segundos
-export const A_LA_VEZ = 2;        // como mucho, paseos a la vez
+export const CADA = 3.5;          // un paseo nuevo cada tantos segundos
+export const A_LA_VEZ = 4;        // como mucho, paseos a la vez
 
 // desde/hacia: sitios de guion.js (con pos y salida). Devuelve el paseo con sus tiempos
 export function montarPaseo({ id, desde, hacia, t0, texto = null, a = null, habla = HABLA }) {
@@ -52,6 +52,19 @@ export function siguientePaseo({ charla = [], vivos = {}, ocupados = [], i = 0, 
     return { paseo: montarPaseo({ id: anda, desde: lugar(anda), hacia: lugar(a), t0, texto: l.texto, a: l.de === anda ? a : null }), i: n + 1 };
   }
   return { paseo: null, i };
+}
+
+// Cuando nadie tiene nada que contar: alguien se levanta a por un café o a ver a un compañero, sin bocadillo.
+// Solo es movimiento: nada de esto sale de datos ni llama al servidor. azar = función que da un número entre 0 y 1
+export function paseoLibre({ vivos = {}, ocupados = [], t0 = 0, sitios = [], azar = Math.random }) {
+  const libres = Object.entries(vivos).filter(([id, v]) => !ocupados.includes(id) && v?.sitio && (v.modo === "sentado"));
+  if (!libres.length) return null;
+  const [id, v] = libres[Math.floor(azar() * libres.length)];
+  const otros = libres.filter(([o]) => o !== id);
+  const irAVer = otros.length && azar() < 0.6;
+  const hacia = irAVer ? otros[Math.floor(azar() * otros.length)][1].sitio : sitios[Math.floor(azar() * sitios.length)];
+  if (!hacia || hacia === v.sitio) return null;
+  return montarPaseo({ id, desde: v.sitio, hacia, t0, habla: irAVer ? HABLA : 2.5 });
 }
 
 // La reunión: cada uno de los que proponen va a una silla de la mesa redonda y dice su propuesta por turnos.

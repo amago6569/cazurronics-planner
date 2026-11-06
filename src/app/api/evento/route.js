@@ -1,16 +1,16 @@
 import { METRICAS, registrar } from "../../../lib/estadisticas";
-import { esPrueba, registrarAccionLugar } from "../../../lib/lugares";
+import { esPrueba, registrarAccionLugar, registrarAccionTienda } from "../../../lib/lugares";
 import { sinRomper } from "../../../lib/almacen";
 import { dentroDelLimite, dentroDelTopeDiario } from "../../../lib/freno";
 
 // POST /api/evento — analítica propia. Lo manda el navegador con navigator.sendBeacon (texto plano).
 // { tipo: "visita" | "vuelve" | "compartir" | "detalle" | "llamar" | "web" | ..., fuente?, lugarId? }
-const DESDE_NAVEGADOR = ["visita", "vuelve", "compartir", "abre_compartido", "detalle", "llamar", "web"];
+const DESDE_NAVEGADOR = ["visita", "vuelve", "compartir", "abre_compartido", "detalle", "llamar", "web", "visita_planner", "visita_despensa", "como_llegar", "web_tienda"];
 
 export async function POST(request) {
   let datos = {};
   try { datos = JSON.parse(await request.text()); } catch { return new Response(null, { status: 400 }); }
-  const { tipo, fuente, lugarId } = datos;
+  const { tipo, fuente, lugarId, tienda } = datos;
   if (!DESDE_NAVEGADOR.includes(tipo) || !METRICAS.includes(tipo)) return new Response(null, { status: 400 });
   // Freno: una persona normal no manda 120 avisos por minuto. Un programa sí, y nos inflaría las cifras.
   // Se responde igual (204) para no darle pistas, pero no se apunta nada.
@@ -21,6 +21,12 @@ export async function POST(request) {
   if (["detalle", "llamar", "web"].includes(tipo) && lugarId && !esPrueba(request)
     && await dentroDelTopeDiario(`accion:${String(lugarId).slice(0, 120)}:${tipo}`, 3, request)) {
     await sinRomper(registrarAccionLugar(lugarId, tipo), "lugar");
+  }
+  // Lo mismo para las tiendas de la Despensa: «Cómo llegar» y su web
+  if (["como_llegar", "web_tienda"].includes(tipo) && tienda?.id && !esPrueba(request)
+    && await dentroDelTopeDiario("tiendas", 30, request, false)
+    && await dentroDelTopeDiario(`accion:t:${String(tienda.id).slice(0, 120)}:${tipo}`, 3, request, false)) {
+    await sinRomper(registrarAccionTienda(tienda, tipo), "tienda");
   }
   return new Response(null, { status: 204 });
 }

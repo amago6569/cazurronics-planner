@@ -26,7 +26,16 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 - Eventos: lo de fuente comprobada se publica; lo dudoso pasa por el Verificador (`lib/guardia.js`): confirmado → web, desmentido o enlace roto → fuera, sin confirmar → web marcado «por confirmar» y aviso a Alejandro (panel y Telegram) para que lo quite si no cuadra. Regla suya del 29-10-2026 (ampliada ese mismo día): «que pase los filtros que quiera, pero que se haga solo». Lo «por confirmar» no espera su Vale/Quitar: el Verificador lo vuelve a mirar solo (Google, otra web) y lo confirma o lo quita; en Telegram va una línea, no botones por evento. Los bares y restaurantes sin ficha real en Google Places se descartan. Mantén esos filtros.
 - Los crons de `vercel.json` llevan horas escalonadas para no saturar la cuota. Si añades uno, ponlo en una hora libre.
 
+## Panel (/panel)
+
+- Regla de Alejandro (6-11-2026): Inicio solo lleva lo básico (visitas, planes, visitas a locales, negocios por contactar y oficina). Lo demás va a /panel/mas. Los botones que gastan búsquedas no salen en Inicio.
+- Todo el panel usa el mundo oscuro de la portada. `panel.css` cambia los colores de Tailwind dentro de `.panel-noche`: `bg-slate-900` es crema y `bg-white` es noche. Escribe los componentes como siempre y se invierten solos.
+- «Visitas a locales» cuenta gestos en la web (fichas y «Cómo llegar»), no gente que entra al local. No lo vendas como otra cosa.
+
 ## Oficina (/panel/oficina)
+
+- Alejandro quiere ver a los monigotes moverse: el 3D es lo primero y no se quita. Si nadie está en turno al abrir, se repiten solas las últimas 24 h. Calidad en `personaje.js`, `posturas.js` y `texturas.js`, sin modelos descargados.
+- Los paseos a por café (`paseoLibre`) son solo ambiente. Lo que se presenta como trabajo sale siempre de datos reales.
 
 - Cada tarea automática es un empleado. Para meter uno nuevo basta una entrada en `DEPARTAMENTOS` de `src/lib/oficina.js` (con `rutas` de su cron) y que su tarea guarde `oficina:turno:<id>`: sale solo su monigote, su mesa (o el anexo), su ficha y su chat.
 - Webs fiables (ayuntamientos, Diputación, Junta, prensa local) en `lib/fiables.js`. Esas señales solo sirven para confirmar, nunca para tirar un evento.
