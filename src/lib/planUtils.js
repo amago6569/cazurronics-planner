@@ -250,11 +250,11 @@ export async function buscarFotoCommons(query, limite) {
 
 // NUEVO: comprueba si Google tiene cobertura de Street View en ese punto (la consulta a "metadata" es
 // gratuita, no gasta cuota) y, si la hay, devuelve la URL de la imagen real de esa calle.
-// OJO: esta clave acaba en el navegador (va dentro del iframe), así que NUNCA puede ser la de Gemini:
-// solo STREET_VIEW_API_KEY o GOOGLE_MAPS_API_KEY (restríngela por dominio en Google Cloud).
+// OJO: la clave del iframe acaba en el navegador, así que solo puede ser STREET_VIEW_API_KEY, restringida a tu dominio
+// y a Maps Embed en Google Cloud. La de Maps o la de Gemini no salen nunca del servidor: sin esa clave, no hay vista 360º.
 export async function obtenerStreetView(lat, lon, limite) {
   try {
-    const svKey = process.env.STREET_VIEW_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    const svKey = process.env.STREET_VIEW_API_KEY;
     if (!svKey) return null;
     const metaUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lon}&key=${svKey}`;
     const metaRes = await fetch(metaUrl, conLimite(MS.streetView, limite));

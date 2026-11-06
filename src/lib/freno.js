@@ -44,8 +44,9 @@ export function respuestaClave(acceso) {
 
 // Tope por DÍA (hora de Madrid). Sin "request" cuenta a todo el mundo junto (techo de gasto si algo dispara las
 // peticiones desde muchas conexiones); con "request" cuenta solo a esa conexión.
-// max <= 0 lo desactiva. Si el almacén falla, nunca bloquea.
-export async function dentroDelTopeDiario(nombre, max, request = null) {
+// max <= 0 lo desactiva. Si el almacén falla no se puede contar, y "siFalla" decide: por defecto deja pasar,
+// pero los techos de gasto pasan false, porque sin contador no hay techo y la factura quedaría sin freno.
+export async function dentroDelTopeDiario(nombre, max, request = null, siFalla = true) {
   if (!(max > 0)) return true;
   const dia = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }); // 2026-10-04
   const clave = `freno:dia:${nombre}:${request ? ipDe(request) : "todos"}:${dia}`;
@@ -54,6 +55,6 @@ export async function dentroDelTopeDiario(nombre, max, request = null) {
     return Number(cuenta) <= max;
   } catch (e) {
     console.error("[freno]", e?.message || e);
-    return true;
+    return siFalla;
   }
 }
