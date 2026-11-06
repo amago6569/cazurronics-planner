@@ -82,3 +82,53 @@ body {
 .roseton-slider:active::-webkit-slider-thumb { cursor: grabbing; transform: scale(1.18) rotate(45deg); }
 .roseton-slider::-moz-range-thumb { width: 34px; height: 34px; background-image: url('/roseton.png'); background-size: 170%; background-repeat: no-repeat; background-position: center; cursor: grab; border: 2px solid rgba(255,255,255,.95); border-radius: 50%; background-color: transparent; filter: drop-shadow(0px 6px 12px rgba(15,23,42,0.25)); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
 .roseton-slider::-moz-range-thumb:hover { transform: scale(1.12) rotate(20deg); }
+
+
+/* ---------- Tema de noche de las páginas interiores: el mismo mundo que la portada ----------
+   Tailwind pinta con variables de color, así que aquí se cambian esas variables y los componentes no se tocan.
+   :has() incluye también el pie legal, que vive fuera de <main>. */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url("/inicio/vendor/archivo-latin.woff2") format("woff2");
+}
+body:has(.cz-noche) {
+  --cz-noche: #07060a;
+  --cz-crema: #f3ead8;
+  --cz-gris: #a39c90;
+  --cz-oro: #e9b44c;
+  --cz-superficie: #14121a;
+  --color-white: var(--cz-superficie);
+  --color-slate-100: var(--cz-superficie);
+  --color-slate-400: var(--cz-gris);
+  --color-slate-500: var(--cz-gris);
+  --color-slate-600: #c9c1b3;
+  --color-slate-700: #ddd4c4;
+  --color-slate-800: var(--cz-crema);
+  --color-slate-900: var(--cz-crema);
+  --color-rose-300: var(--cz-oro);
+  --color-rose-500: var(--cz-oro);
+  --color-rose-600: var(--cz-oro);
+  --color-emerald-50: transparent;
+  --color-emerald-100: rgba(243, 234, 216, .16);
+  --color-emerald-700: var(--cz-crema);
+  --color-indigo-50: transparent;
+  --color-indigo-100: rgba(243, 234, 216, .16);
+  --color-indigo-700: var(--cz-crema);
+  --color-amber-50: transparent;
+  --color-amber-200: rgba(233, 180, 76, .5);
+  --color-amber-800: var(--cz-oro);
+  background: var(--cz-noche);
+  color: var(--cz-crema);
+  color-scheme: dark;
+  font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+}
+.cz-noche h1, .cz-noche h2 { font-weight: 900; font-stretch: 62%; text-transform: uppercase; letter-spacing: 0; }
+.cz-noche h1 { line-height: .95; }
+.cz-noche .cz-vidrio { background: var(--cz-superficie); backdrop-filter: none; border-color: rgba(243, 234, 216, .14); box-shadow: none; }
+.cz-noche .cz-destacado { background: none; color: var(--cz-oro); -webkit-text-fill-color: currentColor; }
+.cz-noche .cz-cta { background: var(--cz-crema); color: var(--cz-noche); box-shadow: none; }
+.cz-noche .cz-cta:hover { background: #fffaf0; }
