@@ -141,4 +141,4 @@ body:has(.cz-noche) {
 .cz-noche .cz-cta:hover { background: #fffaf0; }
 /* Lo que quedaba con degradado (el de encima de las fotos sí se queda) y el botón elegido, como en la portada */
 .cz-noche [class*="bg-gradient-to-"]:not(.bg-gradient-to-t):not(.cz-cta):not(.cz-destacado) { background: var(--cz-superficie); box-shadow: none; }
-.cz-noche button[aria-pressed="true"] { background: var(--cz-crema); color: var(--cz-noche); box-shadow: none; }
+.cz-noche button[aria-pressed="true"] { background: var(--cz-crema) !important; color: var(--cz-noche) !important; box-shadow: none; }
