@@ -109,7 +109,14 @@ body:has(.cz-noche) {
   --color-slate-700: #ddd4c4;
   --color-slate-800: var(--cz-crema);
   --color-slate-900: var(--cz-crema);
+  --color-indigo-200: rgba(243, 234, 216, .16);
+  --color-indigo-300: var(--cz-gris);
+  --color-indigo-500: var(--cz-crema);
+  --color-amber-100: transparent;
+  --color-amber-700: var(--cz-oro);
+  --color-rose-200: rgba(243, 234, 216, .16);
   --color-rose-300: var(--cz-oro);
+  --color-rose-400: var(--cz-oro);
   --color-rose-500: var(--cz-oro);
   --color-rose-600: var(--cz-oro);
   --color-emerald-50: transparent;
@@ -132,3 +139,6 @@ body:has(.cz-noche) {
 .cz-noche .cz-destacado { background: none; color: var(--cz-oro); -webkit-text-fill-color: currentColor; }
 .cz-noche .cz-cta { background: var(--cz-crema); color: var(--cz-noche); box-shadow: none; }
 .cz-noche .cz-cta:hover { background: #fffaf0; }
+/* Lo que quedaba con degradado (el de encima de las fotos sí se queda) y el botón elegido, como en la portada */
+.cz-noche [class*="bg-gradient-to-"]:not(.bg-gradient-to-t):not(.cz-cta):not(.cz-destacado) { background: var(--cz-superficie); box-shadow: none; }
+.cz-noche button[aria-pressed="true"] { background: var(--cz-crema); color: var(--cz-noche); box-shadow: none; }
