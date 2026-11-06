@@ -16,7 +16,7 @@ export async function POST(request) {
     if (!(await dentroDelLimite(request, "despensa", 15, 600)) || !(await dentroDelTopeDiario("despensa", 60, request))) {
       return NextResponse.json({ exito: false, mensaje: "Has buscado mucho seguido 🦁 Espera un poco o toca un producto de los de arriba." }, { status: 429 });
     }
-    if (!(await dentroDelTopeDiario("despensa", Number(process.env.DESPENSA_MAX_DIA ?? 200)))) {
+    if (!(await dentroDelTopeDiario("despensa", Number(process.env.DESPENSA_MAX_DIA ?? 200), null, false))) {
       return NextResponse.json({ exito: false, mensaje: "Hoy se han agotado las búsquedas con IA 🦁 Toca un producto de los de arriba, que eso sigue funcionando." }, { status: 429 });
     }
     const resultado = await buscarEnDespensa(peticion);
