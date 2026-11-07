@@ -11,6 +11,7 @@
 // plan paga búsquedas. PLANES_CON_GOOGLE=1 en Vercel vuelve al modo con búsqueda.
 import { llamarGemini, extraerJSON } from './gemini';
 import { sinRomper } from './almacen';
+import { REGLA_DATOS, textoParaPrompt } from './blindaje';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
@@ -109,7 +110,8 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
 
   const prompt = `
       Eres Cazurronics Planner. Crea un plan en León (solo León capital y provincia, España).
-      DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: "${apetece}". Fecha: ${fecha}.
+      DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: ${textoParaPrompt(apetece)}. Fecha: ${fecha}.
+      ${REGLA_DATOS}
       ${bloqueHoy}
       ${bloqueTiempo}
       ${bloqueAgenda}
