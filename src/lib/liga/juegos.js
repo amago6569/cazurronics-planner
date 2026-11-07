@@ -3,6 +3,7 @@
 // repite la partida con la misma semilla y lo que hizo el jugador: los puntos que valen son los de aquí.
 import * as canasta from "../../../public/liga/motor-canasta.js";
 import * as tapas from "../../../public/liga/motor-tapas.js";
+import * as botillo from "../../../public/liga/motor-botillo.js";
 
 export const JUEGOS = {
   canasta: {
@@ -32,6 +33,19 @@ export const JUEGOS = {
     repetir: (semilla, datos) => tapas.rejugar(semilla, datos?.movimientos),
     ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
   },
+  botillo: {
+    id: "botillo",
+    nombre: "La torre del botillo",
+    sitio: "Botines",
+    pagina: "/liga/botillo.html",
+    foto: "/liga/fondos/botillo-v.jpg",
+    habilidad: "Pulso",
+    version: botillo.VERSION,
+    duracionMs: botillo.DURACION_MS,
+    // datos = { toques: [t, t, …] } (ms de partida en que se soltó cada botillo)
+    repetir: (semilla, datos) => botillo.rejugar(semilla, datos?.toques),
+    ultimoMomento: (datos) => (Array.isArray(datos?.toques) && datos.toques.length ? Number(datos.toques[datos.toques.length - 1]) || 0 : 0),
+  },
 };
 
 // tiempo del último [t, x] de una lista plana
@@ -41,7 +55,7 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas"];
+export const EN_LIGA = ["canasta", "tapas", "botillo"];
 
 export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 

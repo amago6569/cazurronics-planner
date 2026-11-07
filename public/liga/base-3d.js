@@ -50,7 +50,8 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
 
   // Cámara: en el menú respira despacio un poco más atrás; en la cuenta atrás vuelve a su sitio; jugando, quieta
   // (tiene que coincidir con el dedo). «menu» = { x, y, z } de cuánto se aparta en el menú.
-  function moverCamara(d, menu = { x: 0.25, y: 0.15, z: 0.9 }, dt = 0.016) {
+  // «extra» = { x, y, z }: lo que el juego mueve la cámara a propósito (por ejemplo, subir con la torre)
+  function moverCamara(d, menu = { x: 0.25, y: 0.15, z: 0.9 }, dt = 0.016, extra = null) {
     const enMenu = d.estado === "inicio" || d.estado === "fin";
     objetivo.set(0, 0, 0);
     if (enMenu && !reducido) {
@@ -63,11 +64,15 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
       desplaza.copy(desde).multiplyScalar(1 - SUAVE(k));
     } else if (enMenu) desplaza.lerp(objetivo, 1 - Math.exp(-dt * 1.6));
     else desplaza.set(0, 0, 0);
-    camara.position.set(desplaza.x, plano.yc + desplaza.y, plano.D + desplaza.z);
+    const ex = extra?.x || 0, ey = extra?.y || 0, ez = extra?.z || 0;
+    camara.position.set(desplaza.x + ex, plano.yc + desplaza.y + ey, plano.D + desplaza.z + ez);
     camara.updateMatrixWorld();
     // la foto, como algo que está a «lejos» unidades
-    const L = lejos + desplaza.z, s = lejos / L, fpx = plano.k * plano.D;
-    const tr = `translate3d(${(-fpx * desplaza.x / L).toFixed(2)}px,${(fpx * desplaza.y / L).toFixed(2)}px,0) scale(${(SOBRANTE * s).toFixed(4)})`;
+    const ox = desplaza.x + ex, oy = desplaza.y + ey, L = lejos + desplaza.z + ez, s = lejos / L, fpx = plano.k * plano.D;
+    // (sin pasarse: la foto solo tiene un 12 % de sobra por los bordes)
+    const tope = (v, m) => Math.max(-m, Math.min(m, v));
+    const tx = tope(-fpx * ox / L, ancho * 0.05), ty = tope(fpx * oy / L, alto * 0.05);
+    const tr = `translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) scale(${(SOBRANTE * s).toFixed(4)})`;
     if (foto.style.transform !== tr) foto.style.transform = tr;
   }
 

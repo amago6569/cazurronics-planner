@@ -69,7 +69,7 @@ async function rpc(nombre, params) {
 const supabase = {
   async pedirCodigo(email) {
     const r = await pedir("/auth/v1/otp", { clave: PUBLICA, cuerpo: { email, create_user: true } });
-    if (r.status === 429) throw new ErrorLiga(429, "Has pedido muchos códigos. Espera un minuto y vuelve a probar.");
+    if (r.status === 429) throw new ErrorLiga(429, "Ya te mandamos un código hace menos de un minuto: míralo en tu correo (y en spam). Si no está, pide otro en un minuto.");
     if (!r.ok) throw new ErrorLiga(502, "No se pudo mandar el correo. Revisa la dirección o prueba en un rato.", `otp ${r.status}: ${JSON.stringify(r.json)}`);
     return {};
   },
