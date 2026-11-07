@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060a">
+<meta name="robots" content="noindex">
+<title>Canasta en la Catedral | Liga Cazurra</title>
+<meta name="description" content="Mete canastas en la Catedral de León durante 40 segundos. Primer juego de la Liga Cazurra.">
+<link rel="icon" href="/favicon.ico">
+<!-- la letra va en nuestra web, no en Google (como en la portada) -->
+<link rel="preload" href="/inicio/vendor/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/inicio/vendor/archivo.css">
+<style>
+/* Layout: la foto real de la Catedral a pantalla completa, el juego encima en un lienzo y los marcadores arriba.
+   Mismo mundo que la portada: oscuro, Archivo condensada, una cosa por pantalla. */
+:root {
+  --noche: #07060a;
+  --crema: #f3ead8;
+  --gris: #a39c90;
+  --oro: #e9b44c;
+  --vidrio: rgba(243, 234, 216, .1);
+  --borde: rgba(243, 234, 216, .18);
+  --letra: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+body { background: var(--noche); color: var(--crema); font-family: var(--letra); overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+button { font-family: inherit; touch-action: manipulation; }
+
+.fondo { position: fixed; inset: 0; overflow: hidden; }
+.fondo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; }
+.fondo::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(7,6,10,.72), rgba(7,6,10,.3) 16%, rgba(7,6,10,0) 28%, rgba(7,6,10,0) 62%, rgba(7,6,10,.7)); }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de pantalla), pero no se maneja con teclado */
+
+/* marcadores */
+.hud { position: fixed; z-index: 2; left: 0; right: 0; top: 0; pointer-events: none; text-shadow: 0 1px 3px rgba(7,6,10,.65), 0 0 14px rgba(7,6,10,.45);
+  padding: max(12px, env(safe-area-inset-top, 0px)) calc(max(8px, env(safe-area-inset-right, 0px)) + 50px) 0 max(16px, env(safe-area-inset-left, 0px));
+  display: flex; justify-content: space-between; align-items: flex-start; }
+.hud .tiempo, .hud .racha { font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.hud .tiempo.poco { color: var(--oro); }
+.hud .racha { justify-self: end; text-align: right; color: var(--oro); opacity: 0; transform: translateY(-4px); transition: opacity 200ms ease, transform 200ms var(--ease-out); }
+.hud .racha.si { opacity: 1; transform: none; }
+.hud small { display: block; font-size: 12px; font-weight: 700; font-stretch: 100%; letter-spacing: .08em; color: rgba(243,234,216,.8); margin-top: 4px; }
+.puntos { position: absolute; left: 50%; top: max(12px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); text-align: center; }
+.puntos b { display: block; font-weight: 900; font-stretch: 62%; font-size: 64px; line-height: .85; font-variant-numeric: tabular-nums; transition: transform 160ms var(--ease-out); }
+.puntos b.sube { transform: scale(1.18); }
+.viento { position: fixed; z-index: 2; left: max(14px, env(safe-area-inset-left, 0px)); top: calc(max(12px, env(safe-area-inset-top, 0px)) + 58px);
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(7,6,10,.55); border: 1px solid var(--borde);
+  font-size: 13px; font-weight: 700; letter-spacing: .02em; pointer-events: none; white-space: nowrap; }
+.viento svg { width: 22px; height: 14px; }
+
+.aviso { position: fixed; z-index: 3; left: 0; top: 0; pointer-events: none; font-weight: 900; font-stretch: 62%; text-transform: uppercase;
+  white-space: nowrap; transform: translate(-50%, -50%); text-shadow: 0 1px 3px rgba(7,6,10,.8), 0 2px 14px rgba(7,6,10,.7); animation: aviso 1100ms var(--ease-out) forwards; }
+.aviso.bien { color: var(--crema); font-size: 44px; }
+.aviso.oro { color: var(--oro); font-size: 50px; }
+.aviso.mal { color: var(--crema); font-size: 26px; opacity: .9; }
+@keyframes aviso { 0% { opacity: 0; translate: 0 10px; scale: .8; } 15% { opacity: 1; translate: 0 0; scale: 1; } 70% { opacity: 1; } 100% { opacity: 0; translate: 0 -36px; } }
+.nivel { position: fixed; z-index: 3; left: 50%; bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 18vh); transform: translateX(-50%);
+  padding: 10px 16px; border-radius: 999px; background: var(--crema); color: var(--noche); font-weight: 800; font-size: 15px; white-space: nowrap; pointer-events: none;
+  animation: nivel 2200ms var(--ease-out) forwards; }
+@keyframes nivel { 0% { opacity: 0; translate: 0 12px; } 12% { opacity: 1; translate: 0 0; } 80% { opacity: 1; } 100% { opacity: 0; } }
+.pista { position: fixed; z-index: 2; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom, 0px)); text-align: center; font-size: 14px; font-weight: 600; color: var(--crema); opacity: .85; pointer-events: none; transition: opacity 300ms ease; }
+
+/* pantallas: inicio y final */
+/* con margin-top:auto en el primero (y no justify-content:flex-end) se puede hacer scroll si no cabe: móvil tumbado o zoom */
+.capa { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 18px; overflow-y: auto; overscroll-behavior: contain;
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  background: linear-gradient(to bottom, rgba(7,6,10,.25), rgba(7,6,10,.82) 55%, rgba(7,6,10,.95)); }
+.capa > * { width: 100%; max-width: 520px; box-sizing: border-box; flex-shrink: 0; }
+.capa > :first-child { margin-top: auto; }
+.capa.entra > * { animation: entra 520ms var(--ease-out) both; }
+.capa.entra > :nth-child(2) { animation-delay: 60ms; } .capa.entra > :nth-child(3) { animation-delay: 120ms; } .capa.entra > :nth-child(4) { animation-delay: 180ms; } .capa.entra > :nth-child(n+5) { animation-delay: 240ms; }
+@keyframes entra { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.etiqueta { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--oro); }
+.titulo { margin: 0; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: clamp(52px, 15vw, 88px); line-height: .84; letter-spacing: -.005em; }
+.reglas { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.reglas li { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 12px; font-size: 16px; line-height: 1.3; }
+.reglas li b { display: grid; place-items: center; height: 40px; border-radius: 12px; background: var(--vidrio); border: 1px solid var(--borde); font-weight: 900; font-stretch: 62%; font-size: 20px; }
+.nota { margin: 0; font-size: 14px; color: var(--gris); line-height: 1.4; }
+.principal { width: 100%; height: 56px; border: 0; border-radius: 999px; background: var(--crema); color: var(--noche); font-size: 17px; font-weight: 800; cursor: pointer; transition: transform 140ms ease-out, background-color 160ms ease; }
+.principal:active { transform: scale(.97); }
+.secundario { width: 100%; height: 52px; border-radius: 999px; border: 1px solid var(--borde); background: var(--vidrio); color: var(--crema); font-size: 16px; font-weight: 700; cursor: pointer; transition: transform 140ms ease-out; }
+.secundario:active { transform: scale(.97); }
+.botones { display: grid; gap: 10px; }
+@media (hover: hover) and (pointer: fine) { .principal:hover { background: #fffaf0; } .secundario:hover { border-color: rgba(243,234,216,.4); } }
+:focus-visible { outline: 2px solid var(--oro); outline-offset: 3px; }
+
+.marcador { margin: 0; font-weight: 900; font-stretch: 62%; font-size: clamp(110px, 34vw, 170px); line-height: .8; font-variant-numeric: tabular-nums; }
+.marcador span { display: block; font-size: 22px; letter-spacing: .1em; margin-top: 8px; color: var(--gris); }
+.datos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.datos div { padding: 12px 10px; border-radius: 16px; background: var(--vidrio); border: 1px solid var(--borde); }
+.datos dt { font-size: 12px; font-weight: 700; color: var(--gris); letter-spacing: .04em; }
+.datos dd { margin: 4px 0 0; font-weight: 900; font-stretch: 62%; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
+.record { margin: 0; font-size: 15px; font-weight: 700; }
+.record.nuevo { color: var(--oro); }
+
+.cuenta { position: fixed; inset: 0; z-index: 4; display: grid; place-items: center; pointer-events: none; font-weight: 900; font-stretch: 62%; font-size: 160px; text-shadow: 0 4px 30px rgba(7,6,10,.6); }
+.cuenta span { animation: cuenta 900ms var(--ease-out) forwards; }
+@keyframes cuenta { 0% { opacity: 0; scale: 1.6; } 20% { opacity: 1; scale: 1; } 80% { opacity: 1; } 100% { opacity: 0; scale: .9; } }
+
+.sonido { position: fixed; z-index: 6; right: max(8px, env(safe-area-inset-right, 0px)); top: max(8px, env(safe-area-inset-top, 0px)); width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(7,6,10,.45); color: var(--crema); display: grid; place-items: center; cursor: pointer; }
+.sonido svg { width: 22px; height: 22px; }
+.prueba { margin: -4px 0 0; text-align: center; font-size: 13px; color: var(--gris); }
+/* móvil tumbado: el juego necesita la pantalla de pie */
+.gira { display: none; position: fixed; inset: 0; z-index: 10; background: var(--noche); place-items: center; align-content: center; gap: 14px; text-align: center; padding: 24px; }
+.gira svg { width: 56px; height: 56px; justify-self: center; }
+.gira p { margin: 0; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 40px; line-height: .9; }
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) { .gira { display: grid; } }
+.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .capa.entra > *, .aviso, .nivel, .cuenta span { animation-duration: 1ms !important; }
+  .aviso { animation: none; opacity: 1; }
+}
+</style>
+</head>
+<body>
+<div class="fondo" aria-hidden="true"><img id="foto" alt="" src="fondo-v.jpg" decoding="async"></div>
+<canvas id="lienzo" tabindex="-1" role="img" aria-label="Canasta colgada en la torre de la Catedral de León. Desliza hacia arriba desde abajo para tirar."></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div class="tiempo" id="tiempo">0:40<small>TIEMPO</small></div>
+  <div class="puntos"><b id="puntos">0</b><small>PUNTOS</small></div>
+  <div class="racha" id="racha">×0<small>EN RACHA</small></div>
+</div>
+<div class="viento" id="viento" hidden></div>
+<p class="pista" id="pista" hidden></p>
+<div class="cuenta" id="cuenta" aria-hidden="true"></div>
+<p class="oculto" id="anuncio" aria-live="polite"></p>
+
+<section class="capa entra" id="inicio" aria-labelledby="t-inicio">
+  <p class="etiqueta">Liga Cazurra · Juego 1</p>
+  <h1 class="titulo" id="t-inicio">Canasta en la Catedral</h1>
+  <ul class="reglas">
+    <li><b>40″</b><span>Tienes 40 segundos. Mete todas las que puedas.</span></li>
+    <li><b>↑</b><span id="regla-gesto">Desliza el balón hacia arriba. Cuanto más largo, más fuerte.</span></li>
+    <li><b>+3</b><span>Canasta 2 puntos. Limpia, sin tocar aro ni tablero, 3. Tres seguidas: +1 por canasta.</span></li>
+  </ul>
+  <p class="nota" id="nota-inicio">Cada 3 canastas se complica: la canasta cambia de sitio, sopla el cierzo y al final se mueve.</p>
+  <div class="botones"><button class="principal" id="jugar" type="button">Jugar</button></div>
+  <p class="prueba">Versión de prueba: los puntos aún no se guardan.</p>
+</section>
+
+<section class="capa" id="fin" aria-labelledby="t-fin" hidden>
+  <p class="etiqueta" id="t-fin">Se acabó el tiempo</p>
+  <p class="marcador"><b id="fin-puntos">0</b><span>PUNTOS</span></p>
+  <dl class="datos">
+    <div><dt>Canastas</dt><dd id="fin-canastas">0</dd></div>
+    <div><dt>Limpias</dt><dd id="fin-limpias">0</dd></div>
+    <div><dt>Mejor racha</dt><dd id="fin-racha">0</dd></div>
+  </dl>
+  <p class="record" id="fin-record"></p>
+  <div class="botones">
+    <button class="principal" id="otra" type="button">Otra vez</button>
+    <button class="secundario" id="compartir" type="button">Compartir</button>
+  </div>
+</section>
+
+<div class="gira" role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><p>Pon el móvil de pie</p></div>
+
+<button class="sonido" id="sonido" type="button" aria-label="Silenciar" aria-pressed="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path id="ondas" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path id="tachado" d="M16 9l6 6M22 9l-6 6" hidden/></svg>
+</button>
+
+<script type="module" src="juego-canasta.js"></script>
+</body>
+</html>
