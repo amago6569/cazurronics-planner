@@ -2,6 +2,7 @@
 // Cada juego tiene un motor determinista en public/liga/motor-*.js. El móvil juega con él y el servidor
 // repite la partida con la misma semilla y lo que hizo el jugador: los puntos que valen son los de aquí.
 import * as canasta from "../../../public/liga/motor-canasta.js";
+import * as tapas from "../../../public/liga/motor-tapas.js";
 
 export const JUEGOS = {
   canasta: {
@@ -17,12 +18,32 @@ export const JUEGOS = {
     repetir: (semilla, datos) => canasta.rejugar(semilla, datos?.tiros),
     ultimoMomento: (datos) => (Array.isArray(datos?.tiros) && datos.tiros.length ? Math.max(...datos.tiros.map((x) => Number(x?.t) || 0)) : 0),
   },
+  tapas: {
+    id: "tapas",
+    nombre: "Tapeo en el Húmedo",
+    sitio: "Húmedo",
+    pagina: "/liga/tapas.html",
+    foto: "/liga/fondos/humedo-v.jpg",
+    habilidad: "Reflejos",
+    version: tapas.VERSION,
+    duracionMs: tapas.DURACION_MS,
+    maxBytes: 40000, // como mucho 50 movimientos por segundo: ~25 KB en el peor caso
+    // datos = { movimientos: [t, x, t, x, …] } (ms de partida y posición de la cazuela ×10000)
+    repetir: (semilla, datos) => tapas.rejugar(semilla, datos?.movimientos),
+    ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
+  },
 };
 
-// Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta"];
+// tiempo del último [t, x] de una lista plana
+function ultimoPar(lista) {
+  if (!Array.isArray(lista) || lista.length < 2) return 0;
+  return Number(lista[lista.length - 2]) || 0;
+}
 
-export const MAX_BYTES_DATOS = 20000; // una partida de verdad ocupa unos 2 KB
+// Orden en que rotan por los días (calendario.juegosDelDia)
+export const EN_LIGA = ["canasta", "tapas"];
+
+export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 
 // Margen para el reloj del móvil y la red: el tiempo real entre empezar y terminar no puede ser
 // mucho menor que lo que dice la partida (si no, alguien la ha jugado "a cámara rápida").
@@ -36,7 +57,7 @@ export function comprobarPartida({ juego, version, semilla, empezada, ahora, dat
   if (Number(version) !== j.version) return { estado: "rechazada", puntos: null, motivo: "se jugó con una versión vieja del juego" };
   let tam = 0;
   try { tam = JSON.stringify(datos ?? null).length; } catch { return { estado: "rechazada", puntos: null, motivo: "datos ilegibles" }; }
-  if (tam > MAX_BYTES_DATOS) return { estado: "rechazada", puntos: null, motivo: "demasiados datos" };
+  if (tam > (j.maxBytes || MAX_BYTES_DATOS)) return { estado: "rechazada", puntos: null, motivo: "demasiados datos" };
   const real = new Date(ahora).getTime() - new Date(empezada).getTime();
   if (!(real >= 0)) return { estado: "rechazada", puntos: null, motivo: "fechas imposibles" };
   if (real > MAX_PARTIDA_MS) return { estado: "rechazada", puntos: null, motivo: "la partida se dejó a medias demasiado tiempo" };
