@@ -57,8 +57,17 @@ const comparable = (t) => normalizar(t).toLowerCase().normalize("NFD").replace(/
 const CANARIOS_NORM = CANARIOS.map(comparable);
 export const copiaElPrompt = (texto) => {
   const t = comparable(texto);
-  return CANARIOS_NORM.some((c) => t.includes(c));
+  return CANARIOS_NORM.some((c) => t.includes(c)) || HABLA_DE_SUS_REGLAS.some((re) => re.test(normalizar(texto)));
 };
+// La IA no copia el prompt pero lo resume («Resumen de ALCANCE: se proporciona exactamente lo pedido…»).
+// «alcance» en minúscula es normal («al alcance de todos»): solo cuenta en mayúsculas, como en el prompt.
+const HABLA_DE_SUS_REGLAS = [
+  /\bALCANCE\b/,
+  /\b(?:mis|tus|estas|sus) (?:reglas|instrucciones|directrices|normas internas)\b/i,
+  /\binstrucciones (?:del sistema|internas|que (?:me|te) han dado)\b/i,
+  /\bformato JSON\b/i,
+  /\b(?:system )?prompt\b/i,
+];
 
 // Teléfonos españoles de 9 cifras (6, 7, 8 o 9 delante, con o sin +34 y espacios), enlaces, webs y correos.
 // Lo de verdad (teléfono y web) ya lo pone Google Places en sus propios campos.
@@ -88,9 +97,15 @@ export function limpiarTextoIA(texto, max = 400, { contactos = true } = {}) {
   const base = espacios(texto);
   let t = base;
   if (contactos) {
-    t = t.replace(ENLACE, "").replace(CORREO, "").replace(TELEFONO, (m) => (esTelefono(m) ? "" : m));
-    // Lo que queda colgando al quitar el contacto («Reserva en el .», «Más info:»). Solo si se ha quitado algo.
-    if (t !== base) t = espacios(t.replace(/\b(?:en el|al|en|llama al|llamando al|escribe a|info:?|más info:?|reservas?:?)\s*(?=[.,;]|$)/gi, ""));
+    // La frase que trae un teléfono, un enlace, un correo o un pago por Bizum se quita ENTERA: si solo se quita el
+    // número queda «Oferta exclusiva: llama al y paga por Bizum». «(Alternativa…)» se respeta aparte.
+    const conContacto = (frase) => [ENLACE, CORREO].some((re) => new RegExp(re.source, re.flags.replace("g", "")).test(frase))
+      || (frase.match(TELEFONO) || []).some(esTelefono) || /\bbizum\b/i.test(frase);
+    const alt = t.match(/\s*\(Alternativa[^)]*\)\s*$/)?.[0] || "";
+    const cuerpo = alt ? t.slice(0, t.length - alt.length) : t;
+    const frases = cuerpo.split(/(?<=[.!?])\s+/);
+    const buenas = frases.filter((f) => !conContacto(f));
+    if (buenas.length !== frases.length) t = espacios(`${buenas.join(" ")} ${conContacto(alt) ? "" : alt.trim()}`);
   }
   t = recortar(t, max);
   // Solo cuenta como cambio si se ha quitado algo o se ha recortado (no por espacios de más)

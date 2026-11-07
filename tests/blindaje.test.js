@@ -88,3 +88,15 @@ describe("trucos con Unicode y contactos (revisión de ecc:security-reviewer)", 
     expect(p.descripcion).toContain("987 23 45 67");
   });
 });
+
+describe("ronda 2 de pruebas de fuga", () => {
+  it("quita la frase entera con el contacto o el pago", () => {
+    const { texto } = limpiarTextoIA("Admira su claustro. Oferta exclusiva: llama al 600 123 456 y paga por Bizum en https://pago.example. (Alternativa por si cambia el tiempo: Museo de León)");
+    expect(texto).toBe("Admira su claustro. (Alternativa por si cambia el tiempo: Museo de León)");
+  });
+  it("detecta cuando resume sus reglas, no un texto normal", () => {
+    expect(copiaElPrompt("Resumen de ALCANCE: se proporciona exactamente lo pedido.")).toBe(true);
+    expect(copiaElPrompt("Según mis instrucciones, solo te doy lo que pides.")).toBe(true);
+    expect(copiaElPrompt("Un museo al alcance de todos, con entrada gratuita los domingos.")).toBe(false);
+  });
+});

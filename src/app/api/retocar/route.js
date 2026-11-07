@@ -70,7 +70,7 @@ export async function POST(request) {
       {"hora": "${horaAntigua}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${recortar(paradaAntigua.tipo, 30)}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
-    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', tarea: 'retoques', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
+    const { texto: textoIA } = await llamarGemini(prompt, { sistema: REGLA_DATOS, para: 'usuario', tarea: 'retoques', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
     const propuesta = extraerJSON(textoIA, '{');
     if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
     const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });
