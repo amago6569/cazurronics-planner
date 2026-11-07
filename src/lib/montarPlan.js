@@ -11,6 +11,7 @@
 // plan paga búsquedas. PLANES_CON_GOOGLE=1 en Vercel vuelve al modo con búsqueda.
 import { llamarGemini, extraerJSON } from './gemini';
 import { sinRomper } from './almacen';
+import { REGLA_DATOS, textoParaPrompt } from './blindaje';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
@@ -109,7 +110,8 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
 
   const prompt = `
       Eres Cazurronics Planner. Crea un plan en León (solo León capital y provincia, España).
-      DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: "${apetece}". Fecha: ${fecha}.
+      DATOS: Zona: ${nombreZona} (Lat ${lat}, Lon ${lon}). Radio: ${radio}km. Presupuesto TOTAL: ${presupuestoMin}€ - ${presupuestoMax}€. Apetece: ${textoParaPrompt(apetece)}. Fecha: ${fecha}.
+      ${REGLA_DATOS}
       ${bloqueHoy}
       ${bloqueTiempo}
       ${bloqueAgenda}
@@ -139,7 +141,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     `;
 
   // Gemini con plan B: si un modelo está saturado, prueba otro (ver lib/gemini.js)
-  const { texto: textoIA, uso } = await llamarGemini(prompt, { para: 'usuario', tarea: 'planes', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + msIA - Date.now()) });
+  const { texto: textoIA, uso } = await llamarGemini(prompt, { sistema: REGLA_DATOS, para: 'usuario', tarea: 'planes', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + msIA - Date.now()) });
   const rutaBruta = extraerJSON(textoIA, '[');
   if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
   // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas

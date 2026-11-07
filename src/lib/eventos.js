@@ -14,6 +14,7 @@ import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON, motivoClaro } from "./gemini";
 import { fuentesPara } from "./intencion";
+import { limpiarParaPrompt } from "./blindaje";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
@@ -1048,7 +1049,7 @@ export async function barridoAMedida({ fecha, apetece, zona, radio, lat, lon }) 
   const donde = `${zona || "León"} (provincia de León, España), en un radio de ${radio} km`;
   // Webs donde suele publicarse ESE tipo de cosa (charlas, deporte, comida...). Va en la misma búsqueda: no cuesta más
   const fuentesTema = fuentesPara(apetece);
-  const peticion = String(apetece || "").slice(0, 300) || "un plan de ocio";
+  const peticion = limpiarParaPrompt(apetece, 300) || "un plan de ocio"; // sin comillas ni saltos: no puede cerrar la cita
   const temas = [
     `eventos, actividades y planes del ${fecha} (${nombreDia}) en ${donde} relacionados con lo que pide el usuario: "${peticion}"`,
     `todo lo que está en marcha el ${fecha} (${nombreDia}) en ${donde} aunque no sea de un solo día: mercadillos y mercados que se celebran los ${nombreDia}s, ferias, exposiciones temporales abiertas, festivales, fiestas patronales, jornadas gastronómicas y ciclos`,

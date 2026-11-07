@@ -1,5 +1,6 @@
 import { llamarGemini, extraerJSON, mensajeParaUsuario } from '../../../lib/gemini';
 import { NextResponse } from 'next/server';
+import { limpiarParaPrompt, REGLA_DATOS, textoParaPrompt } from '../../../lib/blindaje';
 import { presupuestoAPriceLevel, parsePrecio, obtenerLocalidad, enriquecerParada, leerPeticionPlan } from '../../../lib/planUtils';
 import { enSegundoPlano, leerJSON, guardarJSON, sinRomper } from '../../../lib/almacen';
 import { dentroDelLimite, dentroDelTopeDiario } from '../../../lib/freno';
@@ -41,7 +42,7 @@ export async function POST(request) {
     }
     const { fecha, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
     // Lo que llega del navegador entra en la petición a la IA: con textos enormes, cada retoque costaría más
-    const recortar = (texto, largo = 120) => String(texto ?? '').slice(0, largo);
+    const recortar = (texto, largo = 120) => limpiarParaPrompt(texto, largo);
     const tituloAntiguo = recortar(paradaAntigua.titulo);
     const horaAntigua = recortar(paradaAntigua.hora, 20);
 
@@ -59,7 +60,8 @@ export async function POST(request) {
 
     const prompt = `
       Cazurronics Planner. Cambia la parada "${tituloAntiguo}" (${horaAntigua}).
-      El usuario pide: "${instruccion}".
+      El usuario pide: ${textoParaPrompt(instruccion, 300)}.
+      ${REGLA_DATOS}
       RESTRICCIONES: Solo provincia de León (España). Centro Lat ${lat}, Lon ${lon}. Radio: ${radio}km. Máx presupuesto: ${presDisp}€. Fecha: ${fecha}. NO repitas: ${nombresYa.join(', ')}.
       ${bloqueSitios}
       Si es un bar o restaurante y no conoces uno real con seguridad, no inventes el nombre: pon el tipo y el pueblo ("Bar en Boñar") y lo buscamos en Google Maps. No inventes especialidades ni historia.
@@ -68,7 +70,7 @@ export async function POST(request) {
       {"hora": "${horaAntigua}", "titulo": "Sitio nuevo", "descripcion": "...", "precio": "8€", "resenas": "4.5/5", "transporte": "...", "lat": 42.5, "lon": -5.5, "tipo": "${recortar(paradaAntigua.tipo, 30)}", "lugar": null, "telefono": "No", "web": "No", "horario": "12-23"}
     `;
 
-    const { texto: textoIA } = await llamarGemini(prompt, { para: 'usuario', tarea: 'retoques', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
+    const { texto: textoIA } = await llamarGemini(prompt, { sistema: REGLA_DATOS, para: 'usuario', tarea: 'retoques', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
     const propuesta = extraerJSON(textoIA, '{');
     if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
     const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });

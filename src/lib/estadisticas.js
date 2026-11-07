@@ -5,7 +5,7 @@ import { comando, varios, aObjeto } from "./almacen";
 
 export const METRICAS = [
   "visita", "vuelve", "plan", "retoque", "compartir", "abre_compartido",
-  "voto", "valoracion", "detalle", "llamar", "web", "despensa", "plan_vacio", "plan_ampliado",
+  "voto", "valoracion", "detalle", "llamar", "web", "despensa", "plan_vacio", "plan_ampliado", "ia_filtrada",
   "visita_planner", "visita_despensa", "como_llegar", "web_tienda",
 ];
 

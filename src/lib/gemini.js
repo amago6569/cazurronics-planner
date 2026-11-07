@@ -66,7 +66,8 @@ export function medirUso(modelo, datos) {
 // tarea: nombre con el que se apunta el gasto en el panel (por defecto, el de "para")
 // msPorModelo: tope para cada modelo. Si el primero se queda colgado, al segundo aún le queda tiempo (antes el
 // primero se comía todo el minuto y el plan B nunca llegaba a probarse)
-export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, msPorModelo = 0, maxSalida } = {}) {
+// sistema: instrucción de sistema (la que la IA no debe saltarse por nada que diga el usuario). Opcional.
+export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, msPorModelo = 0, maxSalida, sistema } = {}) {
   const fallos = [];
   const fin = Date.now() + msMax;
   for (const modelo of modelosPara(para)) {
@@ -80,7 +81,7 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
         method: "POST",
         signal: AbortSignal.timeout(Math.max(1000, tope - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}), ...(/^gemini-2\.5-flash$/.test(modelo) ? { thinkingConfig: { thinkingBudget: PENSAR_25 } } : {}) } }),
+        body: JSON.stringify({ ...(sistema ? { systemInstruction: { parts: [{ text: sistema }] } } : {}), contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}), ...(/^gemini-2\.5-flash$/.test(modelo) ? { thinkingConfig: { thinkingBudget: PENSAR_25 } } : {}) } }),
         cache: "no-store",
       });
       const pensarPoco = NIVEL_PENSAMIENTO !== "auto" && /^gemini-(flash|3)/.test(modelo);

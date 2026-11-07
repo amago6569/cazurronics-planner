@@ -1,9 +1,11 @@
 // ============ UTILIDADES COMPARTIDAS ============
 // Usado por app/api/plan/route.js (generar plan) y app/api/retocar/route.js (cambiar una parada).
-import { comando, sinRomper } from './almacen';
+import { comando, enSegundoPlano, sinRomper } from './almacen';
 import { direccionEnLeon, enProvinciaLeon } from './provincia';
 import { bonito, mismoSitioNatural, seParecen, slug } from './nombres';
 import { rutaConocida } from './rutas';
+import { blindarParada } from './blindaje';
+import { registrar } from './estadisticas';
 
 // Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
 // en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
@@ -484,6 +486,11 @@ export async function enriquecerParada(paradaOriginal, contexto) {
 
   parada.fotoOficial = foto || "https://images.unsplash.com/photo-1543785734-4b6e564642f8?auto=format&fit=crop&w=800&q=80";
   parada.streetView = streetView;
+
+  // Lo que ha escrito la IA (descripción y transporte) se recorta y pierde teléfonos, enlaces y trozos del prompt.
+  // Si hay que tirar la descripción, va la ficha propia. Cada vez que salta se cuenta (ia_filtrada) para ver falsos positivos.
+  // A los eventos de la agenda comprobada se les dejan teléfonos y enlaces (inscripciones, entradas): son reales.
+  if (blindarParada(parada, descripcionReal(objetivo, parada.tipo, nombreZona), { deAgenda: Boolean(fuentes) && deLaAgenda })) enSegundoPlano(() => registrar('ia_filtrada'), 'estadísticas');
 
   return { parada, problemaConfigPlaces };
 }
