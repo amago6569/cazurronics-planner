@@ -10,7 +10,7 @@
 //
 // Unidades: metros, segundos. Ejes: x a la derecha, y hacia arriba, z hacia la catedral (lejos del jugador).
 
-export const VERSION = 1;
+export const VERSION = 2; // 2: la canasta está de pie delante de la Catedral (sin fachada detrás) y cambia de sitio desde la 1.ª
 export const DURACION_MS = 40000; // 40 segundos por intento
 export const MAX_TIROS = 60;
 
@@ -24,12 +24,11 @@ const R_TUBO = 0.01; // grosor del hierro del aro
 export const ALTURA_ARO = 3.05;
 export const ARO_TABLERO = 0.38; // del centro del aro a la cara del tablero
 export const TABLERO = { ancho: 1.8, abajo: 2.9, arriba: 3.95 };
-const MURO = 0.2; // la fachada está 20 cm detrás del tablero
 export const SALIDA = { x: 0, y: 1.25, z: 0.3 }; // donde está el balón antes de tirar
+export const ESPERA_MS = 350; // ms desde que se decide un tiro hasta que sale el balón siguiente
 const REB_ARO = 0.55; // cuánto rebota en el aro (0 = nada, 1 = todo)
 const ROCE_ARO = 0.9;
 const REB_TABLERO = 0.6;
-const ESPERA_BALON = 0.35; // s desde que se decide un tiro hasta que sale el balón siguiente
 
 // Ángulo de tiro fijo de 58°: el jugador decide la fuerza (largo del deslizamiento) y la dirección.
 const COS_ANG = 0.5299192642332049;
@@ -65,12 +64,12 @@ function crearSuerte(semilla) {
 }
 
 // ── Niveles: la canasta cambia de sitio solo cuando metes; si fallas, sigue igual para que corrijas ──
-//  0-2 canastas: quieta y centrada · 3-5: cambia de sitio y de distancia · 6-9: además, viento (el cierzo)
-//  10 o más: además, se mueve de lado a lado.
+//  0 canastas: centrada · desde la 1.ª: cada canasta, a otro sitio y otra distancia · desde la 6.ª: además, viento
+//  (el cierzo) · desde la 10.ª: además, se mueve de lado a lado.
 export function nivelDe(canastas) {
   if (canastas >= 10) return 4;
   if (canastas >= 6) return 3;
-  if (canastas >= 3) return 2;
+  if (canastas >= 1) return 2;
   return 1;
 }
 
@@ -114,28 +113,27 @@ export function simularVuelo(aro, t0, vel, opciones = {}) {
   const p = { x: SALIDA.x, y: SALIDA.y, z: SALIDA.z };
   const v = { x: vel.x, y: vel.y, z: vel.z };
   const tray = guardar ? [] : null;
-  const eventos = guardar ? [] : null; // para los sonidos: [paso, "aro" | "tablero" | "muro"]
+  const eventos = guardar ? [] : null; // para los sonidos: [paso, "aro" | "tablero"]
   let enAro = false;
-  let tocoAro = false, tocoTablero = false, porAbajo = false, muro = false;
+  let tocoAro = false, tocoTablero = false, porAbajo = false;
   const zTablero = aro.z + ARO_TABLERO;
   const pasos = Math.floor(VUELO_MAX / DT);
   for (let k = 1; k <= pasos; k++) {
     const t = t0 + k * DT;
     const hx = xAro(aro, t);
-    const yAntes = p.y;
+    const yAntes = p.y, zAntes = p.z;
     v.y -= G * DT;
     v.x += aro.viento * DT;
     p.x += v.x * DT; p.y += v.y * DT; p.z += v.z * DT;
 
     if (conChoques) {
-      // tablero (solo la cara delantera, dentro de sus bordes)
-      if (v.z > 0 && p.z + R_BALON > zTablero && p.z - R_BALON < zTablero + 0.05
+      // tablero: solo su cara delantera, dentro de sus bordes, y solo si el balón venía de delante. Lo que pasa por
+      // encima o por un lado sigue de largo: la canasta está de pie, no hay pared detrás.
+      if (v.z > 0 && zAntes + R_BALON <= zTablero && p.z + R_BALON > zTablero
         && Math.abs(p.x - hx) < TABLERO.ancho / 2 && p.y > TABLERO.abajo && p.y < TABLERO.arriba) {
         p.z = zTablero - R_BALON; v.z = -v.z * REB_TABLERO; v.x *= 0.9; v.y *= 0.9; tocoTablero = true;
         if (guardar) eventos.push(k, "tablero");
       }
-      // fachada de la catedral, detrás de todo: si el balón llega a la piedra, ya no puede entrar
-      if (v.z > 0 && p.z + R_BALON > zTablero + MURO) { p.z = zTablero + MURO - R_BALON; v.z = -v.z * 0.4; muro = true; if (guardar) eventos.push(k, "muro"); }
       // aro: el punto del hierro más cercano al balón
       const dx = p.x - hx, dz = p.z - aro.z;
       const d = Math.sqrt(dx * dx + dz * dz);
@@ -168,17 +166,17 @@ export function simularVuelo(aro, t0, vel, opciones = {}) {
     const dentro = hdx * hdx + hdz * hdz < R_ARO * R_ARO;
     if (yAntes < ALTURA_ARO && p.y >= ALTURA_ARO && dentro) porAbajo = true; // entrar por debajo no vale
     if (yAntes >= ALTURA_ARO && p.y < ALTURA_ARO) {
-      if (dentro && !porAbajo && !muro && conChoques) {
+      if (dentro && !porAbajo && conChoques) {
         return { canasta: true, limpia: !tocoAro && !tocoTablero, tocoAro, tocoTablero, fin: t, tray, eventos };
       }
       if (!conChoques) return { canasta: false, cruce: { x: p.x, z: p.z, hx, t }, fin: t, tray };
     }
     // fallo claro: ya cae por debajo del aro, o se escapa
     if ((v.y < 0 && p.y < ALTURA_ARO - 0.7) || p.z < -1.5) {
-      return { canasta: false, limpia: false, tocoAro, tocoTablero, muro, fin: t, tray, eventos };
+      return { canasta: false, limpia: false, tocoAro, tocoTablero, fin: t, tray, eventos };
     }
   }
-  return { canasta: false, limpia: false, tocoAro, tocoTablero, muro, fin: t0 + VUELO_MAX, tray, eventos };
+  return { canasta: false, limpia: false, tocoAro, tocoTablero, fin: t0 + VUELO_MAX, tray, eventos };
 }
 
 // ── La partida ──
@@ -236,11 +234,11 @@ export function lanzar(partida, tiro, opciones = {}) {
     partida.racha = 0;
   }
   // el balón siguiente sale cuando se decide este, redondeado al ms
-  partida.listoEn = Math.ceil((r.fin + ESPERA_BALON) * 1000);
+  partida.listoEn = Math.ceil(r.fin * 1000) + ESPERA_MS;
   return {
     canasta: r.canasta, limpia: !!r.limpia, tocoAro: r.tocoAro, tocoTablero: r.tocoTablero,
     ganados, racha: partida.racha, subeNivel: partida.nivel !== nivelAntes ? partida.nivel : 0,
-    muro: !!r.muro, aroDelTiro: aro, t0, fin: r.fin, tray: r.tray, eventos: r.eventos, listoEn: partida.listoEn,
+    aroDelTiro: aro, t0, fin: r.fin, tray: r.tray, eventos: r.eventos, listoEn: partida.listoEn,
   };
 }
 

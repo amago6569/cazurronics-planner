@@ -10,6 +10,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // three.js empaquetado y minificado para la Liga Cazurra (se genera con npm run liga:three)
+    "public/liga/vendor/**",
   ]),
 ]);
 

@@ -1,5 +1,6 @@
 // Canasta en la Catedral: lo que se ve y se toca. La física y los puntos salen todos de motor-canasta.js,
-// el mismo archivo que usará el servidor para comprobar cada partida. Aquí solo se dibuja, se escucha el dedo y suena.
+// el mismo archivo que usará el servidor para comprobar cada partida. Aquí se escucha el dedo, suena y se dibuja:
+// en 3D (escena-3d.js) si el móvil puede, y si no, en plano con el dibujo de este archivo.
 import {
   crearPartida, lanzar, resumen, xAro, proyectar, motivoInvalido, nivelDe,
   DURACION_MS, LIMITES, SALIDA, R_BALON, R_ARO, ALTURA_ARO, ARO_TABLERO, TABLERO, PASO,
@@ -9,6 +10,49 @@ const $ = (id) => document.getElementById(id);
 const lienzo = $("lienzo");
 const ctx = lienzo.getContext("2d");
 const reducido = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Para probar: ?semilla=123 repite siempre la misma partida, ?depurar deja mirar el estado desde la consola,
+// ?plano fuerza el dibujo en plano y ?forzar3d usa el 3D aunque el navegador diga que irá lento.
+// En la liga de verdad la semilla la da el servidor y nada de esto influye en los puntos.
+const parametros = new URLSearchParams(location.search);
+const ARO_INICIAL = { z: 4.2, x: 0, viento: 0, amplitud: 0, periodo: 1, fase: 0 };
+const CAMBIO_MS = 240; // lo que tarda la canasta en ponerse en su sitio nuevo
+
+// ── 3D o plano ──
+// «cargando» mientras llega el 3D (medio segundo, normalmente); si falla o el móvil no puede, «plano».
+let modo = "plano";
+let escena3d = null;
+let empezarAlCargar = false;
+const lienzo3d = $("escena");
+function pasarAPlano() {
+  modo = "plano";
+  escena3d = null;
+  lienzo3d.hidden = true;
+  $("foto").style.transform = "";
+  medir();
+  if (empezarAlCargar) { empezarAlCargar = false; empezar(); }
+}
+if (!parametros.has("plano")) {
+  const contexto3d = (() => {
+    try { return lienzo3d.getContext("webgl2", {
+      alpha: true, antialias: true, premultipliedAlpha: true, depth: true, stencil: false, powerPreference: "high-performance",
+      failIfMajorPerformanceCaveat: !parametros.has("forzar3d"), // sin tarjeta gráfica el 3D va a tirones: mejor plano
+    }); } catch { return null; }
+  })();
+  if (contexto3d) {
+    modo = "cargando";
+    const plazo = setTimeout(() => { if (modo === "cargando") pasarAPlano(); }, 8000);
+    import("./escena-3d.js").then(({ crearEscena3D }) => {
+      if (modo !== "cargando") return;
+      escena3d = crearEscena3D({ lienzo: lienzo3d, contexto: contexto3d, foto: $("foto"), reducido, calidadFija: parametros.has("calidadfija") });
+      clearTimeout(plazo);
+      modo = "3d";
+      medir();
+      if (empezarAlCargar) { empezarAlCargar = false; empezar(); }
+    }).catch((e) => { console.warn("Sin 3D:", e); clearTimeout(plazo); pasarAPlano(); });
+    // si el móvil pierde la tarjeta gráfica (pasa al cambiar de app), se sigue jugando en plano
+    lienzo3d.addEventListener("webglcontextlost", (e) => { e.preventDefault(); pasarAPlano(); });
+  } else lienzo3d.hidden = true;
+} else lienzo3d.hidden = true;
 // Con ratón se arrastra; con el dedo se desliza. Nunca «desde abajo del todo»: en el iPhone eso cierra la web.
 const conRaton = matchMedia("(pointer: fine)").matches && !matchMedia("(pointer: coarse)").matches;
 const TEXTO = conRaton
@@ -34,9 +78,11 @@ function medir() {
   lienzo.width = Math.round(ancho * dpr); lienzo.height = Math.round(alto * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const foto = $("foto");
-  const quiere = ancho / alto > 1 ? "fondo-h.jpg" : "fondo-v.jpg";
+  // en 3D, la Catedral desenfocada (está lejos y la cámara enfoca la canasta); en plano, nítida
+  const quiere = `fondo-${ancho / alto > 1 ? "h" : "v"}${modo === "plano" ? "" : "-lejos"}.jpg`;
   if (foto.getAttribute("src") !== quiere) foto.setAttribute("src", quiere);
   calcularPiedra();
+  if (escena3d) escena3d.medir(ancho, alto, H, arriba, window.devicePixelRatio || 1);
 }
 // Siluetas de piedra de cada foto (fracciones del ancho y alto de la foto): la torre y, por debajo del tejado, la nave.
 // Las sombras solo se pintan dentro, para que no caigan sobre el cielo.
@@ -130,19 +176,30 @@ let fallosSeguidos = 0;
 let avisoDiez = false;
 let tiroPendiente = null; // tiro soltado justo antes de que salga el balón: sale en cuanto está
 
-const tiempoJuego = (ahora) => ahora - inicioReal;
+let relojFijo = null; // solo con ?depurar: para mirar un instante concreto de la partida
+const tiempoJuego = (ahora) => (relojFijo ?? ahora - inicioReal);
 
 // ── Dibujo ──
 function aroVisible(tj) {
   // mientras el último balón no se ha decidido, la canasta sigue donde estaba
   for (const v of vuelos) if (tj < v.res.fin * 1000 + 60) return { aro: v.res.aroDelTiro, mezcla: 1 };
-  if (aroAnterior && tj < cambioAro + 300) {
-    const k = Math.max(0, (tj - cambioAro) / 300);
+  if (aroAnterior && tj < cambioAro + CAMBIO_MS) {
+    const k = Math.max(0, (tj - cambioAro) / CAMBIO_MS);
     const e = 1 - (1 - k) ** 3;
     const a = aroAnterior, b = partida.aro;
     return { aro: { ...b, z: a.z + (b.z - a.z) * e, x: a.x + (b.x - a.x) * e }, mezcla: e, quieto: true };
   }
-  return { aro: partida ? partida.aro : { z: 4.2, x: 0, viento: 0, amplitud: 0, periodo: 1, fase: 0 } };
+  return { aro: partida ? partida.aro : ARO_INICIAL };
+}
+// Lo mismo para el 3D: de qué sitio de tiro a cuál va la cámara y por dónde va (e: 0 → a, 1 → b)
+function vistaAro(tj) {
+  for (const v of vuelos) if (tj < v.res.fin * 1000 + 60) return { a: v.res.aroDelTiro, b: v.res.aroDelTiro, e: 1 };
+  if (aroAnterior && tj < cambioAro + CAMBIO_MS) {
+    const k = Math.max(0, (tj - cambioAro) / CAMBIO_MS);
+    return { a: aroAnterior, b: partida.aro, e: reducido ? 1 : k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2 };
+  }
+  const aro = partida ? partida.aro : ARO_INICIAL;
+  return { a: aro, b: aro, e: 1 };
 }
 
 // Sombra suave que funciona también en Safari (que no tiene ctx.filter): se pinta la forma muy lejos, fuera de la
@@ -301,12 +358,33 @@ function posicionVuelo(v, tj) {
   };
 }
 
+let capaSucia = true;
 function dibujar(ahora) {
+  if (modo === "3d") {
+    const tj = estado === "juego" || estado === "fin" ? tiempoJuego(ahora) : 0;
+    const mano = manoVisible(tj);
+    escena3d.dibujar({ estado, ahora, tj, vista: vistaAro(tj), vuelos, mano, inicioCuenta, duracionCuenta });
+    // encima, en plano, solo la flecha de apuntar
+    if (capaSucia) { ctx.clearRect(0, 0, ancho, alto); capaSucia = false; }
+    if (arrastre && mano) {
+      const p = aPantalla(SALIDA.x, SALIDA.y + mano.alza, SALIDA.z);
+      dibujarArrastre({ ...p, r: R_BALON * p.e });
+      capaSucia = true;
+    }
+    return;
+  }
   ctx.clearRect(0, 0, ancho, alto);
+  if (modo === "cargando") return; // un instante, solo la foto
   ctx.save();
   ctx.globalAlpha = estado === "inicio" || estado === "fin" ? 0.3 : 1;
   dibujarEscena(ahora);
   ctx.restore();
+}
+// el balón en la mano: si se ve, cuánto ha subido (al salir) y cuánto se levanta al arrastrar
+function manoVisible(tj) {
+  if (!((estado === "juego" && tj >= partida.listoEn && tj <= DURACION_MS) || estado === "inicio" || estado === "cuenta")) return null;
+  const aparece = estado === "juego" ? Math.min(1, (tj - partida.listoEn) / 220) : 1;
+  return { sube: 1 - (1 - aparece) ** 3, alza: arrastre ? Math.min(0.06, arrastre.largo * 0.15) : 0 };
 }
 
 function dibujarEscena(ahora) {
@@ -332,12 +410,9 @@ function dibujarEscena(ahora) {
   for (const b of balones) if (b.z <= aro.z) dibujarBalon(b.x, b.y, b.z, b.giro, b.alfa);
 
   // el balón en la mano
-  if ((estado === "juego" && tj >= partida.listoEn && tj <= DURACION_MS) || estado === "inicio" || estado === "cuenta") {
-    const aparece = estado === "juego" ? Math.min(1, (tj - partida.listoEn) / 220) : 1;
-    const sube = (1 - (1 - aparece) ** 3);
-    let x = SALIDA.x, y = SALIDA.y - 0.5 * (1 - sube), z = SALIDA.z;
-    if (arrastre) y += Math.min(0.06, arrastre.largo * 0.15);
-    const b = dibujarBalon(x, y, z, 0, sube);
+  const mano = manoVisible(tj);
+  if (mano) {
+    const b = dibujarBalon(SALIDA.x, SALIDA.y - 0.5 * (1 - mano.sube) + mano.alza, SALIDA.z, 0, mano.sube);
     if (arrastre) dibujarArrastre(b);
   }
 }
@@ -378,7 +453,6 @@ function avisoNivel(texto) {
 }
 // por qué ha fallado: se mira dónde pasaba el balón al bajar a la altura del aro
 function porQueFallo(res) {
-  if (res.muro) return "Te has pasado";
   const tr = res.tray, aro = res.aroDelTiro;
   const ev = res.eventos || [];
   let pasoTablero = Infinity;
@@ -473,7 +547,7 @@ function programarEfectos(res, nivelAntes) {
       anunciar(`${res.limpia ? "Canasta limpia" : "Canasta"}. ${partida.puntos} puntos.`);
       fallosSeguidos = 0;
       aroAnterior = aro; cambioAro = res.fin * 1000 + 40;
-      const nivel = { 2: "La canasta cambia de sitio", 3: "Sopla el cierzo: apunta contra el viento", 4: "¡Ahora se mueve!" }[res.subeNivel];
+      const nivel = { 2: "Cada canasta, a otro sitio", 3: "Sopla el cierzo: apunta contra el viento", 4: "¡Ahora se mueve!" }[res.subeNivel];
       if (nivel) { avisoNivel(nivel); setTimeout(() => anunciar(nivel), 900); }
     } else {
       const motivo = porQueFallo(res);
@@ -515,19 +589,22 @@ lienzo.addEventListener("pointerup", soltar);
 lienzo.addEventListener("pointercancel", soltar);
 
 // ── Partida ──
-// Para probar: ?semilla=123 repite siempre la misma partida y ?depurar deja mirar el estado desde la consola.
-// En la liga de verdad la semilla la da el servidor y esto no influye en nada.
-const parametros = new URLSearchParams(location.search);
 function semillaNueva() {
   const fija = Number(parametros.get("semilla"));
   if (Number.isInteger(fija) && fija > 0) return fija >>> 0;
   const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0];
 }
 if (parametros.has("depurar")) {
-  window.__liga = { estado: () => ({ estado, tj: tiempoJuego(performance.now()), H, arriba, partida: partida && { listoEn: partida.listoEn, nivel: partida.nivel, aro: partida.aro, puntos: partida.puntos, canastas: partida.canastas } }) };
+  window.__liga = {
+    congelar: (ms) => { relojFijo = ms; }, soltar: () => { inicioReal = performance.now() - relojFijo; relojFijo = null; },
+    estado: () => ({ estado, modo, tj: tiempoJuego(performance.now()), H, arriba, partida: partida && { listoEn: partida.listoEn, nivel: partida.nivel, aro: partida.aro, puntos: partida.puntos, canastas: partida.canastas }, escena: escena3d && escena3d.info() }),
+  };
 }
+let inicioCuenta = 0, duracionCuenta = 0;
 function empezar() {
   abrirAudio();
+  if (modo === "cargando") { empezarAlCargar = true; $("jugar").textContent = "Cargando…"; return; }
+  $("jugar").textContent = "Jugar";
   partida = crearPartida(semillaNueva());
   vuelos = []; tiros = []; aroAnterior = null; fallosSeguidos = 0; redSacudida = -1e9; avisoDiez = false;
   if (tiroPendiente) { clearTimeout(tiroPendiente); tiroPendiente = null; }
@@ -538,6 +615,7 @@ function empezar() {
   estado = "cuenta";
   const cuenta = $("cuenta");
   const pasos = reducido ? ["¡Ya!"] : ["3", "2", "1", "¡Ya!"];
+  inicioCuenta = performance.now(); duracionCuenta = (pasos.length - 1) * 750; // en 3D, la cámara entra mientras tanto
   pasos.forEach((txt, i) => setTimeout(() => {
     cuenta.innerHTML = `<span>${txt}</span>`;
     sonar("cuenta", i === pasos.length - 1 ? 2 : 1);
@@ -596,6 +674,8 @@ $("compartir").addEventListener("click", async () => {
 
 // ── Bucle ──
 function bucle(ahora) {
+  // en 3D los balones viejos se retiran por tiempo (en plano lo hace el propio dibujo)
+  if (modo === "3d" && vuelos.length) { const tj = tiempoJuego(ahora); vuelos = vuelos.filter((v) => tj < v.res.fin * 1000 + 3200); }
   if (estado === "juego") {
     const tj = tiempoJuego(ahora);
     pintarHud(tj);

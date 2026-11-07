@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "liga:three": "esbuild scripts/three-liga-entrada.js --bundle --format=esm --minify --target=es2020 --legal-comments=inline --outfile=public/liga/vendor/three-liga.js"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",

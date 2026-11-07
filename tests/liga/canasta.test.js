@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  crearPartida, lanzar, rejugar, resumen, motivoInvalido, simularVuelo, velocidadSalida, proyectar, xAro, nuevoAro,
+  crearPartida, lanzar, rejugar, resumen, motivoInvalido, simularVuelo, velocidadSalida, proyectar, xAro, nuevoAro, nivelDe,
   DURACION_MS, LIMITES, SALIDA, ALTURA_ARO, MAX_TIROS, PASO,
 } from "../../public/liga/motor-canasta.js";
 import { jugarPartida, estadisticas } from "./bots.js";
@@ -89,12 +89,34 @@ describe("motor: tiros", () => {
     expect(r.canasta).toBe(false);
   });
 
-  it("si toca la fachada de la catedral, ya no entra", () => {
+  it("lo que pasa por encima del tablero sigue de largo: ni rebota en una pared invisible ni entra", () => {
     const aro = aroFijo();
-    for (let s = 6800; s <= 8000; s += 20) {
-      const r = simularVuelo(aro, 0, velocidadSalida(aro, s, 0));
-      if (r.muro) expect(r.canasta).toBe(false);
+    let porEncima = 0;
+    for (let s = 6000; s <= 8000; s += 20) {
+      const r = simularVuelo(aro, 0, velocidadSalida(aro, s, 0), { trayectoria: true });
+      const zFinal = r.tray[r.tray.length - 1];
+      if (zFinal > aro.z + 0.5) { porEncima++; expect(r.canasta).toBe(false); expect(r.tocoTablero).toBe(false); }
     }
+    expect(porEncima).toBeGreaterThan(0);
+  });
+
+  it("un balón que ya está detrás del tablero no vuelve a aparecer delante", () => {
+    const aro = aroFijo();
+    // sale 2 cm detrás de la cara del tablero y sube a su altura muy despacio hacia el fondo: con el choque de antes
+    // (que no miraba de dónde venía) aparecía de golpe delante del tablero
+    const r = simularVuelo({ ...aro, z: SALIDA.z - 0.38 - 0.02 }, 0, { x: 0, y: 7, z: 0.1 }, { trayectoria: true });
+    for (let i = 2; i < r.tray.length; i += 3) expect(r.tray[i]).toBeGreaterThanOrEqual(SALIDA.z - 1e-9);
+    expect(r.tocoTablero).toBe(false);
+  });
+
+  it("niveles: cambia de sitio desde la 1.ª canasta, viento desde la 6.ª y se mueve desde la 10.ª", () => {
+    expect([0, 1, 5, 6, 9, 10, 20].map(nivelDe)).toEqual([1, 2, 2, 3, 3, 4, 4]);
+    const p = crearPartida(31);
+    const antes = { ...p.aro };
+    const r = lanzar(p, { t: 400, s: largoHastaAro(p.aro), a: 0 });
+    expect(r.canasta).toBe(true);
+    expect(p.nivel).toBe(2);
+    expect(p.aro).not.toEqual(antes);
   });
 
   it("puntos: 2 por canasta, 3 si es limpia y +1 a partir de la tercera seguida", () => {

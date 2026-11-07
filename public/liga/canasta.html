@@ -37,6 +37,9 @@ button { font-family: inherit; touch-action: manipulation; }
   background: linear-gradient(to bottom, rgba(7,6,10,.72), rgba(7,6,10,.3) 16%, rgba(7,6,10,0) 28%, rgba(7,6,10,0) 62%, rgba(7,6,10,.7)); }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
 canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de pantalla), pero no se maneja con teclado */
+/* la escena 3D va entre la foto y el lienzo del dedo; aparece en cuanto está lista */
+#escena { pointer-events: none; opacity: 0; transition: opacity 500ms ease; }
+.fondo img { will-change: transform; }
 
 /* marcadores */
 .hud { position: fixed; z-index: 2; left: 0; right: 0; top: 0; pointer-events: none; text-shadow: 0 1px 3px rgba(7,6,10,.65), 0 0 14px rgba(7,6,10,.45);
@@ -121,8 +124,9 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
 </style>
 </head>
 <body>
-<div class="fondo" aria-hidden="true"><img id="foto" alt="" src="fondo-v.jpg" decoding="async"></div>
-<canvas id="lienzo" tabindex="-1" role="img" aria-label="Canasta colgada en la torre de la Catedral de León. Desliza hacia arriba desde abajo para tirar."></canvas>
+<div class="fondo" aria-hidden="true"><img id="foto" alt="" src="fondo-v-lejos.jpg" decoding="async"></div>
+<canvas id="escena" aria-hidden="true"></canvas>
+<canvas id="lienzo" tabindex="-1" role="img" aria-label="Canasta de baloncesto delante de la torre de la Catedral de León. Desliza hacia arriba desde abajo para tirar."></canvas>
 
 <div class="hud" id="hud" hidden>
   <div class="tiempo" id="tiempo">0:40<small>TIEMPO</small></div>
@@ -142,7 +146,7 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
     <li><b>↑</b><span id="regla-gesto">Desliza el balón hacia arriba. Cuanto más largo, más fuerte.</span></li>
     <li><b>+3</b><span>Canasta 2 puntos. Limpia, sin tocar aro ni tablero, 3. Tres seguidas: +1 por canasta.</span></li>
   </ul>
-  <p class="nota" id="nota-inicio">Cada 3 canastas se complica: la canasta cambia de sitio, sopla el cierzo y al final se mueve.</p>
+  <p class="nota" id="nota-inicio">Cada vez que metes, la canasta cambia de sitio. A la 6.ª sopla el cierzo y a la 10.ª empieza a moverse.</p>
   <div class="botones"><button class="principal" id="jugar" type="button">Jugar</button></div>
   <p class="prueba">Versión de prueba: los puntos aún no se guardan.</p>
 </section>
