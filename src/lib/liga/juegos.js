@@ -4,6 +4,7 @@
 import * as canasta from "../../../public/liga/motor-canasta.js";
 import * as tapas from "../../../public/liga/motor-tapas.js";
 import * as botillo from "../../../public/liga/motor-botillo.js";
+import * as cecina from "../../../public/liga/motor-cecina.js";
 
 export const JUEGOS = {
   canasta: {
@@ -44,9 +45,26 @@ export const JUEGOS = {
     duracionMs: botillo.DURACION_MS,
     // datos = { toques: [t, t, …] } (ms de partida en que se soltó cada botillo)
     repetir: (semilla, datos) => botillo.rejugar(semilla, datos?.toques),
-    ultimoMomento: (datos) => (Array.isArray(datos?.toques) && datos.toques.length ? Number(datos.toques[datos.toques.length - 1]) || 0 : 0),
+    ultimoMomento: ultimoToque,
+  },
+  cecina: {
+    id: "cecina",
+    nombre: "La loncha de cecina",
+    sitio: "Charcutería",
+    pagina: "/liga/cecina.html",
+    foto: "/liga/fondos/cecina-v.jpg",
+    habilidad: "Precisión",
+    version: cecina.VERSION,
+    duracionMs: cecina.DURACION_MS,
+    // datos = { toques: [t, t, …] } (ms de partida de cada corte)
+    repetir: (semilla, datos) => cecina.rejugar(semilla, datos?.toques),
+    ultimoMomento: ultimoToque,
   },
 };
+
+function ultimoToque(datos) {
+  return Array.isArray(datos?.toques) && datos.toques.length ? Number(datos.toques[datos.toques.length - 1]) || 0 : 0;
+}
 
 // tiempo del último [t, x] de una lista plana
 function ultimoPar(lista) {
@@ -55,7 +73,7 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo"];
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina"];
 
 export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 
