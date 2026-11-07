@@ -489,7 +489,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
 
   // Lo que ha escrito la IA (descripción y transporte) se recorta y pierde teléfonos, enlaces y trozos del prompt.
   // Si hay que tirar la descripción, va la ficha propia. Cada vez que salta se cuenta (ia_filtrada) para ver falsos positivos.
-  if (blindarParada(parada, descripcionReal(objetivo, parada.tipo, nombreZona))) enSegundoPlano(() => registrar('ia_filtrada'), 'estadísticas');
+  // A los eventos de la agenda comprobada se les dejan teléfonos y enlaces (inscripciones, entradas): son reales.
+  if (blindarParada(parada, descripcionReal(objetivo, parada.tipo, nombreZona), { deAgenda: Boolean(fuentes) && deLaAgenda })) enSegundoPlano(() => registrar('ia_filtrada'), 'estadísticas');
 
   return { parada, problemaConfigPlaces };
 }
