@@ -582,10 +582,16 @@ $("compartir").addEventListener("click", async () => {
   const r = resumen(partida);
   const texto = `He metido ${r.canastas} canastas en la Catedral de León: ${r.puntos} puntos. ¿Me superas?`;
   const url = location.href.split("#")[0];
-  try {
-    if (navigator.share) await navigator.share({ title: "Canasta en la Catedral", text: texto, url });
-    else { await navigator.clipboard.writeText(`${texto} ${url}`); $("compartir").textContent = "Copiado"; setTimeout(() => ($("compartir").textContent = "Compartir"), 1600); }
-  } catch { /* lo ha cerrado */ }
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(`${texto} ${url}`);
+      $("compartir").textContent = "Copiado";
+      setTimeout(() => ($("compartir").textContent = "Compartir"), 1600);
+    } catch { /* sin portapapeles: no hay nada más que hacer */ }
+  };
+  if (!navigator.share) return copiar();
+  try { await navigator.share({ title: "Canasta en la Catedral", text: texto, url }); }
+  catch (e) { if (e?.name !== "AbortError") copiar(); } // si lo cierra la persona, nada; si el móvil no deja, se copia
 });
 
 // ── Bucle ──
