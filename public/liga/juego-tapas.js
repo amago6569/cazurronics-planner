@@ -99,13 +99,6 @@ lienzo.addEventListener("pointermove", (e) => {
 const soltar = (e) => { if (e.pointerId === arrastrando) arrastrando = null; };
 lienzo.addEventListener("pointerup", soltar);
 lienzo.addEventListener("pointercancel", soltar);
-// con teclado también se puede (flechas)
-addEventListener("keydown", (e) => {
-  if (m.estado !== "juego" || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-  const base = xPendiente ?? (xMandada ?? 0) / 10000;
-  xPendiente = Math.max(-LIMITE_X, Math.min(LIMITE_X, base + (e.key === "ArrowLeft" ? -0.22 : 0.22)));
-  e.preventDefault();
-});
 
 // ── Lo que pasa cuando algo llega a la cazuela ──
 const NOMBRE = { croqueta: "Croqueta", morcilla: "Morcilla", chorizo: "Chorizo", cecina: "Cecina" };
