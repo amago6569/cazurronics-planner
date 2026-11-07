@@ -32,6 +32,7 @@ const nextConfig = {
         { source: "/", destination: "/inicio/index.html" },
         { source: "/planner", destination: "/inicio/planner.html" },
         { source: "/despensa", destination: "/inicio/despensa.html" },
+        { source: "/liga", destination: "/liga/index.html" }, // Liga Cazurra (de momento sin enlace desde la web)
       ],
     };
   },

@@ -5,6 +5,7 @@ import {
   crearPartida, lanzar, resumen, xAro, proyectar, motivoInvalido, nivelDe,
   DURACION_MS, LIMITES, SALIDA, R_BALON, R_ARO, ALTURA_ARO, ARO_TABLERO, TABLERO, PASO,
 } from "./motor-canasta.js";
+import { crearLiga, abrirEntrada, alCambiar } from "./cuenta.js";
 
 const $ = (id) => document.getElementById(id);
 const lienzo = $("lienzo");
@@ -601,14 +602,74 @@ if (parametros.has("depurar")) {
   };
 }
 let inicioCuenta = 0, duracionCuenta = 0;
-function empezar() {
+
+// ── Liga ──
+// Si has entrado y hoy toca este juego, la semilla la da el servidor y al acabar se mandan los tiros: él repite la partida
+// y se queda con sus puntos. Si no, se juega igual, de práctica.
+const liga = crearLiga("canasta");
+let oficial = false, empezando = false;
+const TEXTO_LIGA = {
+  sin_cuenta: "De práctica: no cuenta para la liga.",
+  sin_perfil: "Elige tu apodo para que cuente en la liga.",
+  cerrada: "La semana está cerrada: hasta el lunes, de práctica.",
+  no_toca: "Hoy este juego no puntúa en la liga: es de práctica.",
+  sin_intentos: "Ya has hecho tus 3 intentos de hoy. Sigue de práctica.",
+  error: "Sin conexión con la liga: jugarás de práctica.",
+};
+const ORD = (n) => `${n}.º`;
+function pintarLiga() {
+  const i = liga.info, e = $("liga-estado"), b = $("liga-entrar");
+  if (!i) { e.textContent = ""; b.hidden = true; return; }
+  if (i.oficial) {
+    const intento = 4 - i.quedan;
+    e.innerHTML = `Cuenta para la liga · <b>intento ${intento} de 3</b>${i.mejor != null ? ` · tu mejor hoy: ${i.mejor}` : ""}`;
+    e.classList.add("oficial");
+    b.hidden = true;
+    if (!empezando && !empezarAlCargar) $("jugar").textContent = "Jugar";
+    $("otra").textContent = `Otro intento (${intento} de 3)`;
+  } else {
+    e.textContent = TEXTO_LIGA[i.motivo] || "";
+    e.classList.remove("oficial");
+    b.hidden = !(i.motivo === "sin_cuenta" || i.motivo === "sin_perfil");
+    b.textContent = i.motivo === "sin_perfil" ? "Elegir mi apodo" : "Entrar para puntuar";
+    if (!empezando && !empezarAlCargar) $("jugar").textContent = "Jugar de práctica";
+    $("otra").textContent = "Otra de práctica";
+  }
+}
+async function prepararLiga() { await liga.preparar(); pintarLiga(); }
+$("liga-entrar").addEventListener("click", async () => {
+  if (await abrirEntrada({ motivo: "Para que tus partidas cuenten en el ranking." })) prepararLiga();
+});
+alCambiar(() => { if (estado === "inicio" || estado === "fin") prepararLiga(); });
+prepararLiga();
+
+async function empezar() {
+  if (empezando || estado === "cuenta" || estado === "juego") return;
   abrirAudio();
   if (modo === "cargando") { empezarAlCargar = true; $("jugar").textContent = "Cargando…"; return; }
+  // partida de liga: primero el servidor (gasta el intento y da la semilla)
+  oficial = false;
+  let semilla = null;
+  if (liga.info?.oficial) {
+    empezando = true;
+    const boton = estado === "fin" ? $("otra") : $("jugar"), texto = boton.textContent;
+    boton.textContent = "Preparando…"; boton.disabled = true;
+    try {
+      const r = await liga.empezar(true);
+      oficial = r.oficial; semilla = r.semilla;
+    } catch (e) {
+      empezando = false; boton.disabled = false; boton.textContent = texto;
+      await prepararLiga();
+      $(estado === "fin" ? "fin-liga" : "liga-estado").textContent = e.message;
+      return;
+    }
+    empezando = false; boton.disabled = false; boton.textContent = texto;
+  }
   $("jugar").textContent = "Jugar";
-  partida = crearPartida(semillaNueva());
+  partida = crearPartida(oficial ? semilla : semillaNueva());
   vuelos = []; tiros = []; aroAnterior = null; fallosSeguidos = 0; redSacudida = -1e9; avisoDiez = false;
   if (tiroPendiente) { clearTimeout(tiroPendiente); tiroPendiente = null; }
-  $("inicio").hidden = true; $("fin").hidden = true;
+  $("inicio").hidden = true; $("fin").hidden = true; $("volver").hidden = true;
   $("hud").hidden = false; pintarPuntos(false);
   $("tiempo").firstChild.nodeValue = "0:40";
   const p = $("pista"); p.hidden = false; p.style.opacity = ".85"; p.textContent = TEXTO.pista;
@@ -645,7 +706,28 @@ function terminar() {
   const rec = $("fin-record");
   rec.textContent = nuevo && r.puntos > 0 ? "¡Tu mejor marca!" : mejor ? `Tu mejor marca: ${mejor} puntos` : "";
   rec.classList.toggle("nuevo", nuevo && r.puntos > 0);
+  // liga: se manda lo que has hecho y el servidor pone los puntos
+  const fl = $("fin-liga");
+  fl.classList.remove("oficial");
+  if (oficial) {
+    fl.textContent = "Guardando en la liga…";
+    liga.terminar({ tiros: tiros.slice() }).then((res) => {
+      if (res?.estado === "valida") {
+        fl.classList.add("oficial");
+        const pos = [res.posicionDia && `vas <b>${ORD(res.posicionDia)}</b> hoy`, res.posicionSemana && `<b>${ORD(res.posicionSemana)}</b> en la semana`].filter(Boolean).join(" y ");
+        fl.innerHTML = `Guardado en la liga${pos ? `: ${pos}` : ""}.${res.quedan ? ` Te ${res.quedan === 1 ? "queda 1 intento" : `quedan ${res.quedan} intentos`}.` : " Ya no te quedan intentos hoy."}`;
+      } else if (res?.estado === "rechazada") {
+        fl.textContent = res.motivo;
+      } else {
+        fl.textContent = `${res?.error || "No se pudo guardar."} Lo volveremos a intentar al abrir la liga.`;
+      }
+      prepararLiga();
+    });
+  } else {
+    fl.textContent = liga.info && !liga.info.oficial ? TEXTO_LIGA[liga.info.motivo] || "" : "";
+  }
   setTimeout(() => {
+    $("volver").hidden = false;
     $("hud").hidden = true; $("viento").hidden = true; $("pista").hidden = true;
     const fin = $("fin"); fin.hidden = false; fin.classList.remove("entra"); void fin.offsetWidth; fin.classList.add("entra");
     $("otra").focus({ preventScroll: true });

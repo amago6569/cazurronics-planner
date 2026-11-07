@@ -109,7 +109,13 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
 
 .sonido { position: fixed; z-index: 6; right: max(8px, env(safe-area-inset-right, 0px)); top: max(8px, env(safe-area-inset-top, 0px)); width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(7,6,10,.45); color: var(--crema); display: grid; place-items: center; cursor: pointer; }
 .sonido svg { width: 22px; height: 22px; }
-.prueba { margin: -4px 0 0; text-align: center; font-size: 13px; color: var(--gris); }
+.liga-estado { margin: -4px 0 0; text-align: center; font-size: 14px; line-height: 1.4; color: var(--gris); min-height: 1.4em; }
+.liga-estado b { color: var(--crema); }
+.liga-estado.oficial { color: var(--oro); }
+a.secundario { display: grid; place-items: center; text-decoration: none; box-sizing: border-box; }
+.volver { position: fixed; z-index: 6; left: max(8px, env(safe-area-inset-left, 0px)); top: max(8px, env(safe-area-inset-top, 0px)); height: 44px; padding: 0 14px 0 8px; border-radius: 999px;
+  background: rgba(7,6,10,.45); color: var(--crema); display: inline-flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 800; text-decoration: none; }
+.volver svg { width: 22px; height: 22px; }
 /* móvil tumbado: el juego necesita la pantalla de pie */
 .gira { display: none; position: fixed; inset: 0; z-index: 10; background: var(--noche); place-items: center; align-content: center; gap: 14px; text-align: center; padding: 24px; }
 .gira svg { width: 56px; height: 56px; justify-self: center; }
@@ -138,6 +144,8 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
 <div class="cuenta" id="cuenta" aria-hidden="true"></div>
 <p class="oculto" id="anuncio" aria-live="polite"></p>
 
+<a class="volver" id="volver" href="/liga/" aria-label="Volver a la Liga Cazurra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Liga</a>
+
 <section class="capa entra" id="inicio" aria-labelledby="t-inicio">
   <p class="etiqueta">Liga Cazurra · Juego 1</p>
   <h1 class="titulo" id="t-inicio">Canasta en la Catedral</h1>
@@ -147,8 +155,11 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
     <li><b>+3</b><span>Canasta 2 puntos. Limpia, sin tocar aro ni tablero, 3. Tres seguidas: +1 por canasta.</span></li>
   </ul>
   <p class="nota" id="nota-inicio">Cada vez que metes, la canasta cambia de sitio. A la 6.ª sopla el cierzo y a la 10.ª empieza a moverse.</p>
-  <div class="botones"><button class="principal" id="jugar" type="button">Jugar</button></div>
-  <p class="prueba">Versión de prueba: los puntos aún no se guardan.</p>
+  <div class="botones">
+    <button class="principal" id="jugar" type="button">Jugar</button>
+    <button class="secundario" id="liga-entrar" type="button" hidden>Entrar para puntuar</button>
+  </div>
+  <p class="liga-estado" id="liga-estado" aria-live="polite"></p>
 </section>
 
 <section class="capa" id="fin" aria-labelledby="t-fin" hidden>
@@ -160,8 +171,10 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
     <div><dt>Mejor racha</dt><dd id="fin-racha">0</dd></div>
   </dl>
   <p class="record" id="fin-record"></p>
+  <p class="liga-estado" id="fin-liga" aria-live="polite"></p>
   <div class="botones">
     <button class="principal" id="otra" type="button">Otra vez</button>
+    <a class="secundario" id="ver-ranking" href="/liga/">Ver el ranking</a>
     <button class="secundario" id="compartir" type="button">Compartir</button>
   </div>
 </section>
