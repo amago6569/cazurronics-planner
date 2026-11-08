@@ -9,10 +9,30 @@ import { crearMarco, $, conRaton } from "./marco.js";
 
 const CADA_MS = 20; // como mucho un movimiento cada 20 ms
 // Medidas de un pendón leonés de verdad (en anchos de media pantalla): una vara de unos 6 m que el pendonero apoya
-// en la cuja (el cinto de cuero) a la altura de la cintura; arriba, el travesaño y la tela larga, que acaba en farpas.
+// en la cuja (el cinto de cuero) a la altura de la cintura. La tela va atada a lo largo de la parte de arriba de la
+// vara, como una bandera, y sale hacia el lado del viento: larga, a franjas, acabada en dos farpas.
 export const CUJA = 0.42; // altura de la cuja (donde gira el palo)
 export const LARGO = 2.55; // la vara, de la cuja a la punta
-export const TELA = { ancho: 0.62, alto: 1.75, desde: 0.14 }; // la tela cuelga del travesaño, a «desde» de la punta
+export const TELA = { alto: 0.8, largo: 1.3, desde: 0.06, farpa: 0.3 }; // atada al palo («alto»), sale «largo» hacia el lado; el corte de las farpas
+// Hacia dónde ondea: «bandera» es el ángulo con la vertical (0 = colgando; + = hacia la derecha). Lo da vista().
+let lado = 1;
+
+// Un punto de la tela, en metros de la plaza (x ya restada la cámara). u: de la vara (0) a la punta (1); w: de arriba
+// (0) a abajo (1). La tela no gira con la vara: la gravedad y el viento tiran de ella hacia su lado.
+export function puntoTela(v, u, w, s) {
+  const h = LARGO - TELA.desde - w * TELA.alto, xb = v.x - v.camara;
+  const px = xb + Math.sin(v.angulo) * h, py = CUJA + Math.cos(v.angulo) * h;
+  const f = 0.35 + Math.min(1, Math.abs(v.viento) * 2);
+  const fi = v.bandera * (1 - 0.12 * u) + 0.05 * f * u * Math.sin(s * 3.1 + u * 5 + w);
+  const L = TELA.largo * u;
+  return {
+    x: px + Math.sin(fi) * L,
+    y: Math.max(0.02, py - Math.cos(fi) * L),
+    z: 0.08 * f * u * Math.sin(u * 7 - s * 5.5 + w * 1.6) + 0.03 * f * Math.sin(w * 5 - s * 2.3) * u,
+  };
+}
+// Hasta dónde llega la tela en cada altura (las dos farpas: corte en V en la punta)
+export const finTela = (w) => 1 - TELA.farpa * (1 - Math.abs(2 * w - 1));
 
 function medirCampo(m) {
   const hw = Math.min(m.ancho / 2 - 8, m.H * 0.245);
@@ -134,8 +154,8 @@ export function vista(tj, ahora) {
   if (!partida || m.estado === "inicio") {
     // en el menú, se balancea solo, tranquilo
     const s = ahora / 1000;
-    camara = 0;
-    return { x: 0, camara: 0, angulo: 0.06 * Math.sin(s * 1.3) + 0.03 * Math.sin(s * 2.1), viento: 0.25 * Math.sin(s * 0.4), plomo: false, tj: s * 1000, aguante: 0 };
+    camara = 0.42; lado = 1;
+    return { x: 0, camara: 0.42, angulo: 0.06 * Math.sin(s * 1.3) + 0.03 * Math.sin(s * 2.1), viento: 0.25, bandera: 1.05 + 0.08 * Math.sin(s * 0.7), plomo: false, tj: s * 1000, aguante: 0 };
   }
   let angulo = partida.angulo;
   if (caida && tj < caida.t + LEVANTAR_MS) {
@@ -147,17 +167,22 @@ export function vista(tj, ahora) {
   const levantando = caida && tj < caida.t + LEVANTAR_MS;
   // la cámara va detrás del pendonero, sin dejar que se salga de la pantalla
   const dt = Math.min(0.1, Math.max(0, (ahora - (camaraAntes || ahora)) / 1000)); camaraAntes = ahora;
-  camara += (partida.x - camara) * (1 - Math.exp(-dt * 1.6));
-  camara = Math.max(partida.x - 0.55, Math.min(partida.x + 0.55, camara));
+  // la tela se va hacia el lado del viento (al cambiar, pasa por abajo)
+  const viento = vientoEn(partida, Math.max(0, tj));
+  lado += (Math.max(-1, Math.min(1, viento / 0.03)) - lado) * (1 - Math.exp(-dt * 1.5));
+  // la cámara mira un poco hacia donde ondea la tela, para que se vea entera (el dedo no depende de la cámara)
+  camara += (partida.x + 0.42 * lado - camara) * (1 - Math.exp(-dt * 1.6));
+  camara = Math.max(partida.x - 0.7, Math.min(partida.x + 0.7, camara));
+  const bandera = lado * (1.05 + 0.4 * Math.min(1, Math.abs(viento) / 0.4));
   return {
-    x: partida.x, camara, angulo, viento: vientoEn(partida, Math.max(0, tj)), tj,
+    x: partida.x, camara, angulo, viento, bandera, tj,
     plomo: !levantando && Math.abs(partida.angulo) < PLOMO,
     aguante: levantando ? 0 : tj - partida.dePieDesde,
   };
 }
 
 // ── Dibujo en plano ──
-const RAYAS = ["#a3122a", "#5b1f6e", "#a3122a", "#e2b546", "#a3122a", "#5b1f6e", "#a3122a"];
+const RAYAS = ["#b0142a", "#1f6b3a", "#b0142a", "#1f6b3a", "#b0142a"];
 function dibujarPlano(ctx, tj, ahora) {
   const v = vista(tj, ahora), { hw, yBase } = m.campo;
   // el suelo de la plaza (las losas corren con la cámara)
@@ -175,21 +200,19 @@ function dibujarPlano(ctx, tj, ahora) {
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(v.angulo);
   ctx.fillStyle = "#6a4426"; ctx.fillRect(-3, -LARGO * hw, 6, LARGO * hw + 8);
-  // travesaño, tela larga a franjas que acaba en dos farpas, y los cordones
-  const yT = -(LARGO - TELA.desde) * hw, an = TELA.ancho * hw, al = TELA.alto * hw;
-  ctx.fillStyle = "#4a2e18"; ctx.fillRect(-an / 2 - 6, yT - 3, an + 12, 5);
-  ctx.save(); ctx.translate(0, yT); ctx.rotate(-v.angulo * 0.75 - v.viento * 0.18);
-  const n = RAYAS.length, ond = (u) => Math.sin(ahora / 300 + u * 5) * 4 * (0.3 + Math.abs(v.viento));
-  for (let i = 0; i < n; i++) {
-    const x0 = -an / 2 + (i * an) / n, x1 = x0 + an / n, fondo = (x) => al * (0.78 + 0.22 * Math.abs((x / (an / 2))));
-    ctx.fillStyle = RAYAS[i];
-    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.lineTo(x1 + ond(i + 1), fondo(x1)); ctx.lineTo(x0 + ond(i), fondo(x0)); ctx.closePath(); ctx.fill();
-  }
-  ctx.strokeStyle = "#d9b25a"; ctx.lineWidth = 2;
-  for (const l of [-1, 1]) { ctx.beginPath(); ctx.moveTo(l * an / 2, 0); ctx.quadraticCurveTo(l * (an / 2 + 14), al * 0.4, l * (an / 2 + 8), al * 0.75); ctx.stroke(); }
-  ctx.restore();
   ctx.fillStyle = "#d9b25a"; ctx.fillRect(-2, -LARGO * hw - 22, 4, 22); ctx.fillRect(-9, -LARGO * hw - 16, 18, 4);
   ctx.restore();
+  // la tela, atada a la vara como una bandera: franjas a lo largo y dos farpas en la punta
+  const s = ahora / 1000, P = (u, w) => { const q = puntoTela(v, u, w, s); return [m.campo.cx + q.x * hw, yBase - q.y * hw]; };
+  const n = RAYAS.length, PASOS = 14;
+  for (let i = 0; i < n; i++) {
+    const w0 = i / n, w1 = (i + 1) / n;
+    ctx.fillStyle = RAYAS[i];
+    ctx.beginPath();
+    for (let k = 0; k <= PASOS; k++) { const [x, y] = P((k / PASOS) * finTela(w0), w0); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    for (let k = PASOS; k >= 0; k--) { const [x, y] = P((k / PASOS) * finTela(w1), w1); ctx.lineTo(x, y); }
+    ctx.closePath(); ctx.fill();
+  }
 }
 
 m.arrancar();

@@ -81,7 +81,9 @@ const supabase = {
   },
   async renovar(refresh) {
     const r = await pedir("/auth/v1/token?grant_type=refresh_token", { clave: PUBLICA, cuerpo: { refresh_token: refresh } });
-    if (!r.ok) throw new ErrorLiga(401, "Tu sesión ha caducado. Vuelve a entrar con tu correo.", `refresh ${r.status}`);
+    // Solo si Supabase dice que la clave no vale se cierra la sesión; un fallo suyo no te echa
+    if (r.status === 400 || r.status === 401 || r.status === 403) throw new ErrorLiga(401, "Tu sesión ha caducado. Vuelve a entrar con tu correo.", `refresh ${r.status}`);
+    if (!r.ok) throw new ErrorLiga(503, "La liga no responde ahora mismo. Prueba en un momento.", `refresh ${r.status}`);
     return sesionDe(r.json);
   },
   async usuario(access) {

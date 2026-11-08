@@ -208,7 +208,7 @@ async function cargarRanking() {
       let html = "", anterior = 0;
       for (const f of filas) {
         if (f.posicion > anterior + 1) html += `<li class="salto" aria-hidden="true">···</li>`;
-        html += `<li class="${f.yo ? "yo" : ""}"><span class="pos">${f.posicion}</span><span class="quien"><b>${esc(f.apodo)}</b><small>${esc(f.pueblo)}</small></span><span class="pts">${f.puntos}</span></li>`;
+        html += `<li class="${f.yo ? "yo" : ""}"><span class="pos">${f.posicion}</span><span class="quien"><b>${esc(f.apodo)}</b></span><span class="pts">${f.puntos}</span></li>`;
         anterior = f.posicion;
       }
       t.innerHTML = html;
@@ -229,7 +229,7 @@ function menuCuenta() {
   const m = document.createElement("div");
   m.className = "menu";
   m.innerHTML = `<div role="menu" aria-label="Tu cuenta"><p>${esc(correo() || "")}</p>
-    <button role="menuitem" data-a="perfil">Cambiar apodo o pueblo</button>
+    <button role="menuitem" data-a="perfil">Cambiar apodo</button>
     <button role="menuitem" data-a="salir">Salir</button>
     <button role="menuitem" data-a="borrar" class="peligro">Borrar mi cuenta</button></div>`;
   const cerrar = () => { m.remove(); removeEventListener("keydown", esc_); $("cuenta").focus(); };

@@ -84,12 +84,19 @@ describe("cuenta con correo", () => {
     expect((await pedir("POST", "renovar", { cuerpo: { refresh: sesion.refresh } })).status).toBe(401);
   });
 
+  it("ranking: no enseña el pueblo", async () => {
+    const { sesion } = await entrar("p@x.es");
+    await pedir("POST", "perfil", { token: sesion.access, cuerpo: { apodo: "Pepe", acepta: true } });
+    const r = await pedir("GET", "ranking?de=dia", { token: sesion.access });
+    for (const f of r.json.filas || []) expect(f).not.toHaveProperty("pueblo");
+  });
+
   it("perfil: pide 14 años y bases, y no deja apodos repetidos ni feos", async () => {
     const { sesion } = await entrar("d@x.es");
     const t = sesion.access;
     expect((await pedir("POST", "perfil", { token: t, cuerpo: { apodo: "Dani", pueblo: "León" } })).json.error).toMatch(/14 años/);
     expect((await pedir("POST", "perfil", { token: t, cuerpo: { apodo: "hijoputa", pueblo: "León", acepta: true } })).status).toBe(400);
-    expect((await pedir("POST", "perfil", { token: t, cuerpo: { apodo: "Dani", pueblo: "León", acepta: true } })).status).toBe(200);
+    expect((await pedir("POST", "perfil", { token: t, cuerpo: { apodo: "Dani", acepta: true } })).status).toBe(200); // sin pueblo
     const otro = (await entrar("e@x.es")).sesion.access;
     const r = await pedir("POST", "perfil", { token: otro, cuerpo: { apodo: "DANÍ", pueblo: "Boñar", acepta: true } });
     expect(r.status).toBe(409);

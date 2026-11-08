@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { dentroDelLimite } from "../../../../lib/freno";
 import { enMadrid, juegosDelDia, ligaAbierta, lunesDe, domingoDe } from "../../../../lib/liga/calendario";
 import { JUEGOS, EN_LIGA, comprobarPartida, semillaServidor } from "../../../../lib/liga/juegos";
-import { comprobarApodo, comprobarPueblo, limpiarCodigo, limpiarCorreo } from "../../../../lib/liga/perfil";
+import { comprobarApodo, limpiarCodigo, limpiarCorreo, SIN_PUEBLO } from "../../../../lib/liga/perfil";
 import { ErrorLiga, modoLiga, servicio } from "../../../../lib/liga/servicio";
 
 // ============ LIGA CAZURRA: la API ============
@@ -10,7 +10,7 @@ import { ErrorLiga, modoLiga, servicio } from "../../../../lib/liga/servicio";
 // POST /api/liga/entrar   { email, codigo }             → { sesion, perfil }
 // POST /api/liga/renovar  { refresh }                   → { sesion }
 // GET  /api/liga/hoy                                    → juegos de hoy, intentos que quedan y tu perfil
-// POST /api/liga/perfil   { apodo, pueblo, acepta, novedades }
+// POST /api/liga/perfil   { apodo, acepta, novedades }   (el pueblo ya no se pide)
 // POST /api/liga/empezar  { juego }                     → { partida, semilla, intento, quedan }
 // POST /api/liga/terminar { partida, datos }            → puntos comprobados aquí, no los del móvil
 // GET  /api/liga/ranking?de=dia|semana
@@ -105,12 +105,10 @@ const ACCIONES = {
     const b = await cuerpo(request);
     const a = comprobarApodo(b.apodo);
     if (a.error) throw new ErrorLiga(400, a.error);
-    const p = comprobarPueblo(b.pueblo);
-    if (p.error) throw new ErrorLiga(400, p.error);
     frenar(await dentroDelLimite(request, "liga-perfil", 20, 900));
     const previo = await s.perfil(u.id);
     if (!previo && b.acepta !== true) throw new ErrorLiga(400, "Para jugar tienes que tener 14 años o más y aceptar las bases.");
-    await s.guardarPerfil(u.id, { apodo: a.apodo, clave: a.clave, pueblo: p.pueblo, novedades: b.novedades === true }, !previo);
+    await s.guardarPerfil(u.id, { apodo: a.apodo, clave: a.clave, pueblo: previo?.pueblo || SIN_PUEBLO, novedades: b.novedades === true }, !previo);
     return responder({ perfil: await s.perfil(u.id) });
   },
 
@@ -165,7 +163,7 @@ const ACCIONES = {
     const desde = de === "semana" ? lunesDe(dia) : dia, hasta = de === "semana" ? domingoDe(dia) : dia;
     const filas = await s.ranking(desde, hasta, LIMITE_RANKING, u?.id);
     return responder(
-      { de, desde, hasta, filas: filas.map((f) => ({ posicion: Number(f.posicion), apodo: f.apodo, pueblo: f.pueblo, puntos: Number(f.puntos), yo: Boolean(f.yo) })) },
+      { de, desde, hasta, filas: filas.map((f) => ({ posicion: Number(f.posicion), apodo: f.apodo, puntos: Number(f.puntos), yo: Boolean(f.yo) })) },
       200,
       u ? "no-store" : "public, s-maxage=20, stale-while-revalidate=40", // sin sesión, Vercel lo guarda 20 s
     );

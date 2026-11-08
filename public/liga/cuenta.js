@@ -1,6 +1,7 @@
 // ============ LIGA CAZURRA: tu cuenta (para todas las páginas de la liga) ============
-// Entrar con el correo (código de 6 cifras), apodo y pueblo, y las llamadas a /api/liga con la sesión.
-// La sesión se guarda en este navegador (localStorage) y se renueva sola cada hora.
+// Entrar con el correo (código de 6 cifras) y apodo, y las llamadas a /api/liga con la sesión.
+// La sesión se guarda en este navegador (localStorage) y se renueva sola: en el mismo dispositivo no hay que volver a
+// entrar. Solo se borra si tú sales o si el servidor dice que la sesión ya no vale (no por un fallo de red).
 // Sin cuenta se puede jugar igual, pero de práctica: no suma en la liga.
 
 const CLAVE = "liga-sesion";
@@ -37,7 +38,12 @@ async function renovar() {
   renovando ||= (async () => {
     try {
       const r = await fetch(`${API}/renovar`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ refresh: s.refresh }) });
-      if (r.status === 401) { guardar(null); avisar(); return null; }
+      if (r.status === 401) {
+        // otra pestaña o página pudo renovarla justo antes (la clave vieja ya no vale): se usa la guardada
+        const otra = leer();
+        if (otra && otra.refresh !== s.refresh) { memoria = otra; return otra; }
+        guardar(null); avisar(); return null;
+      }
       if (!r.ok) return s; // fallo de red o del servidor: se reintenta en la siguiente llamada
       const { sesion } = await r.json();
       guardar({ ...sesion, email: sesion.usuario?.email || s.email });
@@ -84,7 +90,7 @@ async function entrarConCodigo(email, codigo) {
 }
 
 // ─────────────────────────── La hoja para entrar ───────────────────────────
-// Una pregunta por pantalla: correo → código → (si es nuevo) apodo, pueblo y casillas.
+// Una pregunta por pantalla: correo → código → (si es nuevo) apodo y casillas.
 const CSS = `
 .hoja-fondo { position: fixed; inset: 0; z-index: 50; background: rgba(7,6,10,.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   display: flex; align-items: flex-end; justify-content: center; animation: hoja-fondo 220ms ease both; }
@@ -128,13 +134,8 @@ function estilo() {
 
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-// Pueblos para sugerir (se puede escribir cualquiera)
-const PUEBLOS = ["León", "San Andrés del Rabanedo", "Villaquilambre", "Ponferrada", "Astorga", "La Bañeza", "Valencia de Don Juan", "Sahagún", "La Robla",
-  "Boñar", "Cistierna", "Villablino", "Bembibre", "Riaño", "Valverde de la Virgen", "Sariegos", "Santovenia de la Valdoncina", "Onzonilla", "Villarejo de Órbigo",
-  "Hospital de Órbigo", "Mansilla de las Mulas", "Valencia de Don Juan", "Cacabelos", "Villafranca del Bierzo", "Fuera de León"];
-
 // Abre la hoja. Devuelve una promesa que se cumple con true si acaba con cuenta y perfil, o false si la cierra.
-// motivo: una frase arriba («Para que cuente en la liga…»). perfilActual: para cambiar apodo/pueblo.
+// motivo: una frase arriba («Para que cuente en la liga…»). perfilActual: para cambiar el apodo.
 export function abrirEntrada({ motivo = "", perfilActual = null, soloPerfil = false } = {}) {
   estilo();
   return new Promise((resolver) => {
@@ -238,8 +239,6 @@ export function abrirEntrada({ motivo = "", perfilActual = null, soloPerfil = fa
         <p>${nuevo ? "Así sales en el ranking. Tu correo no lo ve nadie." : "Así sales en el ranking."}</p>
         <form class="fila" novalidate>
           <label class="campo">Apodo (3 a 16 letras)<input type="text" name="apodo" maxlength="16" autocomplete="nickname" autocapitalize="words" spellcheck="false" required value="${esc(actual?.apodo || "")}"></label>
-          <label class="campo">Pueblo o barrio<input type="text" name="pueblo" maxlength="40" list="liga-pueblos" autocomplete="address-level2" required value="${esc(actual?.pueblo || "")}" placeholder="León, Boñar… o «Fuera de León»"></label>
-          <datalist id="liga-pueblos">${[...new Set(PUEBLOS)].map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
           ${nuevo ? `<label class="casilla"><input type="checkbox" name="acepta"><span>Tengo 14 años o más y acepto las <a href="/liga/bases.html" target="_blank" rel="noopener">bases de la liga</a>.</span></label>` : ""}
           <label class="casilla"><input type="checkbox" name="novedades" ${actual?.novedades ? "checked" : ""}><span>Quiero que me escribáis cuando haya novedades de la liga (opcional).</span></label>
           <div class="error" role="alert"></div>
@@ -254,7 +253,7 @@ export function abrirEntrada({ motivo = "", perfilActual = null, soloPerfil = fa
           const texto = b.textContent;
           ocupado(b, true, "Guardando…");
           try {
-            await guardarPerfil({ apodo: f.apodo.value, pueblo: f.pueblo.value, acepta: nuevo ? f.acepta.checked : undefined, novedades: f.novedades.checked });
+            await guardarPerfil({ apodo: f.apodo.value, acepta: nuevo ? f.acepta.checked : undefined, novedades: f.novedades.checked });
             avisar();
             cerrar(true);
           } catch (er) { ocupado(b, false, texto); err.textContent = er.message; }

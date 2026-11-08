@@ -52,6 +52,9 @@ export function comprobarApodo(texto) {
 
 export const FUERA = "Fuera de León";
 
+// El pueblo ya no se pide (Alejandro, 8-11-2026). La columna de la base lo exige, así que va este relleno, que no se enseña.
+export const SIN_PUEBLO = "sin indicar";
+
 export function comprobarPueblo(texto) {
   const pueblo = String(texto ?? "").normalize("NFC").trim().replace(/\s+/g, " ");
   if (pueblo.length < 2) return { error: "Dinos tu pueblo o barrio (o «Fuera de León»)." };

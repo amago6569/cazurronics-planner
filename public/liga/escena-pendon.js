@@ -2,11 +2,11 @@
 // juego-pendon.js, la misma que usa el dibujo plano.
 //
 // La plaza de San Marcos al atardecer. Un pendón leonés como los de las romerías: la vara larga de madera apoyada en la
-// cuja del pendonero, el remate dorado arriba, el travesaño, la tela larga a franjas carmesí y morado con su galón
-// dorado, que acaba en dos farpas y ondea con el viento, y los cordones con sus borlas. Lo lleva un pendonero con
+// cuja del pendonero, el remate dorado arriba y la tela atada a la vara como una bandera, larga, a franjas carmesí y
+// verde, que acaba en dos farpas y ondea hacia el lado del viento. Lo lleva un pendonero con
 // camisa blanca, chaleco negro y faja roja. La cámara le sigue por la plaza.
 import { crearBase, textura, ruido2d, THREE } from "./base-3d.js";
-import { CUJA, LARGO, TELA } from "./juego-pendon.js";
+import { CUJA, LARGO, TELA, puntoTela } from "./juego-pendon.js";
 
 const D = 6.8, YC = 1.3;
 
@@ -81,49 +81,36 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
   const oro = new THREE.MeshStandardMaterial({ color: 0xd9a940, metalness: 1, roughness: 0.3 });
   const vara = malla(new THREE.CylinderGeometry(0.02, 0.03, LARGO + 0.05, 12), madera, 0, (LARGO - 0.05) / 2, 0, pendon);
   vara.receiveShadow = true;
-  const yT = LARGO - TELA.desde;
-  const travesano = malla(new THREE.CylinderGeometry(0.012, 0.012, TELA.ancho + 0.1, 8), madera, 0, yT, 0, pendon);
-  travesano.rotation.z = Math.PI / 2;
-  for (const l of [-1, 1]) malla(new THREE.SphereGeometry(0.022, 12, 8), oro, l * (TELA.ancho / 2 + 0.06), yT, 0, pendon);
   // el remate de arriba: bola y cruz doradas
   malla(new THREE.SphereGeometry(0.035, 14, 10), oro, 0, LARGO + 0.01, 0, pendon);
   malla(new THREE.BoxGeometry(0.022, 0.17, 0.022), oro, 0, LARGO + 0.12, 0, pendon);
   malla(new THREE.BoxGeometry(0.1, 0.02, 0.02), oro, 0, LARGO + 0.15, 0, pendon);
 
-  // la tela: franjas carmesí y morado (con una dorada en medio), galón arriba y dos farpas abajo
-  const FRANJAS = ["#a3122a", "#5b1f6e", "#a3122a", "#e2b546", "#a3122a", "#5b1f6e", "#a3122a"];
-  const tex = textura(256, 1024, (g, w, h) => {
-    const r = ruido2d(9, 5, w, h);
-    g.beginPath(); // silueta: rectángulo con un corte en V abajo (dos farpas)
-    g.moveTo(0, 0); g.lineTo(w, 0); g.lineTo(w, h); g.lineTo(w / 2, h * 0.8); g.lineTo(0, h); g.closePath(); g.clip();
-    FRANJAS.forEach((c, i) => { g.fillStyle = c; g.fillRect((i * w) / FRANJAS.length, 0, w / FRANJAS.length + 1, h); });
-    // grano de la tela (damasco) y pliegues verticales
-    const im = g.getImageData(0, 0, w, h);
+  // la tela, atada a la vara como una bandera: franjas carmesí y verde a lo largo, separadas por un hilo dorado, el
+  // galón junto a la vara y el corte de las dos farpas en la punta. Ancho de la textura = largo de la tela.
+  const FRANJAS = ["#b0142a", "#1f6b3a", "#b0142a", "#1f6b3a", "#b0142a"];
+  const tex = textura(1024, 256, (g, w, h) => {
+    const r = ruido2d(5, 9, w, h);
+    g.beginPath(); // silueta: corte en V en la punta (finTela)
+    g.moveTo(0, 0); g.lineTo(w, 0); g.lineTo(w * (1 - TELA.farpa), h / 2); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.clip();
+    const fr = h / FRANJAS.length;
+    FRANJAS.forEach((c, i) => { g.fillStyle = c; g.fillRect(0, i * fr, w, fr + 1); });
+    const im = g.getImageData(0, 0, w, h); // grano de la tela (damasco) y pliegues
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4; if (!im.data[i + 3]) continue;
-      const k = 0.82 + 0.22 * r(x, y) + 0.06 * Math.sin(x * 0.35);
+      const k = 0.82 + 0.22 * r(x, y) + 0.05 * Math.sin(x * 0.09);
       im.data[i] *= k; im.data[i + 1] *= k; im.data[i + 2] *= k;
     }
     g.putImageData(im, 0, 0);
-    g.fillStyle = "#d4a63e"; g.fillRect(0, 0, w, 22); // galón de arriba
-    g.fillStyle = "rgba(212,166,62,.9)"; g.fillRect(0, 26, w, 5);
+    g.fillStyle = "rgba(230,200,120,.85)";
+    for (let i = 1; i < FRANJAS.length; i++) g.fillRect(0, i * fr - 1.5, w, 3);
+    g.fillStyle = "#d4a63e"; g.fillRect(0, 0, 18, h); // galón junto a la vara
   });
-  const SX = 16, SY = 40;
-  const geoTela = new THREE.PlaneGeometry(TELA.ancho, TELA.alto, SX, SY);
-  geoTela.translate(0, -TELA.alto / 2, 0);
-  const reposo = geoTela.attributes.position.array.slice();
+  const SX = 30, SY = 10;
+  const geoTela = new THREE.PlaneGeometry(1, 1, SX, SY);
   const tela = new THREE.Mesh(geoTela, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.75 }));
-  tela.castShadow = true;
-  const colgado = new THREE.Group(); colgado.position.y = yT; colgado.add(tela);
-  pendon.add(colgado);
-  // cordones con borlas, de las puntas del travesaño
-  const matCordon = new THREE.MeshStandardMaterial({ color: 0xc89a3a, roughness: 0.5, metalness: 0.3 });
-  for (const l of [-1, 1]) {
-    const x0 = l * (TELA.ancho / 2 + 0.06);
-    const curva = new THREE.CatmullRomCurve3([new THREE.Vector3(x0, 0, 0), new THREE.Vector3(x0 + l * 0.06, -0.5, 0.04), new THREE.Vector3(x0 + l * 0.02, -1.0, 0.06)]);
-    malla(new THREE.TubeGeometry(curva, 24, 0.008, 6), matCordon, 0, 0, 0, colgado);
-    malla(new THREE.ConeGeometry(0.035, 0.12, 12), matCordon, x0 + l * 0.02, -1.05, 0.06, colgado);
-  }
+  tela.castShadow = true; tela.frustumCulled = false;
+  escena.add(tela);
 
   // la línea de plomo: un hilo dorado que aparece cuando va derecho
   const hilo = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, LARGO + 0.2, 6), new THREE.MeshBasicMaterial({ color: 0xe9b44c, transparent: true, opacity: 0 }));
@@ -154,13 +141,11 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
       b.brazo.scale.set(1, dir.length(), 1);
       b.brazo.quaternion.setFromUnitVectors(arriba, dir.normalize());
     }
-    // la tela cuelga (casi) hacia abajo aunque la vara se incline; el viento la empuja y la hace ondear
-    colgado.rotation.z = v.angulo * 0.8 - v.viento * 0.2;
-    const p = geoTela.attributes.position, s = d.ahora / 1000, fuerza = 0.3 + Math.min(1, Math.abs(v.viento) * 1.5);
+    // la tela: cada punto sale de puntoTela (lo mismo que en plano)
+    const p = geoTela.attributes.position, sg = reducido ? 0 : d.ahora / 1000;
     for (let j = 0; j <= SY; j++) for (let i = 0; i <= SX; i++) {
-      const k = j * (SX + 1) + i, u = i / SX, w = j / SY; // w: 0 arriba, 1 abajo
-      const z = reducido ? 0 : 0.05 * fuerza * w * Math.sin(u * 6 - s * 4.5 + w * 3) + 0.03 * fuerza * w * Math.sin(w * 7 - s * 2.6);
-      p.setXYZ(k, reposo[k * 3] + (reducido ? 0 : 0.03 * fuerza * w * w * Math.sin(s * 1.7 + w * 2)), reposo[k * 3 + 1], z);
+      const q = puntoTela(v, i / SX, j / SY, sg);
+      p.setXYZ(j * (SX + 1) + i, q.x, q.y, reducido ? 0 : q.z);
     }
     p.needsUpdate = true;
     geoTela.computeVertexNormals();
