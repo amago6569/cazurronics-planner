@@ -6,6 +6,7 @@ import * as tapas from "../../../public/liga/motor-tapas.js";
 import * as botillo from "../../../public/liga/motor-botillo.js";
 import * as cecina from "../../../public/liga/motor-cecina.js";
 import * as vidriera from "../../../public/liga/motor-vidriera.js";
+import * as pendon from "../../../public/liga/motor-pendon.js";
 
 export const JUEGOS = {
   canasta: {
@@ -74,6 +75,20 @@ export const JUEGOS = {
     repetir: (semilla, datos) => vidriera.rejugar(semilla, datos?.toques),
     ultimoMomento: (datos) => ultimoPar(datos?.toques),
   },
+  pendon: {
+    id: "pendon",
+    nombre: "El Pendón",
+    sitio: "San Marcos",
+    pagina: "/liga/pendon.html",
+    foto: "/liga/fondos/pendon-v.jpg",
+    habilidad: "Equilibrio",
+    version: pendon.VERSION,
+    duracionMs: pendon.DURACION_MS,
+    maxBytes: 40000, // como mucho 50 movimientos por segundo
+    // datos = { movimientos: [t, x, t, x, …] } (ms de partida y posición de la base ×10000)
+    repetir: (semilla, datos) => pendon.rejugar(semilla, datos?.movimientos),
+    ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
+  },
 };
 
 function ultimoToque(datos) {
@@ -87,7 +102,7 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera"];
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon"];
 
 export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 
