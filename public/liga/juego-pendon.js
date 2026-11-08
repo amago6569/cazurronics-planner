@@ -8,19 +8,23 @@ import {
 import { crearMarco, $, conRaton } from "./marco.js";
 
 const CADA_MS = 20; // como mucho un movimiento cada 20 ms
-export const LARGO = 1.9; // el palo, en anchos de media plaza (lo que va de x = 0 a x = 1)
-export const TELA = { ancho: 0.72, alto: 1.12, desde: 0.18 }; // la tela cuelga del travesaño, a «desde» de la punta
+// Medidas de un pendón leonés de verdad (en anchos de media pantalla): una vara de unos 6 m que el pendonero apoya
+// en la cuja (el cinto de cuero) a la altura de la cintura; arriba, el travesaño y la tela larga, que acaba en farpas.
+export const CUJA = 0.42; // altura de la cuja (donde gira el palo)
+export const LARGO = 2.55; // la vara, de la cuja a la punta
+export const TELA = { ancho: 0.62, alto: 1.75, desde: 0.14 }; // la tela cuelga del travesaño, a «desde» de la punta
 
 function medirCampo(m) {
-  const hw = Math.min(m.ancho / 2 - 8, m.H * 0.3);
-  m.campo = { cx: m.ancho / 2, hw, yBase: m.arriba + m.H * 0.87 };
+  const hw = Math.min(m.ancho / 2 - 8, m.H * 0.245);
+  m.campo = { cx: m.ancho / 2, hw, yBase: m.arriba + m.H * 0.92 };
 }
-const aPantalla = (x, y) => ({ x: m.campo.cx + x * m.campo.hw, y: m.campo.yBase - y * m.campo.hw });
+const aPantalla = (x, y) => ({ x: m.campo.cx + (x - camara) * m.campo.hw, y: m.campo.yBase - y * m.campo.hw });
 
 let partida = null;
 let ultimoEnvio = -1e9, xMandada = null, xPendiente = null;
 let caida = null; // { t, lado } la última vez que se cayó
 let avisoDiez = false, rachaViento = 0;
+let camara = 0, camaraAntes = 0; // la plaza es ancha: la cámara sigue al pendonero
 
 const TEXTO = conRaton
   ? { pista: "Mueve el ratón hacia donde se inclina para que no se caiga.", regla: "Mueve el ratón y la base del palo le sigue." }
@@ -44,7 +48,7 @@ const m = crearMarco({
   cargar3d: () => import("./escena-pendon.js"),
   medir: medirCampo,
   empezar(p) {
-    partida = p; ultimoEnvio = -1e9; xMandada = null; xPendiente = null; caida = null; avisoDiez = false; rachaViento = 0;
+    partida = p; camara = 0; ultimoEnvio = -1e9; xMandada = null; xPendiente = null; caida = null; avisoDiez = false; rachaViento = 0;
     ancla = null;
   },
   actualizar(tj) {
@@ -76,7 +80,7 @@ function querer(clientX) {
   if (m.estado !== "juego" || !partida) return;
   if (!ancla) ancla = { px: clientX, x: xMandada === null ? partida.objetivo : xMandada / 10000 };
   let x = ancla.x + (clientX - ancla.px) / m.campo.hw;
-  if (x > LIMITE_X || x < -LIMITE_X) { x = Math.max(-LIMITE_X, Math.min(LIMITE_X, x)); ancla = { px: clientX, x }; } // contra la pared: sin holgura al volver
+  if (x > LIMITE_X || x < -LIMITE_X) { x = Math.max(-LIMITE_X, Math.min(LIMITE_X, x)); ancla = { px: clientX, x }; } // (la plaza no se acaba en la práctica)
   xPendiente = x;
   const tj = m.tj();
   if (tj - ultimoEnvio >= CADA_MS) enviar(tj);
@@ -107,7 +111,7 @@ lienzo.addEventListener("pointerup", soltar);
 lienzo.addEventListener("pointercancel", soltar);
 
 function efecto(e) {
-  const punta = aPantalla(partida.x, LARGO * 0.75);
+  const punta = aPantalla(partida.x, CUJA + LARGO * 0.6);
   if (e.tipo === "cae") {
     caida = { t: e.t, lado: e.lado };
     m.sonar("cae"); m.vibrar(60);
@@ -130,7 +134,8 @@ export function vista(tj, ahora) {
   if (!partida || m.estado === "inicio") {
     // en el menú, se balancea solo, tranquilo
     const s = ahora / 1000;
-    return { x: 0, angulo: 0.06 * Math.sin(s * 1.3) + 0.03 * Math.sin(s * 2.1), viento: 0.25 * Math.sin(s * 0.4), plomo: false, tj: s * 1000, aguante: 0 };
+    camara = 0;
+    return { x: 0, camara: 0, angulo: 0.06 * Math.sin(s * 1.3) + 0.03 * Math.sin(s * 2.1), viento: 0.25 * Math.sin(s * 0.4), plomo: false, tj: s * 1000, aguante: 0 };
   }
   let angulo = partida.angulo;
   if (caida && tj < caida.t + LEVANTAR_MS) {
@@ -140,43 +145,51 @@ export function vista(tj, ahora) {
     else { const u = (s - 600) / (LEVANTAR_MS - 600); angulo = caida.lado * 1.45 * (1 - u) * (1 - u) * (1 + 2 * u); } // lo levantan
   }
   const levantando = caida && tj < caida.t + LEVANTAR_MS;
+  // la cámara va detrás del pendonero, sin dejar que se salga de la pantalla
+  const dt = Math.min(0.1, Math.max(0, (ahora - (camaraAntes || ahora)) / 1000)); camaraAntes = ahora;
+  camara += (partida.x - camara) * (1 - Math.exp(-dt * 1.6));
+  camara = Math.max(partida.x - 0.55, Math.min(partida.x + 0.55, camara));
   return {
-    x: partida.x, angulo, viento: vientoEn(partida, Math.max(0, tj)), tj,
+    x: partida.x, camara, angulo, viento: vientoEn(partida, Math.max(0, tj)), tj,
     plomo: !levantando && Math.abs(partida.angulo) < PLOMO,
     aguante: levantando ? 0 : tj - partida.dePieDesde,
   };
 }
 
 // ── Dibujo en plano ──
-const RAYAS = ["#a3122a", "#5b1f6e"];
+const RAYAS = ["#a3122a", "#5b1f6e", "#a3122a", "#e2b546", "#a3122a", "#5b1f6e", "#a3122a"];
 function dibujarPlano(ctx, tj, ahora) {
   const v = vista(tj, ahora), { hw, yBase } = m.campo;
-  // el suelo de la plaza
+  // el suelo de la plaza (las losas corren con la cámara)
   ctx.fillStyle = "rgba(60,48,40,.55)"; ctx.fillRect(0, yBase, m.ancho, m.alto - yBase);
-  const b = aPantalla(v.x, 0);
+  ctx.fillStyle = "rgba(255,255,255,.12)";
+  for (let k = -12; k <= 12; k++) { const x = m.campo.cx + (k * 0.5 - (v.camara % 0.5)) * hw; ctx.fillRect(x, yBase, 2, m.alto - yBase); }
+  const suelo = aPantalla(v.x, 0), b = aPantalla(v.x, CUJA);
+  // el pendonero (silueta)
+  ctx.fillStyle = "#1c1612"; ctx.fillRect(suelo.x - 10, b.y, 7, suelo.y - b.y); ctx.fillRect(suelo.x + 3, b.y, 7, suelo.y - b.y);
+  ctx.fillStyle = "#efe9de"; ctx.fillRect(suelo.x - 12, b.y - 0.26 * hw, 24, 0.26 * hw);
+  ctx.fillStyle = "#b3121e"; ctx.fillRect(suelo.x - 12, b.y - 6, 24, 8);
+  ctx.fillStyle = "#e0b48c"; ctx.beginPath(); ctx.arc(suelo.x, b.y - 0.32 * hw, 0.055 * hw, 0, Math.PI * 2); ctx.fill();
   // la línea de plomo (dorada) cuando va derecho
   if (v.plomo) { ctx.strokeStyle = "rgba(233,180,76,.5)"; ctx.setLineDash([6, 8]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x, b.y - LARGO * hw); ctx.stroke(); ctx.setLineDash([]); }
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(v.angulo);
-  // el palo
-  ctx.fillStyle = "#6a4426"; ctx.fillRect(-3, -LARGO * hw, 6, LARGO * hw);
-  // travesaño y tela (a rayas, con las puntas abajo)
+  ctx.fillStyle = "#6a4426"; ctx.fillRect(-3, -LARGO * hw, 6, LARGO * hw + 8);
+  // travesaño, tela larga a franjas que acaba en dos farpas, y los cordones
   const yT = -(LARGO - TELA.desde) * hw, an = TELA.ancho * hw, al = TELA.alto * hw;
-  ctx.fillStyle = "#4a2e18"; ctx.fillRect(-an / 2 - 4, yT - 3, an + 8, 5);
-  ctx.save(); ctx.translate(0, yT); ctx.rotate(-v.angulo * 0.7 + v.viento * 0.25);
-  const n = 6;
+  ctx.fillStyle = "#4a2e18"; ctx.fillRect(-an / 2 - 6, yT - 3, an + 12, 5);
+  ctx.save(); ctx.translate(0, yT); ctx.rotate(-v.angulo * 0.75 - v.viento * 0.18);
+  const n = RAYAS.length, ond = (u) => Math.sin(ahora / 300 + u * 5) * 4 * (0.3 + Math.abs(v.viento));
   for (let i = 0; i < n; i++) {
-    ctx.fillStyle = RAYAS[i % 2];
-    const x0 = -an / 2 + (i * an) / n, ond = Math.sin(ahora / 260 + i) * 3 * (0.3 + Math.abs(v.viento));
-    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0 + an / n, 0);
-    ctx.lineTo(x0 + an / n + ond, al * (i % 3 === 2 ? 0.86 : 1)); ctx.lineTo(x0 + ond, al * (i % 3 === 0 ? 0.86 : 1)); ctx.closePath(); ctx.fill();
+    const x0 = -an / 2 + (i * an) / n, x1 = x0 + an / n, fondo = (x) => al * (0.78 + 0.22 * Math.abs((x / (an / 2))));
+    ctx.fillStyle = RAYAS[i];
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.lineTo(x1 + ond(i + 1), fondo(x1)); ctx.lineTo(x0 + ond(i), fondo(x0)); ctx.closePath(); ctx.fill();
   }
+  ctx.strokeStyle = "#d9b25a"; ctx.lineWidth = 2;
+  for (const l of [-1, 1]) { ctx.beginPath(); ctx.moveTo(l * an / 2, 0); ctx.quadraticCurveTo(l * (an / 2 + 14), al * 0.4, l * (an / 2 + 8), al * 0.75); ctx.stroke(); }
   ctx.restore();
-  // la cruz de arriba
-  ctx.fillStyle = "#d9b25a"; ctx.fillRect(-2, -LARGO * hw - 18, 4, 18); ctx.fillRect(-8, -LARGO * hw - 13, 16, 4);
+  ctx.fillStyle = "#d9b25a"; ctx.fillRect(-2, -LARGO * hw - 22, 4, 22); ctx.fillRect(-9, -LARGO * hw - 16, 18, 4);
   ctx.restore();
-  // las manos (la base)
-  ctx.fillStyle = "#2b1d14"; ctx.beginPath(); ctx.ellipse(b.x, b.y, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
 }
 
 m.arrancar();

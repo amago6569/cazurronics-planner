@@ -40,7 +40,7 @@ describe("pendón: siempre da lo mismo", () => {
 describe("pendón: trampas", () => {
   it("rechaza movimientos mal formados, fuera de tiempo, demasiado seguidos o demasiados", () => {
     expect(rejugar(1, [100]).valida).toBe(false);
-    expect(rejugar(1, [100, 20000]).valida).toBe(false);
+    expect(rejugar(1, [100, 70000]).valida).toBe(false);
     expect(rejugar(1, [DURACION_MS + 1, 0]).valida).toBe(false);
     expect(rejugar(1, [100, 0, 104, 10]).valida).toBe(false);
     expect(rejugar(1, [100.5, 0]).valida).toBe(false);
@@ -61,7 +61,7 @@ describe("pendón: trampas", () => {
 
   it("una partida con todos los movimientos que se permiten cabe en lo que acepta el servidor", () => {
     const lista = [];
-    for (let i = 0; i < MAX_MOVIMIENTOS; i++) lista.push(10000 + i * 12, i % 2 ? -9999 : 9999);
+    for (let i = 0; i < MAX_MOVIMIENTOS; i++) lista.push(10000 + i * 12, i % 2 ? -59999 : 59999);
     expect(JSON.stringify({ movimientos: lista }).length).toBeLessThan(JUEGOS.pendon.maxBytes);
   });
 });

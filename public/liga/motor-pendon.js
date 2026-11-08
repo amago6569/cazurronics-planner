@@ -7,16 +7,16 @@
 // y los mismos movimientos del dedo). Por eso aquí no hay Math.random, ni senos, ni potencias, ni fechas: el palo se
 // mueve con la fórmula del péndulo invertido «de ángulos pequeños», que solo usa sumas y productos.
 //
-// Unidades: x de la base entre -1 y 1 (pantalla); ángulo en radianes (positivo = se inclina a la derecha);
+// Unidades: x de la base en anchos de media pantalla (entre -LIMITE_X y LIMITE_X); ángulo en radianes (positivo = se inclina a la derecha);
 // tiempo en ms de partida.
 
-export const VERSION = 1;
+export const VERSION = 2; // 2: sin paredes a los lados (la plaza sigue al pendonero) y base más rápida
 export const DURACION_MS = 45000;
 export const PASOS_POR_SEGUNDO = 240;
 const DT = 1 / PASOS_POR_SEGUNDO;
 
-export const LIMITE_X = 0.85;
-export const BASE = { seguir: 14, velocidad: 3.2, aceleracion: 30 }; // cómo sigue la base al dedo
+export const LIMITE_X = 6; // la plaza es ancha: la cámara sigue al pendonero, no hay pared que te impida salvarlo
+export const BASE = { seguir: 16, velocidad: 5, aceleracion: 50 }; // cómo sigue la base al dedo
 export const CAE = 0.6; // pasado este ángulo, se cae
 export const PLOMO = 0.1; // por debajo, «a plomo» (cuenta doble)
 export const LEVANTAR_MS = 1500;
@@ -79,7 +79,7 @@ export function crearPartida(semilla) {
 
 export function motivoMovimientoInvalido(p, t, x) {
   if (!Number.isInteger(t) || !Number.isInteger(x)) return "valores que no son enteros";
-  if (x < -10000 || x > 10000) return "posición fuera de la plaza";
+  if (x < -LIMITE_X * 10000 || x > LIMITE_X * 10000) return "posición fuera de la plaza";
   if (t < 0 || t > DURACION_MS) return "movimiento fuera de tiempo";
   const n = p.movimientos.length;
   if (n >= MAX_MOVIMIENTOS * 2) return "demasiados movimientos";

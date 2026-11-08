@@ -93,8 +93,10 @@ function dibujarPlano(ctx, tj) {
   const xb = x0 + v.borde * GROSOR * k;
   const g = ctx.createLinearGradient(0, yCorte - alto, 0, yCorte);
   g.addColorStop(0, "#6b2a1c"); g.addColorStop(0.2, "#8e1f1a"); g.addColorStop(1, "#4d0f0b");
-  ctx.fillStyle = g; ctx.fillRect(0, yCorte - alto, xb, alto);
-  ctx.fillStyle = "rgba(240,220,200,.6)"; ctx.fillRect(0, yCorte - alto, xb, 4);
+  // la pieza vista de lado: lomo redondeado e irregular, no un bloque
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, yCorte);
+  for (let x = 0; x <= xb - 6; x += 8) ctx.lineTo(x, yCorte - alto * (0.9 + 0.06 * Math.sin(x * 0.045) + 0.04 * Math.sin(x * 0.13 + 1)));
+  ctx.quadraticCurveTo(xb, yCorte - alto * 0.95, xb, yCorte - alto * 0.6); ctx.lineTo(xb, yCorte); ctx.closePath(); ctx.fill();
   // la cuchilla
   const brillo = Math.max(0, 1 - (tj - v.ultimoCorte) / 260);
   ctx.fillStyle = `rgba(220,226,232,${0.75 + 0.25 * brillo})`;

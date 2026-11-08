@@ -1,13 +1,14 @@
-// El Pendón, en 3D. Aquí solo se dibuja: cuánto se inclina el palo sale de motor-pendon.js y de la «vista» de
+// El Pendón, en 3D. Aquí solo se dibuja: cuánto se inclina la vara sale de motor-pendon.js y de la «vista» de
 // juego-pendon.js, la misma que usa el dibujo plano.
 //
-// La plaza de San Marcos al atardecer. Un pendón leonés: el palo largo de madera, la cruz dorada arriba, el
-// travesaño y la tela a rayas carmesí y morado, con sus puntas, que ondea con el viento. Abajo, el cinto de cuero
-// donde se apoya. Detrás, la foto de San Marcos, desenfocada.
+// La plaza de San Marcos al atardecer. Un pendón leonés como los de las romerías: la vara larga de madera apoyada en la
+// cuja del pendonero, el remate dorado arriba, el travesaño, la tela larga a franjas carmesí y morado con su galón
+// dorado, que acaba en dos farpas y ondea con el viento, y los cordones con sus borlas. Lo lleva un pendonero con
+// camisa blanca, chaleco negro y faja roja. La cámara le sigue por la plaza.
 import { crearBase, textura, ruido2d, THREE } from "./base-3d.js";
-import { LARGO, TELA } from "./juego-pendon.js";
+import { CUJA, LARGO, TELA } from "./juego-pendon.js";
 
-const D = 6.5, YC = 1.0;
+const D = 6.8, YC = 1.3;
 
 export function crearEscena({ lienzo, contexto, foto, reducido }) {
   const base = crearBase({
@@ -19,14 +20,14 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
   // ── Luz de atardecer: sol bajo por la derecha, dorado ──
   escena.add(new THREE.HemisphereLight(0xbcd0f0, 0x6a5040, 0.85));
   const sol = new THREE.DirectionalLight(0xffcf96, 2.6);
-  sol.position.set(4, 3, 3);
+  sol.position.set(4, 4, 3);
   sol.castShadow = true;
   sol.shadow.mapSize.set(1024, 1024);
-  Object.assign(sol.shadow.camera, { left: -3, right: 3, top: 3, bottom: -1, near: 1, far: 14 });
+  Object.assign(sol.shadow.camera, { left: -3, right: 3, top: 4, bottom: -1, near: 1, far: 16 });
   sol.shadow.radius = 3; sol.shadow.bias = -0.0005; sol.shadow.normalBias = 0.01;
   escena.add(sol, sol.target);
 
-  // ── Suelo de la plaza: losas ──
+  // ── Suelo de la plaza: losas (corren cuando la cámara sigue al pendonero) ──
   const losas = textura(256, 256, (g, w, h) => {
     const r = ruido2d(4, 6, w, h);
     const im = g.createImageData(w, h);
@@ -38,91 +39,134 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
     g.strokeStyle = "rgba(60,50,42,.55)"; g.lineWidth = 3;
     for (let i = 0; i <= 2; i++) { g.beginPath(); g.moveTo(0, i * 128); g.lineTo(w, i * 128); g.stroke(); g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, h); g.stroke(); }
   }, { repetir: true });
-  losas.repeat.set(8, 7);
-  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(16, 14), new THREE.MeshStandardMaterial({ map: losas, roughness: 0.9 }));
-  suelo.rotation.x = -Math.PI / 2; suelo.position.set(0, 0, 0);
+  const ANCHO_SUELO = 24;
+  losas.repeat.set(ANCHO_SUELO / 2, 7);
+  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(ANCHO_SUELO, 14), new THREE.MeshStandardMaterial({ map: losas, roughness: 0.9 }));
+  suelo.rotation.x = -Math.PI / 2;
   suelo.receiveShadow = true;
   escena.add(suelo);
 
-  // ── El pendón ──
-  const pendon = new THREE.Group();
-  escena.add(pendon);
-  const madera = new THREE.MeshStandardMaterial({ color: 0x7a4e2c, roughness: 0.6 });
-  const oro = new THREE.MeshStandardMaterial({ color: 0xd9a940, metalness: 1, roughness: 0.3 });
-  const palo = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.032, LARGO, 12), madera);
-  palo.position.y = LARGO / 2; palo.castShadow = true;
-  pendon.add(palo);
-  const yT = LARGO - TELA.desde;
-  const travesano = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, TELA.ancho + 0.08, 8), madera);
-  travesano.rotation.z = Math.PI / 2; travesano.position.y = yT; travesano.castShadow = true;
-  pendon.add(travesano);
-  for (const lado of [-1, 1]) { const bola = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), oro); bola.position.set(lado * (TELA.ancho / 2 + 0.05), yT, 0); pendon.add(bola); }
-  // la cruz de arriba
-  const cruz = new THREE.Group();
-  const v1 = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.16, 0.025), oro); v1.position.y = 0.08;
-  const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.022, 0.022), oro); h1.position.y = 0.11;
-  const pomo = new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), oro);
-  cruz.add(v1, h1, pomo); cruz.position.y = LARGO;
-  cruz.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  pendon.add(cruz);
-  // el cinto de cuero (la base)
-  const cinto = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.08, 18), new THREE.MeshStandardMaterial({ color: 0x3a2416, roughness: 0.7 }));
-  cinto.position.y = 0.04; cinto.castShadow = true;
-  escena.add(cinto);
+  // ── El pendonero ──
+  const camisa = new THREE.MeshStandardMaterial({ color: 0xefe9de, roughness: 0.8 });
+  const chaleco = new THREE.MeshStandardMaterial({ color: 0x1b1714, roughness: 0.7 });
+  const faja = new THREE.MeshStandardMaterial({ color: 0xb3121e, roughness: 0.75 });
+  const pantalon = new THREE.MeshStandardMaterial({ color: 0x2a2420, roughness: 0.8 });
+  const piel = new THREE.MeshStandardMaterial({ color: 0xd9a87e, roughness: 0.6 });
+  const cuero = new THREE.MeshStandardMaterial({ color: 0x5a3418, roughness: 0.6 });
+  const pendonero = new THREE.Group();
+  escena.add(pendonero);
+  const malla = (geo, mat, x, y, z, padre = pendonero) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.castShadow = true; padre.add(o); return o; };
+  for (const l of [-1, 1]) {
+    const pierna = malla(new THREE.CapsuleGeometry(0.035, 0.3, 4, 8), pantalon, l * 0.055, 0.2, -0.1);
+    pierna.rotation.z = l * 0.12;
+    malla(new THREE.BoxGeometry(0.06, 0.04, 0.12), chaleco, l * 0.075, 0.02, -0.08);
+  }
+  const torso = malla(new THREE.CapsuleGeometry(0.075, 0.2, 4, 12), camisa, 0, 0.53, -0.12);
+  torso.scale.z = 0.75;
+  const vest = malla(new THREE.CapsuleGeometry(0.078, 0.14, 4, 12), chaleco, 0, 0.56, -0.12); vest.scale.set(1.02, 1, 0.8);
+  malla(new THREE.CylinderGeometry(0.085, 0.085, 0.07, 16), faja, 0, 0.4, -0.12).scale.z = 0.8;
+  malla(new THREE.SphereGeometry(0.06, 16, 12), piel, 0, 0.77, -0.12);
+  const sombrero = malla(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 20), chaleco, 0, 0.815, -0.12);
+  malla(new THREE.CylinderGeometry(0.05, 0.055, 0.05, 16), chaleco, 0, 0.025, 0, sombrero);
+  // la cuja: el cinto de cuero con el hueco donde va la vara
+  malla(new THREE.CylinderGeometry(0.035, 0.03, 0.06, 12), cuero, 0, CUJA - 0.02, 0);
+  // brazos: del hombro a las manos, que van sobre la vara (se recolocan cada cuadro)
+  const geoBrazo = new THREE.CylinderGeometry(0.022, 0.02, 1, 8); geoBrazo.translate(0, 0.5, 0);
+  const brazos = [-1, 1].map((l) => ({ l, brazo: malla(geoBrazo, camisa, 0, 0, 0), mano: malla(new THREE.SphereGeometry(0.026, 10, 8), piel, 0, 0, 0) }));
 
-  // la tela: rayas carmesí y morado, con las puntas abajo (lo que no es tela, transparente)
-  const COLS = 7;
-  const tex = textura(256, 512, (g, w, h) => {
-    const r = ruido2d(9, 4, w, h);
-    for (let i = 0; i < COLS; i++) {
-      g.fillStyle = i % 2 ? "#5b1f6e" : "#a3122a";
-      const x0 = (i * w) / COLS, x1 = ((i + 1) * w) / COLS;
-      const corto = i % 3 === 1 ? 0.88 : 1;
-      g.beginPath(); g.moveTo(x0, 0); g.lineTo(x1, 0); g.lineTo(x1, h * corto); g.lineTo((x0 + x1) / 2, h * (corto - 0.06)); g.lineTo(x0, h * corto); g.closePath(); g.fill();
-    }
-    // tejido: un poco de grano
+  // ── El pendón ──
+  const pendon = new THREE.Group(); // gira en la cuja
+  escena.add(pendon);
+  const madera = new THREE.MeshStandardMaterial({ color: 0x7a4e2c, roughness: 0.55 });
+  const oro = new THREE.MeshStandardMaterial({ color: 0xd9a940, metalness: 1, roughness: 0.3 });
+  const vara = malla(new THREE.CylinderGeometry(0.02, 0.03, LARGO + 0.05, 12), madera, 0, (LARGO - 0.05) / 2, 0, pendon);
+  vara.receiveShadow = true;
+  const yT = LARGO - TELA.desde;
+  const travesano = malla(new THREE.CylinderGeometry(0.012, 0.012, TELA.ancho + 0.1, 8), madera, 0, yT, 0, pendon);
+  travesano.rotation.z = Math.PI / 2;
+  for (const l of [-1, 1]) malla(new THREE.SphereGeometry(0.022, 12, 8), oro, l * (TELA.ancho / 2 + 0.06), yT, 0, pendon);
+  // el remate de arriba: bola y cruz doradas
+  malla(new THREE.SphereGeometry(0.035, 14, 10), oro, 0, LARGO + 0.01, 0, pendon);
+  malla(new THREE.BoxGeometry(0.022, 0.17, 0.022), oro, 0, LARGO + 0.12, 0, pendon);
+  malla(new THREE.BoxGeometry(0.1, 0.02, 0.02), oro, 0, LARGO + 0.15, 0, pendon);
+
+  // la tela: franjas carmesí y morado (con una dorada en medio), galón arriba y dos farpas abajo
+  const FRANJAS = ["#a3122a", "#5b1f6e", "#a3122a", "#e2b546", "#a3122a", "#5b1f6e", "#a3122a"];
+  const tex = textura(256, 1024, (g, w, h) => {
+    const r = ruido2d(9, 5, w, h);
+    g.beginPath(); // silueta: rectángulo con un corte en V abajo (dos farpas)
+    g.moveTo(0, 0); g.lineTo(w, 0); g.lineTo(w, h); g.lineTo(w / 2, h * 0.8); g.lineTo(0, h); g.closePath(); g.clip();
+    FRANJAS.forEach((c, i) => { g.fillStyle = c; g.fillRect((i * w) / FRANJAS.length, 0, w / FRANJAS.length + 1, h); });
+    // grano de la tela (damasco) y pliegues verticales
     const im = g.getImageData(0, 0, w, h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (im.data[i + 3]) { const k = 0.85 + 0.25 * r(x, y); im.data[i] *= k; im.data[i + 1] *= k; im.data[i + 2] *= k; } }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4; if (!im.data[i + 3]) continue;
+      const k = 0.82 + 0.22 * r(x, y) + 0.06 * Math.sin(x * 0.35);
+      im.data[i] *= k; im.data[i + 1] *= k; im.data[i + 2] *= k;
+    }
     g.putImageData(im, 0, 0);
-    // la franja de arriba, dorada
-    g.fillStyle = "#c99a3c"; g.fillRect(0, 0, w, 14);
+    g.fillStyle = "#d4a63e"; g.fillRect(0, 0, w, 22); // galón de arriba
+    g.fillStyle = "rgba(212,166,62,.9)"; g.fillRect(0, 26, w, 5);
   });
-  const SX = 14, SY = 22;
+  const SX = 16, SY = 40;
   const geoTela = new THREE.PlaneGeometry(TELA.ancho, TELA.alto, SX, SY);
   geoTela.translate(0, -TELA.alto / 2, 0);
   const reposo = geoTela.attributes.position.array.slice();
-  const tela = new THREE.Mesh(geoTela, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.85 }));
+  const tela = new THREE.Mesh(geoTela, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.75 }));
   tela.castShadow = true;
   const colgado = new THREE.Group(); colgado.position.y = yT; colgado.add(tela);
   pendon.add(colgado);
+  // cordones con borlas, de las puntas del travesaño
+  const matCordon = new THREE.MeshStandardMaterial({ color: 0xc89a3a, roughness: 0.5, metalness: 0.3 });
+  for (const l of [-1, 1]) {
+    const x0 = l * (TELA.ancho / 2 + 0.06);
+    const curva = new THREE.CatmullRomCurve3([new THREE.Vector3(x0, 0, 0), new THREE.Vector3(x0 + l * 0.06, -0.5, 0.04), new THREE.Vector3(x0 + l * 0.02, -1.0, 0.06)]);
+    malla(new THREE.TubeGeometry(curva, 24, 0.008, 6), matCordon, 0, 0, 0, colgado);
+    malla(new THREE.ConeGeometry(0.035, 0.12, 12), matCordon, x0 + l * 0.02, -1.05, 0.06, colgado);
+  }
 
   // la línea de plomo: un hilo dorado que aparece cuando va derecho
-  const hilo = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, LARGO + 0.15, 6), new THREE.MeshBasicMaterial({ color: 0xe9b44c, transparent: true, opacity: 0 }));
-  hilo.position.set(0, (LARGO + 0.15) / 2, -0.04);
+  const hilo = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, LARGO + 0.2, 6), new THREE.MeshBasicMaterial({ color: 0xe9b44c, transparent: true, opacity: 0 }));
   escena.add(hilo);
 
   function medir(m) { base.medir(m, { cx: m.campo.cx, yPlano: m.campo.yBase, k: m.campo.hw, D, yc: YC }); }
 
   let plomoVisto = 0;
+  const arriba = new THREE.Vector3(0, 1, 0), hombro = new THREE.Vector3(), mano = new THREE.Vector3(), dir = new THREE.Vector3();
   function dibujar(d) {
     const v = d.vista;
     const dt = Math.min(0.1, (d.ahora - (dibujar.antes || d.ahora)) / 1000); dibujar.antes = d.ahora;
     base.moverCamara(d, { x: 0.4, y: 0.15, z: 1.2 }, dt);
-    pendon.position.x = v.x; cinto.position.x = v.x;
+    const x = v.x - v.camara; // la cámara sigue al pendonero: lo que se mueve es la plaza
+    losas.offset.x = (v.camara / 2) % 1;
+    pendonero.position.x = x;
+    pendonero.rotation.z = -v.angulo * 0.15; // se echa un poco hacia donde tira el pendón
+    pendon.position.set(x, CUJA, 0);
     pendon.rotation.z = -v.angulo;
-    // la tela cuelga (casi) hacia abajo aunque el palo se incline, y el viento la empuja y la hace ondear
-    colgado.rotation.z = v.angulo * 0.75 - v.viento * 0.22;
-    const p = geoTela.attributes.position, s = d.ahora / 1000, fuerza = 0.25 + Math.min(1, Math.abs(v.viento) * 1.5);
+    // las manos sobre la vara (una a la altura del pecho, otra más arriba), los brazos desde los hombros
+    for (const b of brazos) {
+      const h = b.l < 0 ? 0.2 : 0.42;
+      mano.set(x + Math.sin(v.angulo) * h, CUJA + Math.cos(v.angulo) * h, 0.03);
+      b.mano.position.copy(mano).sub(pendonero.position);
+      hombro.set(b.l * 0.09, 0.66, -0.12);
+      b.brazo.position.copy(hombro);
+      dir.copy(b.mano.position).sub(hombro);
+      b.brazo.scale.set(1, dir.length(), 1);
+      b.brazo.quaternion.setFromUnitVectors(arriba, dir.normalize());
+    }
+    // la tela cuelga (casi) hacia abajo aunque la vara se incline; el viento la empuja y la hace ondear
+    colgado.rotation.z = v.angulo * 0.8 - v.viento * 0.2;
+    const p = geoTela.attributes.position, s = d.ahora / 1000, fuerza = 0.3 + Math.min(1, Math.abs(v.viento) * 1.5);
     for (let j = 0; j <= SY; j++) for (let i = 0; i <= SX; i++) {
       const k = j * (SX + 1) + i, u = i / SX, w = j / SY; // w: 0 arriba, 1 abajo
-      const z = reducido ? 0 : 0.035 * fuerza * w * Math.sin(u * 7 - s * 5.5 + w * 2) + 0.02 * fuerza * w * Math.sin(w * 6 - s * 3.1);
-      p.setXYZ(k, reposo[k * 3], reposo[k * 3 + 1], z);
+      const z = reducido ? 0 : 0.05 * fuerza * w * Math.sin(u * 6 - s * 4.5 + w * 3) + 0.03 * fuerza * w * Math.sin(w * 7 - s * 2.6);
+      p.setXYZ(k, reposo[k * 3] + (reducido ? 0 : 0.03 * fuerza * w * w * Math.sin(s * 1.7 + w * 2)), reposo[k * 3 + 1], z);
     }
     p.needsUpdate = true;
     geoTela.computeVertexNormals();
     plomoVisto += ((v.plomo ? 1 : 0) - plomoVisto) * Math.min(1, dt * 8);
-    hilo.position.x = v.x;
-    hilo.material.opacity = 0.55 * plomoVisto;
+    hilo.position.set(x, CUJA + (LARGO + 0.2) / 2, -0.05);
+    hilo.material.opacity = 0.5 * plomoVisto;
     base.pintar(d.ahora);
   }
 

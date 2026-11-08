@@ -70,37 +70,87 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
   guarda.rotation.y = Math.PI / 2; guarda.rotation.x = 0; guarda.position.x = 0.01; cuchilla.add(guarda);
 
   // ── La pieza de cecina ──
+  // Corte de una pieza de verdad: redondeada e irregular, más alta por un lado, con bultos; no un bloque.
+  // contorno (u = a lo ancho de la máquina, v = alto), centrado en 0
+  const contorno = (() => {
+    const s = suerteVisual(41), n = 40, pts = [];
+    const bultos = Array.from({ length: 4 }, () => ({ a: s() * Math.PI * 2, k: 0.06 + 0.09 * s(), w: 0.4 + 0.5 * s() }));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      let r = 1;
+      for (const b of bultos) { const d = Math.atan2(Math.sin(a - b.a), Math.cos(a - b.a)); r += b.k * Math.exp(-(d * d) / (b.w * b.w * 0.3)); }
+      const c = Math.cos(a), sn = Math.sin(a);
+      // abajo, casi plana (apoya en la bandeja); arriba, más llena por un lado (la pieza es más gruesa por ahí)
+      let u = (FONDO / 2) * Math.sign(c) * Math.abs(c) ** 0.5 * r;
+      let v = (ALTO / 2) * Math.sign(sn) * Math.abs(sn) ** (sn < 0 ? 0.3 : 0.6) * r;
+      if (sn > 0) v *= 0.88 + 0.12 * (u / (FONDO / 2) + 1) / 2;
+      pts.push([u, v]);
+    }
+    const minV = Math.min(...pts.map((p) => p[1]));
+    return pts.map(([u, v]) => [u, v - minV - ALTO / 2]); // que toque la bandeja abajo
+  })();
+  const forma = new THREE.Shape(contorno.map(([u, v]) => new THREE.Vector2(u, v)));
+  // la cara del corte: carne roja oscura con vetas de grasa, borde de corteza siguiendo el contorno
   const cara = textura(256, 256, (g, w, h) => {
-    const r = ruido2d(31, 10, w, h), s = suerteVisual(77);
-    const im = g.createImageData(w, h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const borde = Math.min(x, y, w - 1 - x, h - 1 - y);
-      const k = 0.75 + 0.4 * r(x, y);
-      const i = (y * w + x) * 4;
-      let R = 150 * k, G = 26 * k, B = 22 * k;
-      if (borde < 10) { R = 92 * k; G = 46 * k; B = 28 * k; } // corteza
-      else if (y < 34) { R = 236 * k; G = 214 * k; B = 186 * k; } // tocino de arriba
-      im.data[i] = R; im.data[i + 1] = G; im.data[i + 2] = B; im.data[i + 3] = 255;
+    const aT = ([u, v]) => [(u / FONDO + 0.5) * w, (0.5 - v / ALTO) * h];
+    const s = suerteVisual(77), r = ruido2d(31, 9, w, h);
+    g.fillStyle = "#3a1410"; g.fillRect(0, 0, w, h);
+    const camino = () => { g.beginPath(); contorno.forEach((p, i) => { const [x, y] = aT(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.closePath(); };
+    // corteza: el contorno, oscuro y algo dorado
+    camino(); g.fillStyle = "#5a2a18"; g.fill();
+    // carne: el mismo contorno un poco más pequeño
+    g.save(); g.translate(w / 2, h / 2); g.scale(0.9, 0.88); g.translate(-w / 2, -h / 2);
+    camino(); g.clip();
+    const grad = g.createRadialGradient(w * 0.45, h * 0.55, 10, w / 2, h / 2, w * 0.6);
+    grad.addColorStop(0, "#9c1e1c"); grad.addColorStop(0.6, "#7d1416"); grad.addColorStop(1, "#5a0f10");
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    // vetas de grasa (finas, curvas, en grupos) y la capa de grasa de un lado
+    g.strokeStyle = "rgba(240,215,190,.6)"; g.lineCap = "round";
+    for (let i = 0; i < 18; i++) {
+      g.lineWidth = 0.8 + s() * 2;
+      const x0 = s() * w, y0 = s() * h, l = 30 + s() * 90, a = s() * Math.PI;
+      g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(x0 + Math.cos(a) * l * 0.5 + (s() - 0.5) * 30, y0 + Math.sin(a) * l * 0.5 + (s() - 0.5) * 30, x0 + Math.cos(a) * l, y0 + Math.sin(a) * l); g.stroke();
     }
+    g.fillStyle = "rgba(236,214,186,.85)";
+    g.beginPath(); g.ellipse(w * 0.16, h * 0.42, w * 0.06, h * 0.22, 0.25, 0, Math.PI * 2); g.fill();
+    g.restore();
+    // brillo y grano de carne curada
+    const im = g.getImageData(0, 0, w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, k = 0.82 + 0.3 * r(x, y); im.data[i] *= k; im.data[i + 1] *= k; im.data[i + 2] *= k; }
     g.putImageData(im, 0, 0);
-    g.strokeStyle = "rgba(245,225,205,.55)"; g.lineWidth = 1.6;
-    for (let i = 0; i < 14; i++) { g.beginPath(); const y0 = 50 + s() * 190; g.moveTo(10, y0); g.bezierCurveTo(80, y0 + (s() - 0.5) * 60, 170, y0 + (s() - 0.5) * 60, 246, y0 + (s() - 0.5) * 40); g.stroke(); }
   });
-  const corteza = textura(256, 128, (g, w, h) => {
-    const r = ruido2d(13, 6, w, h);
+  cara.repeat.set(1 / FONDO, 1 / ALTO); cara.offset.set(0.5, 0.5);
+  // corteza de cecina curada: granate muy oscuro, con fibras a lo largo y brillos de grasa
+  const corteza = textura(256, 512, (g, w, h) => {
+    const r = ruido2d(13, 18, w, h), r2 = ruido2d(4, 5, w, h), s = suerteVisual(9);
     const im = g.createImageData(w, h);
-    const r2 = ruido2d(4, 9, w, h);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const k = 0.55 + 0.5 * r2(x, y), flor = Math.max(0, r(x, y) - 0.62) * 2.2, i = (y * w + x) * 4; // corteza oscura con «flor» clara de curación
-      im.data[i] = 96 * k + 140 * flor; im.data[i + 1] = 30 * k + 120 * flor; im.data[i + 2] = 26 * k + 100 * flor; im.data[i + 3] = 255;
+      const k = 0.7 + 0.35 * r(x, y) + 0.12 * r2(x, y), i = (y * w + x) * 4;
+      im.data[i] = 118 * k; im.data[i + 1] = 28 * k; im.data[i + 2] = 26 * k; im.data[i + 3] = 255;
     }
     g.putImageData(im, 0, 0);
+    // fibras a lo largo de la pieza (en los lados, la v de la textura va a lo largo)
+    for (let i = 0; i < 120; i++) {
+      g.strokeStyle = s() < 0.5 ? "rgba(40,10,8,.35)" : "rgba(170,80,60,.22)"; g.lineWidth = 1 + s() * 2;
+      const y = s() * h, x = s() * w, l = 40 + s() * 160;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + (s() - 0.5) * 6, y + l); g.stroke();
+    }
+    // vetas de grasa que asoman
+    g.fillStyle = "rgba(225,190,160,.35)";
+    for (let i = 0; i < 10; i++) { g.beginPath(); g.ellipse(s() * w, s() * h, 2 + s() * 4, 20 + s() * 50, (s() - 0.5) * 0.2, 0, Math.PI * 2); g.fill(); }
   }, { repetir: true });
-  corteza.repeat.set(3, 1);
+  corteza.repeat.set(2.5, 0.5);
   const matCara = new THREE.MeshStandardMaterial({ map: cara, roughness: 0.55 });
-  const matCorteza = new THREE.MeshStandardMaterial({ map: corteza, roughness: 0.8 });
+  const matCorteza = new THREE.MeshPhysicalMaterial({ map: corteza, roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.5 });
   const LARGO = 2.2;
-  const pieza = new THREE.Mesh(new THREE.BoxGeometry(LARGO, ALTO, FONDO), [matCara, matCorteza, matCorteza, matCorteza, matCorteza, matCorteza]);
+  // la pieza y las lonchas: el contorno estirado a lo largo (x). Grupo 0 = las dos caras del corte, 1 = la corteza
+  function geoPieza(largo, curvas) {
+    const g = new THREE.ExtrudeGeometry(forma, { depth: largo, bevelEnabled: curvas, bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 3, curveSegments: 8 });
+    g.translate(0, 0, -largo / 2);
+    g.rotateY(Math.PI / 2); // lo extruido (z) pasa a ser x
+    return g;
+  }
+  const pieza = new THREE.Mesh(geoPieza(LARGO, false), [matCara, matCorteza]);
   pieza.castShadow = pieza.receiveShadow = true;
   maquina.add(pieza);
   // el empujador (la garra que sujeta la pieza)
@@ -110,9 +160,9 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
   const plato = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.3, 0.025, 48), new THREE.MeshStandardMaterial({ color: 0xf3eee4, roughness: 0.25 }));
   plato.position.set(0.65, -0.005, 0.05); plato.receiveShadow = true;
   maquina.add(plato);
-  const geoLoncha = new THREE.BoxGeometry(1, ALTO, FONDO);
+  const geoLoncha = geoPieza(1, false);
   const libres = [], vivas = new Map(); // por t de la loncha
-  function malla() { const o = libres.pop() || new THREE.Mesh(geoLoncha, [matCara, matCara, matCorteza, matCorteza, matCorteza, matCorteza]); o.castShadow = o.receiveShadow = true; o.visible = true; maquina.add(o); return o; }
+  function malla() { const o = libres.pop() || new THREE.Mesh(geoLoncha, [matCara, matCorteza]); o.castShadow = o.receiveShadow = true; o.visible = true; maquina.add(o); return o; }
 
   function medir(m) { base.medir(m, { cx: m.campo.cx, yPlano: m.campo.yCorte, k: m.campo.k, D, yc: YC }); }
 
