@@ -54,6 +54,7 @@
     { "path": "/api/despensa/fichas?pasada=3", "schedule": "0 20 * * *" },
     { "path": "/api/finde/aviso", "schedule": "0 8 * * 4" },
     { "path": "/api/captacion/aviso", "schedule": "30 7 * * *" },
-    { "path": "/api/telegram/diario", "schedule": "45 8 * * *" }
+    { "path": "/api/telegram/diario", "schedule": "45 8 * * *" },
+    { "path": "/api/liga/ranking?de=dia", "schedule": "20 9 * * *" }
   ]
 }
