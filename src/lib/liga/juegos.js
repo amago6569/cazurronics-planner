@@ -7,6 +7,7 @@ import * as botillo from "../../../public/liga/motor-botillo.js";
 import * as cecina from "../../../public/liga/motor-cecina.js";
 import * as vidriera from "../../../public/liga/motor-vidriera.js";
 import * as pendon from "../../../public/liga/motor-pendon.js";
+import * as esqui from "../../../public/liga/motor-esqui.js";
 
 export const JUEGOS = {
   canasta: {
@@ -89,6 +90,20 @@ export const JUEGOS = {
     repetir: (semilla, datos) => pendon.rejugar(semilla, datos?.movimientos),
     ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
   },
+  esqui: {
+    id: "esqui",
+    nombre: "Bajada en San Isidro",
+    sitio: "San Isidro",
+    pagina: "/liga/esqui.html",
+    foto: "/liga/fondos/montes-v.jpg",
+    habilidad: "Esquí",
+    version: esqui.VERSION,
+    duracionMs: esqui.DURACION_MS,
+    maxBytes: 40000, // como mucho 50 movimientos por segundo
+    // datos = { movimientos: [t, x, t, x, …] } (ms de partida y posición del esquiador ×10000)
+    repetir: (semilla, datos) => esqui.rejugar(semilla, datos?.movimientos),
+    ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
+  },
 };
 
 function ultimoToque(datos) {
@@ -102,7 +117,7 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon"];
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui"];
 
 export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 

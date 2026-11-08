@@ -57,6 +57,15 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
 .puntitos i.gastado { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(243,234,216,.5); }
 .juego .ir { height: 48px; padding: 0 20px; border-radius: 999px; background: var(--crema); color: var(--noche); font-size: 16px; font-weight: 800; display: grid; place-items: center; white-space: nowrap; }
 .juego.hecho .ir { background: rgba(243,234,216,.14); color: var(--crema); }
+.todos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mini { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 118px; padding: 12px; border-radius: 18px; overflow: hidden; color: var(--crema); text-decoration: none; isolation: isolate; }
+.mini img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.mini::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, rgba(7,6,10,.9), rgba(7,6,10,.2)); }
+.mini:active { transform: scale(.98); }
+.mini .hab { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--oro); }
+.mini b { display: block; margin-top: 3px; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 21px; line-height: .92; }
+.nota-todos { margin: -4px 0 12px; font-size: 14px; color: #cfc6b6; }
+@media (min-width: 720px) { .todos { grid-template-columns: repeat(3, 1fr); } }
 .aviso-cuenta { margin: 12px 0 0; padding: 14px 16px; border-radius: 18px; background: var(--vidrio); border: 1px solid var(--borde); font-size: 15px; line-height: 1.4; display: grid; gap: 12px; }
 .aviso-cuenta button { height: 48px; border-radius: 999px; border: 0; background: var(--crema); color: var(--noche); font-size: 16px; font-weight: 800; cursor: pointer; }
 
@@ -113,6 +122,12 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
     </div>
   </section>
 
+  <section aria-labelledby="t-todos">
+    <h2 id="t-todos">Todos los juegos</h2>
+    <p class="nota-todos">Para practicar cuando quieras. Para la liga cuentan los de hoy.</p>
+    <div class="todos" id="todos"></div>
+  </section>
+
   <section aria-labelledby="t-ranking">
     <h2 id="t-ranking">Ranking</h2>
     <div class="pestanas" role="tablist" aria-label="Qué ranking ver">
@@ -163,6 +178,18 @@ function pintarJuegos() {
       <span class="ir">${hecho ? "Practicar" : "Jugar"}</span></a>`;
   }).join("") || `<p class="aviso-cuenta">Hoy no hay juegos.</p>`;
 }
+
+// Los siete juegos (mismo orden y datos que src/lib/liga/juegos.js)
+const TODOS = [
+  ["canasta", "Canasta en la Catedral", "Puntería", "/liga/fondo-v.jpg"],
+  ["tapas", "Tapeo en el Húmedo", "Reflejos", "/liga/fondos/humedo-v.jpg"],
+  ["botillo", "La torre del botillo", "Pulso", "/liga/fondos/botillo-v.jpg"],
+  ["cecina", "La loncha de cecina", "Precisión", "/liga/fondos/cecina-v.jpg"],
+  ["vidriera", "La Vidriera", "Memoria", "/liga/fondos/vidriera-v.jpg"],
+  ["pendon", "El Pendón", "Equilibrio", "/liga/fondos/pendon-v.jpg"],
+  ["esqui", "Bajada en San Isidro", "Esquí", "/liga/fondos/montes-v.jpg"],
+];
+$("todos").innerHTML = TODOS.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto}" alt="" loading="lazy"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
 
 async function cargar() {
   try { datos = await hoy(); } catch { datos = null; }
