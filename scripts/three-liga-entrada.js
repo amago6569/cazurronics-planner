@@ -9,7 +9,7 @@ export {
   PMREMGenerator, SRGBColorSpace, ACESFilmicToneMapping, NeutralToneMapping, PCFShadowMap,
   DoubleSide, EquirectangularReflectionMapping, RepeatWrapping, AdditiveBlending,
   // los otros juegos (tapas, vidriera, pendón, bajada, cecina, botillo)
-  LatheGeometry, CapsuleGeometry, ConeGeometry, ExtrudeGeometry, TubeGeometry, BufferGeometry, BufferAttribute,
+  LatheGeometry, CapsuleGeometry, ConeGeometry, ExtrudeGeometry, ShapeGeometry, TubeGeometry, BufferGeometry, BufferAttribute,
   Shape, Vector2, CatmullRomCurve3, Points, PointsMaterial, PointLight, SpotLight, Sprite, SpriteMaterial,
   MeshPhysicalMaterial, BackSide, FrontSide, Fog, MathUtils,
 } from "three";

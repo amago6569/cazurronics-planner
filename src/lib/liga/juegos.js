@@ -5,6 +5,7 @@ import * as canasta from "../../../public/liga/motor-canasta.js";
 import * as tapas from "../../../public/liga/motor-tapas.js";
 import * as botillo from "../../../public/liga/motor-botillo.js";
 import * as cecina from "../../../public/liga/motor-cecina.js";
+import * as vidriera from "../../../public/liga/motor-vidriera.js";
 
 export const JUEGOS = {
   canasta: {
@@ -60,6 +61,19 @@ export const JUEGOS = {
     repetir: (semilla, datos) => cecina.rejugar(semilla, datos?.toques),
     ultimoMomento: ultimoToque,
   },
+  vidriera: {
+    id: "vidriera",
+    nombre: "La Vidriera",
+    sitio: "Catedral",
+    pagina: "/liga/vidriera.html",
+    foto: "/liga/fondos/vidriera-v.jpg",
+    habilidad: "Memoria",
+    version: vidriera.VERSION,
+    duracionMs: vidriera.DURACION_MS,
+    // datos = { toques: [t, vidriera, t, vidriera, …] }
+    repetir: (semilla, datos) => vidriera.rejugar(semilla, datos?.toques),
+    ultimoMomento: (datos) => ultimoPar(datos?.toques),
+  },
 };
 
 function ultimoToque(datos) {
@@ -73,7 +87,7 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina"];
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera"];
 
 export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 
