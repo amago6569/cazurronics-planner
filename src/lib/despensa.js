@@ -20,7 +20,7 @@
 //    Tope TOPE_PLACES_PRO_MES = 250 al mes (súbelo con DESPENSA_TOPE_PLACES_PRO cuando la factura confirme 0 €).
 // Peor caso si no quedase nada gratis: 900 × 0,02 + 250 × 0,017 ≈ 22 $ al mes. Lo normal: 0 €.
 // Lo que no cabe en los topes se retoma el mes siguiente.
-import { aObjeto, comando, leerJSON, guardarJSON, varios } from "./almacen";
+import { aObjeto, comando, leerJSON, guardarJSON, varios, recordar, olvidar } from "./almacen";
 import { productoPorId, PRODUCTOS, categoriasDeProducto, notaAjustada } from "./despensaProductos";
 import { leerTiendasGoogle, puntuacionGoogle } from "./despensaTiendas";
 import { leerFichas } from "./despensaFichas";
@@ -230,6 +230,7 @@ export async function barrerCombinacion(producto, zona) {
   if (r.sinCupo) return { producto, zona, sinCupo: true, encontradas: r.encontradas, guardadas: 0 };
   const antes = await leerJSON(claveCombo(producto, zona)).catch(() => null);
   await guardarJSON(claveCombo(producto, zona), { fecha: new Date().toISOString(), tiendas: r.buenas, vacia: !r.buenas.length });
+  olvidar("despensa:");
   const nuevas = await apuntarTiendasNuevas(r.buenas, antes?.tiendas, PRODUCTO[producto].nombre);
   return { producto, zona, encontradas: r.encontradas, guardadas: r.buenas.length, nuevas, muestra: muestraDe(r.buenas) };
 }
@@ -291,6 +292,7 @@ async function barrerPeticion(p) {
   const fecha = new Date().toISOString();
   const antes = await leerJSON(claveLibre(p.id)).catch(() => null);
   await guardarJSON(claveLibre(p.id), { texto: p.texto, zona: p.zona, fecha, tiendas: r.buenas }, 180 * 86400);
+  olvidar("despensa:");
   await comando(["HSET", LIBRES, p.id, fecha]);
   const nuevas = await apuntarTiendasNuevas(r.buenas, antes?.tiendas, p.texto);
   return { peticion: p.texto, zona: p.zona, encontradas: r.encontradas, guardadas: r.buenas.length, nuevas, muestra: muestraDe(r.buenas) };
@@ -356,7 +358,11 @@ export function zonaDeTiendaIA(t, zonaBuscada) {
 }
 
 // conPedidas: también las tiendas de lo que pidió la gente (las usa la IA del buscador; la página no las necesita)
-export async function leerDespensa({ conPedidas = false } = {}) {
+const DIEZ_MIN = 10 * 60 * 1000;
+export function leerDespensa({ conPedidas = false } = {}) {
+  return recordar(`despensa:leer:${conPedidas ? 1 : 0}`, DIEZ_MIN, () => leerDespensaYa({ conPedidas }));
+}
+async function leerDespensaYa({ conPedidas }) {
   const res = await varios(COMBINACIONES.map((c) => ["GET", claveCombo(c.producto, c.zona)])).catch(() => []);
   const tiendas = [];
   let hechas = 0;
@@ -427,7 +433,10 @@ export async function catalogoParaWeb({ producto } = {}) {
   const cats = producto ? categoriasDeProducto(producto) : [];
   if (!cats.length) return lista;
   const ya = new Set(lista.filter((t) => t.producto === producto).map((t) => t.placeId));
-  const [google, fichas] = await Promise.all([leerTiendasGoogle().catch(() => []), leerFichas().catch(() => ({}))]);
+  const [google, fichas] = await Promise.all([
+    recordar("despensa:google", DIEZ_MIN, () => leerTiendasGoogle()).catch(() => []),
+    recordar("despensa:fichas", DIEZ_MIN, () => leerFichas()).catch(() => ({})),
+  ]);
   // Con lo investigado de cada tienda (lib/despensaFichas.js): un premio suma 1 punto y las especialidades, 0,3
   const deGoogle = google
     .filter((t) => !ya.has(t.placeId) && (t.cats || []).some((c) => cats.includes(c)))
