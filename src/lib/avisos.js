@@ -15,7 +15,7 @@ export function avisosPendientes({ barrido, gasto }) {
   const tipos = new Set(Object.values(barrido?.fuentes || {}).filter((f) => !f.ok).map((f) => f.tipo));
   const avisos = [];
   if (tipos.has("clave")) avisos.push({ tipo: "clave", texto: "🔑 Google rechaza la clave de la IA y el barrido no puede buscar. Hay que cambiar GEMINI_API_KEY en Vercel (Settings → Environment Variables). La clave nueva se saca en aistudio.google.com/apikey." });
-  if (tipos.has("modelo")) avisos.push({ tipo: "modelo", texto: "🧩 Google ha retirado uno de los modelos de IA del barrido. Los otros siguen trabajando; dímelo y lo cambio por otro 2.x (gratis)." });
+  if (tipos.has("modelo")) avisos.push({ tipo: "modelo", texto: "🧩 Google ha retirado uno de los modelos de IA del barrido. Si el otro también cae, el barrido se para: dímelo y lo cambio (ya no quedan más 2.x con búsqueda gratis)." });
   if (gasto?.hoy > LIMITE_DIA_EUROS) avisos.push({ tipo: "gasto", texto: `💸 La IA lleva ${euros(gasto.hoy)} hoy (el aviso salta a partir de ${euros(LIMITE_DIA_EUROS)}). Mira la tarjeta de gasto en /panel/oficina.` });
   return avisos;
 }
