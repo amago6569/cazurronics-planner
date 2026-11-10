@@ -115,8 +115,9 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
       )}
 
       <div className="h-[250px] w-full rounded-[2rem] overflow-hidden border-4 border-white shadow-[0_10px_30px_rgba(0,0,0,0.1)] relative z-0">
-        <MapContainer center={center} zoom={14} minZoom={9} maxBounds={LIMITES_LEON} maxBoundsViscosity={1.0} scrollWheelZoom={true} className="h-full w-full" attributionControl={false}>
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapContainer center={center} zoom={14} minZoom={9} maxBounds={LIMITES_LEON} maxBoundsViscosity={1.0} scrollWheelZoom={true} className="h-full w-full">
+          {/* El crédito de OpenStreetMap es obligatorio por sus normas de uso: sin él nos pueden cortar el mapa */}
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
           
           {!itinerario && <Marker position={center} />}
           

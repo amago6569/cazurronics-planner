@@ -109,6 +109,9 @@
 .caja-info { padding: 14px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); display: grid; gap: 4px; align-content: start; text-align: left; color: var(--crema); font: inherit; }
 .caja-info[hidden] { display: none; }
 .caja-info b { font-size: 15px; } .caja-info span { font-size: 13px; color: var(--gris); line-height: 1.35; }
+.caja-info.cal { grid-template-columns: auto 1fr; column-gap: 12px; align-items: center; }
+.caja-info.cal::before { content: ""; grid-row: span 2; width: 22px; height: 22px; background: currentColor; -webkit-mask: var(--ico-cal) center / contain no-repeat; mask: var(--ico-cal) center / contain no-repeat;
+  --ico-cal: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='3'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4M12 13.5v4M10 15.5h4'/%3E%3C/svg%3E"); }
 button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } button.caja-info:active { transform: scale(.98); }
 .seccion { margin: 8px 0 0; font-size: 22px; font-weight: 800; }
 .seccion[hidden] { display: none; }
@@ -248,6 +251,7 @@ button.caja-info { cursor: pointer; transition: transform 120ms ease-out; } butt
         <div class="caja-info" id="prevCaja" hidden><b>Previsión</b><span id="prevTxt"></span></div>
         <button class="caja-info" type="button" id="compartirCaja" hidden><b>Decidid en grupo</b><span id="compartirTxt">Manda el enlace y votad cada parada.</span></button>
       </div>
+      <button class="caja-info cal marco" type="button" id="calCaja" hidden><b>Al calendario</b><span id="calTxt">Guárdalo en el móvil con aviso de cada parada.</span></button>
       <h2 class="seccion marco">La ruta</h2>
       <div class="marco" id="fichas" style="display:grid;gap:12px"></div>
       <h2 class="seccion marco" id="eventosTit" hidden>Más cosas ese día</h2>
@@ -405,6 +409,12 @@ async function compartir() {
   else if (r === "error") CZ.avisar("No hemos podido copiar el enlace. Prueba otra vez.");
 }
 $("compartirCaja").onclick = compartir;
+// «Al calendario»: el .ics se monta en el propio móvil con el plan que ya hay en pantalla (no llama a ninguna API)
+$("calCaja").onclick = () => {
+  if (!PLAN || !PLAN.length) return;
+  if (CZ.descargarCalendario(PLAN, peticion.fecha, planId)) $("calTxt").textContent = "Listo. Ábrelo y dale a «Añadir».";
+  else CZ.avisar("No hemos podido crear el archivo del calendario. Prueba otra vez.");
+};
 
 /* ═══ Montando: la web llama a /api/plan y mientras enseña los mismos pasos de siempre ═══ */
 const PASOS_CARGA = ["Mirando la previsión del tiempo", "Buscando sitios dentro de tu zona", "Ajustándolo a tu presupuesto", "Comprobando horarios y fotos reales", "Trazando la ruta más cazurra"];
@@ -444,6 +454,7 @@ function pintarResultado(datos) {
   $("prevCaja").hidden = !datos.prevision; $("prevTxt").textContent = datos.prevision || "";
   $("compartirCaja").hidden = !planId;
   $("dosCol").hidden = !datos.prevision && !planId;
+  $("calCaja").hidden = !PLAN.length; $("calTxt").textContent = "Guárdalo en el móvil con aviso de cada parada.";
   pintarFichas();
   pintarEventos(datos.masEseDia || []);
   pintarRuta();

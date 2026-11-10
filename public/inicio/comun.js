@@ -84,6 +84,46 @@
     try { await navigator.clipboard.writeText(url); return "copiado"; } catch { return "error"; }
   };
 
+  // «Al calendario»: el plan como archivo .ics (una cita por parada, con aviso 30 min antes). Se hace en el móvil: sin servidor ni coste.
+  // Horas «flotantes» (sin zona): el calendario las pone en la hora del móvil, que en León es la de Madrid.
+  const icsTexto = (s) => String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  const icsPlegar = (linea) => { // máximo 75 bytes por línea, como pide el formato
+    const trozos = []; let actual = "", bytes = 0;
+    for (const ch of linea) { const b = ch.charCodeAt(0) < 128 ? 1 : encodeURIComponent(ch).length / 3; if (bytes + b > (trozos.length ? 74 : 75)) { trozos.push(actual); actual = ""; bytes = 0; } actual += ch; bytes += b; }
+    trozos.push(actual); return trozos.join("\r\n ");
+  };
+  const icsHora = (fecha, min) => { const d = new Date(`${fecha}T00:00:00`); d.setMinutes(min); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}00`; };
+  C.calendarioPlan = (plan, fecha, planId, origen = "https://cazurronics.es") => {
+    const paradas = (plan || []).map((p) => ({ p, h: C.leerHora(p.hora) }));
+    const enlace = planId ? `${origen}/plan/${planId}` : origen;
+    const sello = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+    const lineas = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cazurronics//Planner//ES", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+    const cita = (uid, inicio, fin, titulo, lugar, desc, aviso) => lineas.push("BEGIN:VEVENT", `UID:${uid}@cazurronics.es`, `DTSTAMP:${sello}`, ...inicio, ...fin,
+      `SUMMARY:${icsTexto(titulo)}`, ...(C.hay(lugar) ? [`LOCATION:${icsTexto(lugar)}`] : []), `DESCRIPTION:${icsTexto(desc)}`, `URL:${enlace}`, ...(aviso ? ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsTexto(titulo)}`, "TRIGGER:-PT30M", "END:VALARM"] : []), "END:VEVENT");
+    const conHora = paradas.filter((x) => x.h.min != null);
+    if (conHora.length) {
+      conHora.forEach(({ p, h }, k) => {
+        const sig = conHora[k + 1], fin = h.fin != null && h.fin > h.min ? h.fin : sig && sig.h.min > h.min ? sig.h.min : h.min + 90;
+        const lugar = C.hay(p.lugar) ? p.lugar : `${p.titulo}, León`;
+        cita(`${planId || fecha}-${k}`, [`DTSTART:${icsHora(fecha, h.min)}`], [`DTEND:${icsHora(fecha, fin)}`], p.titulo || "Parada del plan", lugar,
+          [p.descripcion, C.hay(p.precio) ? `Precio: ${p.precio}` : "", `Tu plan: ${enlace}`].filter(C.hay).join("\n"), true);
+      });
+    } else { // sin horas: un solo aviso de día entero con todas las paradas
+      cita(`${planId || fecha}-dia`, [`DTSTART;VALUE=DATE:${icsHora(fecha, 0).slice(0, 8)}`], [`DTEND;VALUE=DATE:${icsHora(fecha, 24 * 60).slice(0, 8)}`],
+        "Plan en León", "", [...paradas.map(({ p }, i) => `${i + 1}. ${p.titulo}`), `Tu plan: ${enlace}`].join("\n"));
+    }
+    lineas.push("END:VCALENDAR");
+    return lineas.map(icsPlegar).join("\r\n") + "\r\n";
+  };
+  C.descargarCalendario = (plan, fecha, planId) => {
+    try {
+      const url = URL.createObjectURL(new Blob([C.calendarioPlan(plan, fecha, planId, location.origin)], { type: "text/calendar;charset=utf-8" }));
+      const a = document.createElement("a"); a.href = url; a.download = `plan-cazurronics-${fecha}.ics`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+      return true;
+    } catch { return false; }
+  };
+
   C.distanciaKm = (a, b) => { const R = 6371, r = Math.PI / 180, dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
     const h = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
   C.km = (k) => (k < 1 ? `${Math.round(k * 1000)} m` : `${(Math.round(k * 10) / 10).toString().replace(".", ",")} km`);
