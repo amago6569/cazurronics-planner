@@ -283,11 +283,15 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
 
   let partidaVista = null;
   let golpe = -1e9; // ms de partida en que cayó algo en la cazuela (para que bote un poco)
+  // migas que saltan de la cazuela, lo que se estrella en la barra y el polvillo en la luz de los faroles (adorno)
+  const fx = base.efectos;
+  fx.ponerMotas({ n: 34, caja: [-1.5, 1.5, -0.2, 2.4, -0.5, 0.8], color: 0xffd9a0, tam: 0.018, opacidad: 0.4 });
+  let enBarra = new WeakSet();
   function dibujar(d) {
     const { partida, decididas } = d;
     const dt = Math.min(0.1, (d.ahora - (dibujar.antes || d.ahora)) / 1000); dibujar.antes = d.ahora;
     base.moverCamara(d, { x: 0.35, y: 0.25, z: 1.6 }, dt);
-    if (partida !== partidaVista) { partidaVista = partida; vaciarMonton(); giros.clear(); golpe = -1e9; }
+    if (partida !== partidaVista) { partidaVista = partida; vaciarMonton(); giros.clear(); golpe = -1e9; enBarra = new WeakSet(); }
     devolverTodas();
     const caida = marco.campo.caida;
     const tj = d.tj;
@@ -320,7 +324,19 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
         const s = (tj - c.tc) / 1000;
         if (s < 0) continue;
         if (c.res.cogida && c.tipo !== "servilleta") {
-          if (s >= 0.12) { alMonton(c); if (c.tc > golpe) golpe = c.tc; continue; }
+          if (s >= 0.12) {
+            alMonton(c);
+            if (c.tc > golpe) {
+              golpe = c.tc;
+              if (s < 0.5) { // recién caída (no al volver a pintar las de antes)
+                const oro = c.clase === "dorado";
+                fx.sacudir(oro ? 0.3 : 0.16);
+                fx.trozos({ x: xc, y: 0.03, z: 0.05, ancho: 0.08, n: oro ? 12 : 6, colores: oro ? [0xffd76a, 0xf2b53a, 0xfff2c0] : [0xd9a441, 0xb5651d, 0xf0d9a0], fuerza: 0.6, arriba: 1.5, tam: [0.008, 0.02], suelo: BARRA + 0.01, vida: 0.9 });
+                if (oro) fx.humo({ x: xc, y: 0.1, z: 0.15, n: 4, color: 0xffd76a, tam: [0.1, 0.5], opacidad: 0.45, luz: true, vida: 0.5 });
+              }
+            }
+            continue;
+          }
           const o = pedir(c.clase);
           const k = s / 0.12;
           o.position.set(xc + (xEn(c, c.tc) - xc) * (1 - k), -0.07 * k, 0);
@@ -340,7 +356,13 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
         const suelo = BARRA + c.r * 0.6;
         const x = xEn(c, c.tc) + c.vx * s * 0.3; // lo que venía en diagonal sigue un poco de lado
         let y = -(1.4 * s + 4.9 * s * s);
-        if (y < suelo) y = suelo;
+        if (y < suelo) {
+          y = suelo;
+          if (!enBarra.has(c) && s < 1) { // el golpe contra la barra
+            enBarra.add(c);
+            if (c.clase !== "servilleta") { fx.sacudir(0.14); fx.trozos({ x, y: suelo, z: 0.15, n: 5, colores: [0xd9a441, 0x8a4a1c, 0xf0d9a0], fuerza: 0.5, arriba: 1.0, tam: [0.008, 0.018], suelo, vida: 0.7 }); }
+          }
+        }
         o.position.set(x, y, 0.15 * Math.min(1, s * 3));
         o.scale.setScalar(ESCALA_COSA * (s < 0.7 ? 1 : Math.max(0, 1 - (s - 0.7) / 0.5)));
         if (y > suelo) orientar(o, c, (c.tc - c.t0) / 1000 + s);

@@ -167,6 +167,11 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
   function medir(m) { base.medir(m, { cx: m.campo.cx, yPlano: m.campo.yCorte, k: m.campo.k, D, yc: YC }); }
 
   let partidaVista = null, giroDisco = 0;
+  // virutas que saltan de la cuchilla en cada corte y un destello si la loncha sale fina (adorno)
+  const fx = base.efectos;
+  fx.ponerMotas({ n: 24, caja: [-1.4, 1.4, 0, 1.8, -0.3, 0.9], color: 0xffe8cc, tam: 0.014, opacidad: 0.35 });
+  let corteVisto = -1e9;
+  const pCorte = new THREE.Vector3();
   const q = new THREE.Quaternion(), eje3 = new THREE.Vector3(0, 0, 1);
   function dibujar(d) {
     const v = d.vista;
@@ -182,6 +187,16 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
     giroDisco += dt * (reducido ? 0 : s < 0.25 ? 30 : 16);
     caraDisco.rotation.x = giroDisco;
     cromo.emissive?.setScalar(s >= 0 && s < 0.2 ? 0.25 * (1 - s / 0.2) : 0);
+    if (v.ultimoCorte !== corteVisto) {
+      corteVisto = v.ultimoCorte;
+      const l = v.lonchas[v.lonchas.length - 1];
+      if (l && d.estado === "juego" && s >= 0 && s < 0.3) {
+        maquina.localToWorld(pCorte.set(XC + 0.02, ALTO * 0.55, 0.12));
+        fx.sacudir(l.nota === "gorda" ? 0.3 : 0.16);
+        fx.trozos({ x: pCorte.x, y: pCorte.y, z: pCorte.z, fondo: 0.08, n: 7, colores: [0x7d1416, 0x9c1e1c, 0x5a2a18, 0xe6cdb0], fuerza: 0.45, vx: 0.35, arriba: 1.1, tam: [0.006, 0.016], suelo: 0.02, vida: 0.8 });
+        if (l.nota === "papel" || l.nota === "fina") fx.humo({ x: pCorte.x, y: pCorte.y, z: pCorte.z + 0.1, n: l.nota === "papel" ? 4 : 2, color: 0xffe2a0, tam: [0.08, 0.4], opacidad: 0.4, luz: true, vida: 0.45 });
+      }
+    }
     // lonchas: caen de la cuchilla al plato y se quedan, en abanico
     const vistas = new Set();
     const ultimas = v.lonchas.slice(-14);

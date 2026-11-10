@@ -64,7 +64,7 @@ export function crearMarco(juego) {
     lienzo.width = Math.round(m.ancho * m.dpr); lienzo.height = Math.round(m.alto * m.dpr);
     ctx.setTransform(m.dpr, 0, 0, m.dpr, 0, 0);
     // en 3D la foto va desenfocada (está lejos y la cámara enfoca el juego); en plano, nítida
-    const quiere = `${juego.fondo}-${m.ancho / m.alto > 1 ? "h" : "v"}${m.modo === "plano" ? "" : "-lejos"}.jpg`;
+    const quiere = `${juego.fondo}-${m.ancho / m.alto > 1 ? "h" : "v"}${m.modo === "plano" ? "" : "-lejos"}.webp`;
     if (foto.getAttribute("src") !== quiere) foto.setAttribute("src", quiere);
     juego.medir?.(m);
     if (escena3d) escena3d.medir(m);

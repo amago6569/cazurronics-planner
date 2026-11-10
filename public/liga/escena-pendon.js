@@ -26,6 +26,10 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
   Object.assign(sol.shadow.camera, { left: -3, right: 3, top: 4, bottom: -1, near: 1, far: 16 });
   sol.shadow.radius = 3; sol.shadow.bias = -0.0005; sol.shadow.normalBias = 0.01;
   escena.add(sol, sol.target);
+  // contraluz frío por detrás: recorta al pendonero y la tela contra la plaza
+  const contraluz = new THREE.DirectionalLight(0xa9c4ff, 0.7);
+  contraluz.position.set(-3, 2.5, -3);
+  escena.add(contraluz);
 
   // ── Suelo de la plaza: losas (corren cuando la cámara sigue al pendonero) ──
   const losas = textura(256, 256, (g, w, h) => {
@@ -41,7 +45,7 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
   }, { repetir: true });
   const ANCHO_SUELO = 24;
   losas.repeat.set(ANCHO_SUELO / 2, 7);
-  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(ANCHO_SUELO, 14), new THREE.MeshStandardMaterial({ map: losas, roughness: 0.9 }));
+  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(ANCHO_SUELO, 14), new THREE.MeshStandardMaterial({ map: losas, bumpMap: losas, bumpScale: 0.7, roughness: 0.82 }));
   suelo.rotation.x = -Math.PI / 2;
   suelo.receiveShadow = true;
   escena.add(suelo);
@@ -119,6 +123,10 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
   function medir(m) { base.medir(m, { cx: m.campo.cx, yPlano: m.campo.yBase, k: m.campo.hw, D, yc: YC }); }
 
   let plomoVisto = 0;
+  // polvo de la plaza que se lleva el viento, hojas que cruzan y la polvareda cuando el pendón se va al suelo (adorno)
+  const fx = base.efectos;
+  fx.ponerMotas({ n: 44, caja: [-2.6, 2.6, 0.05, 4, -0.8, 1.2], color: 0xffe2b8, tam: 0.022, opacidad: 0.4 });
+  let enSuelo = false, hoja = 0;
   const arriba = new THREE.Vector3(0, 1, 0), hombro = new THREE.Vector3(), mano = new THREE.Vector3(), dir = new THREE.Vector3();
   function dibujar(d) {
     const v = d.vista;
@@ -149,6 +157,21 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
     }
     p.needsUpdate = true;
     geoTela.computeVertexNormals();
+    fx.motas.viento = v.viento * 1.6;
+    hoja -= dt;
+    if (d.estado === "juego" && Math.abs(v.viento) > 0.05 && hoja <= 0) {
+      hoja = 0.9 - Math.min(0.6, Math.abs(v.viento));
+      const s = Math.sign(v.viento);
+      fx.trozos({ x: x - s * 2.4, y: 0.25 + 1.6 * Math.abs(Math.sin(d.ahora * 0.0031)), z: 0.3, fondo: 0.5, n: 1, colores: [0xb5651d, 0x8a6a1c, 0xc98a2a, 0x6a7a2a], fuerza: 0.15, vx: s * (1.6 + 2 * Math.abs(v.viento)), arriba: 0.5, gravedad: 0.9, tam: [0.016, 0.03], suelo: 0.01, vida: 2.6 });
+    }
+    const tumbado = Math.abs(v.angulo) > 1.38;
+    if (tumbado && !enSuelo) {
+      const s = Math.sign(v.angulo);
+      fx.sacudir(0.7);
+      fx.humo({ x: x + s * LARGO * 0.75, y: 0.08, z: 0.1, ancho: LARGO * 0.25, n: 6, color: 0xd9c4a6, tam: [0.15, 0.7], opacidad: 0.35, abre: 0.5, sube: 0.3, vida: 1.0 });
+      fx.trozos({ x: x + s * LARGO * 0.8, y: 0.04, z: 0.1, ancho: LARGO * 0.2, n: 10, colores: [0xa89a88, 0x8a7c6c], fuerza: 0.6, arriba: 1.2, tam: [0.008, 0.018], suelo: 0.01, vida: 0.8 });
+    }
+    enSuelo = tumbado;
     plomoVisto += ((v.plomo ? 1 : 0) - plomoVisto) * Math.min(1, dt * 8);
     hilo.position.set(x, CUJA + (LARGO + 0.2) / 2, -0.05);
     hilo.material.opacity = 0.5 * plomoVisto;

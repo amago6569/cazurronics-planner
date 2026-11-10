@@ -80,7 +80,7 @@ function medir() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const foto = $("foto");
   // en 3D, la Catedral desenfocada (está lejos y la cámara enfoca la canasta); en plano, nítida
-  const quiere = `fondo-${ancho / alto > 1 ? "h" : "v"}${modo === "plano" ? "" : "-lejos"}.jpg`;
+  const quiere = `fondo-${ancho / alto > 1 ? "h" : "v"}${modo === "plano" ? "" : "-lejos"}.webp`;
   if (foto.getAttribute("src") !== quiere) foto.setAttribute("src", quiere);
   calcularPiedra();
   if (escena3d) escena3d.medir(ancho, alto, H, arriba, window.devicePixelRatio || 1);
@@ -88,8 +88,8 @@ function medir() {
 // Siluetas de piedra de cada foto (fracciones del ancho y alto de la foto): la torre y, por debajo del tejado, la nave.
 // Las sombras solo se pintan dentro, para que no caigan sobre el cielo.
 const PIEDRA = {
-  "fondo-v.jpg": { ancho: 810, alto: 1440, puntos: [[0, 0], [0.715, 0], [0.715, 0.48], [1, 0.48], [1, 1], [0, 1]] },
-  "fondo-h.jpg": { ancho: 1920, alto: 1080, puntos: [[0.19, 0.13], [0.33, 0], [0.57, 0], [0.57, 0.48], [1, 0.48], [1, 1], [0.19, 1]] },
+  "fondo-v.webp": { ancho: 810, alto: 1440, puntos: [[0, 0], [0.715, 0], [0.715, 0.48], [1, 0.48], [1, 1], [0, 1]] },
+  "fondo-h.webp": { ancho: 1920, alto: 1080, puntos: [[0.19, 0.13], [0.33, 0], [0.57, 0], [0.57, 0.48], [1, 0.48], [1, 1], [0.19, 1]] },
 };
 let siluetaPiedra = null;
 function calcularPiedra() {

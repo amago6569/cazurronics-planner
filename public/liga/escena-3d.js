@@ -10,6 +10,7 @@
 // (x − s.x, y, s.z − z). Con la cámara quieta en su sitio, este dibujo coincide al píxel con proyectar() del motor,
 // que es con lo que se calcula hacia dónde va el tiro.
 import * as THREE from "./vendor/three-liga.js";
+import { crearEfectos } from "./efectos-3d.js";
 import { xAro, SALIDA, R_BALON, R_ARO, ALTURA_ARO, ARO_TABLERO, TABLERO, CAMARA, PASO } from "./motor-canasta.js";
 
 const ARO_INICIAL = { z: 4.2, x: 0, viento: 0, amplitud: 0, periodo: 1, fase: 0 };
@@ -214,6 +215,9 @@ export function crearEscena3D({ lienzo, contexto, foto, reducido = false, calida
   const objetivo = new THREE.Vector3(), entradaDesdeV = new THREE.Vector3();
   const reserva = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   const vivos = new Set();
+  // polvo flotando en la luz de la plaza y destellos en el aro cuando entra (solo adorno)
+  const fx = crearEfectos({ escena, reducido, maxTrozos: 8 });
+  fx.ponerMotas({ n: 50, caja: [-2.6, 2.6, 0.4, 4.6, -1.5, 4.5], color: 0xfff0d8, tam: 0.035, opacidad: 0.4 });
 
   function medir(nAncho, nAlto, nH, nArriba, nDpr) {
     ancho = nAncho; alto = nAlto; H = nH; arriba = nArriba; dpr = nDpr;
@@ -429,6 +433,11 @@ export function crearEscena3D({ lienzo, contexto, foto, reducido = false, calida
     for (const v of d.vuelos) {
       let e = estados.get(v);
       if (!e) { e = crearEstado(v); estados.set(v, e); }
+      if (v.res.canasta && !e.celebrado && tj >= v.res.fin && tj < v.res.fin + 0.4) {
+        e.celebrado = true;
+        const limpia = v.res.limpia;
+        fx.humo({ x: xCanastaSim, y: ALTURA_ARO - 0.05, z: 0.05, ancho: R_ARO * 0.8, n: limpia ? 6 : 3, color: limpia ? 0xffd76a : 0xfff2d8, tam: [0.12, limpia ? 0.9 : 0.6], opacidad: limpia ? 0.5 : 0.35, luz: true, vida: 0.6, abre: 0.6, sube: 0.3 });
+      }
       if (tj < v.res.t0 || e.fuera) { e.malla.visible = false; continue; }
       const p = tj <= v.res.fin ? enTrayectoria(v.res, tj, va) : caidaEn(e, v.res, tj, xCanastaSim);
       e.malla.position.copy(p);
@@ -448,6 +457,7 @@ export function crearEscena3D({ lienzo, contexto, foto, reducido = false, calida
     } else mano.visible = false;
 
     pintarRed();
+    fx.actualizar(dt);
     const t1 = performance.now();
     renderer.render(escena, camara);
     const t2 = performance.now();

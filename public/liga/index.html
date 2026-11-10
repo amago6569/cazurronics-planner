@@ -44,6 +44,8 @@ h1 { margin: 0; font-weight: 900; font-stretch: 62%; text-transform: uppercase; 
 
 h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 34px; line-height: .9; }
 .juegos { display: grid; gap: 12px; }
+/* mientras llegan los juegos de hoy se guarda su hueco: lo de debajo no salta */
+.juegos[aria-busy="true"] { min-height: 348px; border-radius: 22px; background: linear-gradient(var(--vidrio), var(--vidrio)) top / 100% 168px no-repeat, linear-gradient(var(--vidrio), var(--vidrio)) bottom / 100% 168px no-repeat; }
 .juego { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; min-height: 168px; padding: 16px; border-radius: 22px; overflow: hidden;
   text-decoration: none; color: var(--crema); border: 1px solid var(--borde); isolation: isolate; transition: transform 160ms var(--ease-out); }
 .juego:active { transform: scale(.985); }
@@ -100,7 +102,7 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
 </style>
 </head>
 <body>
-<div class="cielo" aria-hidden="true"><img src="/liga/fondo-v-lejos.jpg" alt=""></div>
+<div class="cielo" aria-hidden="true"><img src="/liga/fondo-v-lejos.webp" alt="" fetchpriority="high" decoding="async"></div>
 <main>
   <div class="arriba">
     <a class="marca" href="/">Cazurronics</a>
@@ -173,7 +175,7 @@ function pintarJuegos() {
       <span>${j.quedan ? `Te quedan ${j.quedan} ${j.quedan === 1 ? "intento" : "intentos"}` : "Intentos de hoy hechos"}${j.mejor != null ? ` · tu mejor: ${j.mejor}` : ""}</span>` : `<span>3 intentos al día</span>`;
     const hecho = con && !j.quedan;
     return `<a class="juego${hecho ? " hecho" : ""}" href="${esc(j.pagina)}">
-      <img src="${esc(j.foto)}" alt="" loading="lazy">
+      <img src="${esc(String(j.foto).replace(/\.webp$/, "-mini.webp"))}" alt="" decoding="async">
       <div><span class="hab">${esc(j.habilidad)} · ${esc(j.sitio)}</span><h3>${esc(j.nombre)}</h3><div class="estado">${puntos}</div></div>
       <span class="ir">${hecho ? "Practicar" : "Jugar"}</span></a>`;
   }).join("") || `<p class="aviso-cuenta">Hoy no hay juegos.</p>`;
@@ -181,15 +183,15 @@ function pintarJuegos() {
 
 // Los siete juegos (mismo orden y datos que src/lib/liga/juegos.js)
 const TODOS = [
-  ["canasta", "Canasta en la Catedral", "Puntería", "/liga/fondo-v.jpg"],
-  ["tapas", "Tapeo en el Húmedo", "Reflejos", "/liga/fondos/humedo-v.jpg"],
-  ["botillo", "La torre del botillo", "Pulso", "/liga/fondos/botillo-v.jpg"],
-  ["cecina", "La loncha de cecina", "Precisión", "/liga/fondos/cecina-v.jpg"],
-  ["vidriera", "La Vidriera", "Memoria", "/liga/fondos/vidriera-v.jpg"],
-  ["pendon", "El Pendón", "Equilibrio", "/liga/fondos/pendon-v.jpg"],
-  ["esqui", "Bajada en San Isidro", "Esquí", "/liga/fondos/montes-v.jpg"],
+  ["canasta", "Canasta en la Catedral", "Puntería", "/liga/fondo-v.webp"],
+  ["tapas", "Tapeo en el Húmedo", "Reflejos", "/liga/fondos/humedo-v.webp"],
+  ["botillo", "La torre del botillo", "Pulso", "/liga/fondos/botillo-v.webp"],
+  ["cecina", "La loncha de cecina", "Precisión", "/liga/fondos/cecina-v.webp"],
+  ["vidriera", "La Vidriera", "Memoria", "/liga/fondos/vidriera-v.webp"],
+  ["pendon", "El Pendón", "Equilibrio", "/liga/fondos/pendon-v.webp"],
+  ["esqui", "Bajada en San Isidro", "Esquí", "/liga/fondos/montes-v.webp"],
 ];
-$("todos").innerHTML = TODOS.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto}" alt="" loading="lazy"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
+$("todos").innerHTML = TODOS.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto.replace(/\.webp$/, "-mini.webp")}" alt="" loading="lazy" decoding="async"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
 
 async function cargar() {
   try { datos = await hoy(); } catch { datos = null; }

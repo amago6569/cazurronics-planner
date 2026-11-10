@@ -22,6 +22,9 @@ input, textarea, select { font-size: 16px; }
 .fondo { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
 .fondo video { position: absolute; inset: -6%; width: 112%; height: 112%; object-fit: cover; filter: blur(16px) saturate(1.15); transition: opacity 600ms ease; }
 .fondo::after { content: ""; position: absolute; inset: 0; background: rgba(7, 6, 10, .64); }
+/* En el móvil el vídeo ya viene desenfocado de fábrica (leon-fondo-movil.mp4): se ve igual y el teléfono no tiene que
+   desenfocar 30 fotogramas por segundo, que es lo que más pesaba al deslizar. */
+@media (max-width: 700px) { .fondo video { filter: none; } }
 
 /* cabecera: progreso, volver, nombre de la sección y cerrar */
 .cabeza { position: relative; z-index: 2; padding-top: max(10px, env(safe-area-inset-top, 0px)); padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
@@ -53,7 +56,13 @@ input, textarea, select { font-size: 16px; }
 }
 :focus-visible { outline: 2px solid var(--oro); outline-offset: 3px; }
 textarea:focus-visible, input:focus-visible { outline: none; }
-@media (prefers-reduced-motion: reduce) { .progreso span::after, .chip, .principal { transition-duration: 1ms !important; } }
+/* Todo botón responde al dedo aunque no tenga su propio estilo (:where no pisa a los que ya lo tienen) */
+:where(button, [role="button"]) { transition: transform 140ms ease-out; }
+:where(button, [role="button"]):active { transform: scale(.97); }
+/* Las fotos entran con un fundido corto en vez de aparecer de golpe (la clase la pone cada página al cargar la foto) */
+@keyframes foto-entra { from { opacity: 0; } }
+img.entra { animation: foto-entra 320ms ease both; }
+@media (prefers-reduced-motion: reduce) { .progreso span::after, .chip, .principal { transition-duration: 1ms !important; } img.entra { animation: none; } }
 
 /* mapa oscuro (mapa.js) */
 /* isolation: las capas de Leaflet (z-index 400+) se quedan dentro del mapa y no tapan las sugerencias de búsqueda */
