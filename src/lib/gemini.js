@@ -6,19 +6,23 @@
 import { enSegundoPlano } from "./almacen";
 import { registrarGastoIA } from "./estadisticas";
 
-const MODELOS = {
+// Los 2.0 (gemini-2.0-flash y -lite) los apagó Google el 1-6-2026: devolvían 404 y solo hacían perder tiempo.
+// De los 2.x solo quedan los 2.5 (sin fecha de cierre, pero Google ya no los da a cuentas nuevas).
+export const MODELOS = {
   // Planes y retoques: gemini-2.5-flash primero. gemini-flash-latest se cobra como un 3.x (0,75 $ / 3,75 $ por millón de
   // tokens, frente a 0,30 $ / 2,50 $) y era lo que más pesaba en la factura de los planes. Queda de reserva por si el 2.5
   // se satura. PLANES_GEMINI_3=1 en Vercel vuelve a ponerlo el primero si los planes salen peor.
-  usuario: ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
-  // Solo modelos 2.x: en ellos las búsquedas en Google entran en las 1.500 peticiones gratis al día. Los 3.x (como
-  // gemini-flash-lite-latest) cobran CADA búsqueda; cuando el 2.5 se saturaba (429) el barrido saltaba a uno 3.x y
-  // eso fue la mayor parte de la factura. Si los 2.x no responden, ese tramo se salta y se repite en la siguiente pasada.
-  barrido: ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash"],
+  usuario: ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"],
+  // Solo modelos 2.x: en ellos las búsquedas en Google entran en las 1.500 peticiones gratis al día (cupo compartido
+  // entre 2.5 Flash y 2.5 Flash-Lite). Los 3.x (como gemini-flash-lite-latest) cobran CADA búsqueda; cuando el 2.5 se
+  // saturaba (429) el barrido saltaba a uno 3.x y eso fue la mayor parte de la factura. De reserva, 2.5 Flash sin pensar:
+  // la búsqueda sigue gratis y solo cuesta más el texto (≤0,02 $ por búsqueda frente a ≤0,004 $). Si los dos fallan,
+  // ese tramo se salta y se repite en la siguiente pasada.
+  barrido: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
   // El buscador de la Despensa: sin Google, solo elige entre tiendas ya comprobadas. Basta un modelo barato (~0,0007 $ por búsqueda).
-  despensa: ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"],
+  despensa: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
   // El asesor de Telegram: sin Google, solo lee las cifras que le pasamos (~0,0005 $ por pregunta).
-  asesor: ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"],
+  asesor: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
 };
 const modelosPara = (para) => {
   if (para === "usuario" && /^(1|si|sí|true)$/i.test(String(process.env.PLANES_GEMINI_3 || "").trim())) {
@@ -26,8 +30,10 @@ const modelosPara = (para) => {
   }
   return MODELOS[para] || MODELOS.usuario;
 };
-// gemini-2.5-flash también piensa y lo cobra como salida: con un tope el plan sale igual y cuesta menos
+// gemini-2.5-flash también piensa y lo cobra como salida: con un tope el plan sale igual y cuesta menos.
+// Fuera de los planes (barrido, Despensa, asesor) es solo la reserva del Flash-Lite y no piensa nada.
 const PENSAR_25 = 1024;
+const pensar25 = (para) => (para === "usuario" ? PENSAR_25 : 0);
 // Los modelos 3.x "piensan" antes de contestar y esos tokens se cobran. Con "low" el plan sale igual y cuesta bastante menos
 // (y tarda menos). GEMINI_PENSAMIENTO=auto en Vercel devuelve el comportamiento de fábrica; también vale minimal, medium o high.
 const NIVEL_PENSAMIENTO = String(process.env.GEMINI_PENSAMIENTO || "low").trim().toLowerCase();
@@ -81,7 +87,7 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
         method: "POST",
         signal: AbortSignal.timeout(Math.max(1000, tope - Date.now())),
         headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY || "" },
-        body: JSON.stringify({ ...(sistema ? { systemInstruction: { parts: [{ text: sistema }] } } : {}), contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}), ...(/^gemini-2\.5-flash$/.test(modelo) ? { thinkingConfig: { thinkingBudget: PENSAR_25 } } : {}) } }),
+        body: JSON.stringify({ ...(sistema ? { systemInstruction: { parts: [{ text: sistema }] } } : {}), contents: [{ parts: [{ text: prompt }] }], ...(google ? { tools: [{ googleSearch: {} }] } : {}), generationConfig: { temperature: temperatura, ...(maxSalida ? { maxOutputTokens: maxSalida } : {}), ...(json && !google ? { responseMimeType: "application/json" } : {}), ...(pensarPoco ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}), ...(/^gemini-2\.5-flash$/.test(modelo) ? { thinkingConfig: { thinkingBudget: pensar25(para) } } : {}) } }),
         cache: "no-store",
       });
       const pensarPoco = NIVEL_PENSAMIENTO !== "auto" && /^gemini-(flash|3)/.test(modelo);
@@ -122,7 +128,7 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
 }
 
 // Por qué ha fallado una búsqueda, en cristiano, para la oficina. err.fallos trae lo que dijo cada modelo
-// ("gemini-2.5-flash-lite: 429 Resource exhausted…", "gemini-2.0-flash: tardó demasiado"). Devuelve { tipo, texto, detalle }
+// ("gemini-2.5-flash-lite: 429 Resource exhausted…", "gemini-2.5-flash: tardó demasiado"). Devuelve { tipo, texto, detalle }
 export function motivoClaro(err) {
   const fallos = Array.isArray(err?.fallos) && err.fallos.length ? err.fallos : [String(err?.message || err || "")];
   const detalle = fallos.join(" | ").slice(0, 400);

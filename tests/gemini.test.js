@@ -1,6 +1,6 @@
 // npm test — Sacar el JSON de lo que responde la IA, aunque venga "adornado"
 import { describe, expect, it } from "vitest";
-import { ErrorIA, extraerJSON, llamarGemini, medirUso, mensajeParaUsuario } from "../src/lib/gemini";
+import { ErrorIA, extraerJSON, llamarGemini, medirUso, mensajeParaUsuario, MODELOS } from "../src/lib/gemini";
 
 describe("extraerJSON", () => {
   it("lee una lista limpia", () => {
@@ -79,6 +79,31 @@ describe("llamarGemini sin Google", () => {
       expect(cuerpo.tools).toBeUndefined();
       expect(cuerpo.generationConfig.responseMimeType).toBe("application/json");
       expect(r.uso).toMatchObject({ entrada: 100, salida: 10, consultas: 0 });
+    } finally { globalThis.fetch = original; }
+  });
+});
+
+describe("modelos que se usan", () => {
+  it("el barrido solo usa 2.5 (búsqueda gratis): ni 3.x, ni alias -latest, ni los 2.0 que Google apagó", () => {
+    expect(MODELOS.barrido.length).toBeGreaterThan(0);
+    for (const m of MODELOS.barrido) expect(m).toMatch(/^gemini-2\.5-flash(-lite)?$/);
+  });
+  it("nadie pide ya los 2.0 (devuelven 404 desde el 1-6-2026)", () => {
+    for (const lista of Object.values(MODELOS)) for (const m of lista) expect(m).not.toMatch(/^gemini-2\.0/);
+  });
+  it("2.5 Flash de reserva en el barrido no piensa (no se paga pensamiento)", async () => {
+    const original = globalThis.fetch;
+    const cuerpos = [];
+    globalThis.fetch = async (url, opciones) => {
+      cuerpos.push({ url, cuerpo: JSON.parse(opciones.body) });
+      if (url.includes("flash-lite")) return new Response(JSON.stringify({ error: { message: "busy" } }), { status: 503 });
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "[]" }] } }], usageMetadata: {} }), { status: 200 });
+    };
+    try {
+      const r = await llamarGemini("hola", { para: "barrido" });
+      expect(r.modelo).toBe("gemini-2.5-flash");
+      expect(cuerpos[1].cuerpo.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+      expect(cuerpos[1].cuerpo.tools).toEqual([{ googleSearch: {} }]);
     } finally { globalThis.fetch = original; }
   });
 });
