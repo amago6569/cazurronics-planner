@@ -139,9 +139,9 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 <script src="/inicio/rosa.js"></script>
 <script>
 const SECCIONES = [
-  { nombre: "Planner",  completo: "Cazurronics Planner",        frase: "Dinos qué te apetece y te montamos el plan en León." },
-  { nombre: "Despensa", completo: "La despensa de Cazurronics", frase: "Lo mejor de la tierra leonesa, del productor a tu mesa." },
-  { nombre: "Pronto",   completo: "Próxima sección",            frase: "Lo próximo de Cazurronics irá aquí.", pronto: true },
+  { nombre: "Planner",  completo: "Cazurronics Planner",        frase: "Dinos qué te apetece y te montamos el plan en León.", url: "/planner" },
+  { nombre: "Despensa", completo: "La despensa de Cazurronics", frase: "Lo mejor de la tierra leonesa, del productor a tu mesa.", url: "/despensa" },
+  { nombre: "Pronto",   completo: "Próxima sección",            frase: "Lo próximo de Cazurronics irá aquí.", pronto: true, url: "/liga" }, // la Liga Cazurra: de momento pide contraseña
 ];
 const N = SECCIONES.length, PASO = 360 / N;
 const $ = (id) => document.getElementById(id);
@@ -302,7 +302,7 @@ function tocar(x, y) {
   const a = (Math.atan2(y - cy, x - cx) * 180 / Math.PI + 90 - angulo + 720) % 360; // ángulo del toque sobre la rosa sin girar
   const i = ((Math.round(a / PASO) % N) + N) % N;
   if (i === elegida && !bucle) { entrar(); return; }
-  destino = SECCIONES[i].pronto ? -1 : i;
+  destino = SECCIONES[i].url ? i : -1;
   irA(i);
 }
 function alParar() { if (destino >= 0 && destino === elegida) { const d = destino; destino = -1; setTimeout(() => { if (elegida === d) entrar(); }, 160); } }
@@ -321,20 +321,20 @@ function mostrar(i) {
   $("nombre").textContent = s.nombre;
   const f = $("frase"); f.innerHTML = s.frase.split(" ").map((w) => `<span>${w}</span>`).join(" ");
   [...f.children].forEach((w, k) => setTimeout(() => { if (yo === turno) w.classList.add("on"); }, reducir ? 0 : 40 + k * 45));
-  $("entrar").disabled = !!s.pronto; $("entrar").textContent = s.pronto ? "Muy pronto" : "Entrar";
+  $("entrar").disabled = !s.url; $("entrar").textContent = s.url ? "Entrar" : "Muy pronto";
   document.querySelectorAll(".punto").forEach((p, j) => p.setAttribute("aria-current", j === i));
   o.setAttribute("aria-valuenow", i + 1); o.setAttribute("aria-valuetext", s.completo);
   if (lista) { $("aguja").classList.add("tic"); setTimeout(() => $("aguja").classList.remove("tic"), 100); }
 }
 $("entrar").onclick = entrar;
 function entrar() {
-  const s = SECCIONES[elegida]; if (!s || s.pronto || !lista) return;
+  const s = SECCIONES[elegida]; if (!s || !s.url || !lista) return;
   // la cámara sigue hacia dentro de la rosa, funde a negro y se abre la sección
   const r = o.getBoundingClientRect(), z = 6;
   const zoom = $("escena").animate([{ transform: "none", opacity: 1 }, { transform: `scale(${z})`, opacity: 0 }],
     { duration: reducir ? 1 : 650, easing: "cubic-bezier(.7, 0, .84, 0)", fill: "forwards" });
   $("escena").style.transformOrigin = `${r.left + r.width / 2}px ${r.top + r.height / 2}px`;
-  zoom.onfinish = () => { location.href = (s.nombre === "Planner" ? "/planner" : "/despensa") + location.search; };
+  zoom.onfinish = () => { location.href = s.url + location.search; };
 }
 // Al volver con "atrás" el navegador puede sacar la página de su caché con el zoom puesto: se quita
 addEventListener("pageshow", (e) => { if (e.persisted) $("escena").getAnimations().forEach((a) => a.cancel()); });

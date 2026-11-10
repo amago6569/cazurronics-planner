@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import PaginaContenido from "../../../components/PaginaContenido";
 import SelectorSeccion from "../../../components/SelectorSeccion";
-import { catalogoCacheado } from "../../../../lib/despensaCache";
+import { cache } from "react";
+import { tiendasDeProducto } from "../../../../lib/despensaCache";
 import { PRODUCTOS, enlaceEsTuTienda, enlaceMaps, productoPorId, topTiendas } from "../../../../lib/despensaProductos";
 import { ZONAS } from "../../../../lib/zonas";
 import { SEO_ZONAS, rutaDespensaZona, zonaPorSlug } from "../../../../lib/zonasSeo";
@@ -16,15 +17,15 @@ export const revalidate = 21600;
 // Se generan la primera vez que alguien (o Google) las visita, no en cada despliegue
 export const generateStaticParams = () => [];
 
-async function cargar(params) {
+const cargar = cache(async (params) => {
   const { producto, zona } = await params;
   const p = productoPorId(producto);
   const z = zonaPorSlug(zona);
   if (!p || !z) return null;
-  const tiendas = await catalogoCacheado(p.id);
+  const tiendas = await tiendasDeProducto(p.id);
   const top = topTiendas(tiendas.filter((t) => t.zona === z.id), { producto: p.id, cuantas: 10 });
   return { p, z, en: SEO_ZONAS[z.id].en, top, tiendas };
-}
+});
 
 export async function generateMetadata({ params }) {
   const d = await cargar(params);

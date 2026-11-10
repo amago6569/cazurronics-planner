@@ -149,6 +149,20 @@ export function aRanking(lista) {
   return r;
 }
 
+// Recuerda en esta instancia del servidor lo que se lee mucho y cambia poco (el catálogo de la Despensa, que son
+// ~170 lecturas). Upstash cobra por comando: sin esto, cada visita de un buscador a una página de la Despensa
+// gastaba cientos (noviembre de 2026: se pasó del límite gratis de 500.000 al mes en una semana).
+const recordados = globalThis.__cazurroRecuerdo || (globalThis.__cazurroRecuerdo = new Map());
+export function recordar(clave, ms, leer) {
+  const r = recordados.get(clave);
+  if (r && r.hasta > Date.now()) return r.promesa;
+  const promesa = Promise.resolve().then(leer);
+  recordados.set(clave, { hasta: Date.now() + ms, promesa });
+  promesa.catch(() => recordados.delete(clave)); // un fallo no se recuerda
+  return promesa;
+}
+export function olvidar(prefijo = "") { for (const k of [...recordados.keys()]) if (k.startsWith(prefijo)) recordados.delete(k); }
+
 // Identificador corto y no adivinable para los enlaces de los planes (10 caracteres base62)
 export function nuevoId(largo = 10) {
   const alfabeto = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";

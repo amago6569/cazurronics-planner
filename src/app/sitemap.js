@@ -2,7 +2,7 @@ import { URL_SITIO } from "../lib/sitio";
 import { ZONAS } from "../lib/zonas";
 import { rutaDespensaZona, rutaZona } from "../lib/zonasSeo";
 import { PRODUCTOS, topTiendas } from "../lib/despensaProductos";
-import { catalogoCacheado } from "../lib/despensaCache";
+import { tiendasDeProducto } from "../lib/despensaCache";
 
 export const revalidate = 86400;
 
@@ -11,7 +11,7 @@ export const revalidate = 86400;
 async function paginasDespensa(ahora) {
   const urls = [];
   for (const p of PRODUCTOS) {
-    const tiendas = await catalogoCacheado(p.id).catch(() => []);
+    const tiendas = await tiendasDeProducto(p.id).catch(() => []);
     if (!topTiendas(tiendas, { producto: p.id }).length) continue;
     urls.push({ url: `${URL_SITIO}/despensa/${p.id}`, lastModified: ahora, changeFrequency: "weekly", priority: 0.6 });
     for (const z of ZONAS) {
