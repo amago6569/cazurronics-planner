@@ -100,7 +100,7 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
 </style>
 </head>
 <body>
-<div class="cielo" aria-hidden="true"><img src="/liga/fondo-v-lejos.jpg" alt=""></div>
+<div class="cielo" aria-hidden="true"><img src="/liga/fondo-v-lejos.webp" alt="" fetchpriority="high" decoding="async"></div>
 <main>
   <div class="arriba">
     <a class="marca" href="/">Cazurronics</a>
@@ -173,7 +173,7 @@ function pintarJuegos() {
       <span>${j.quedan ? `Te quedan ${j.quedan} ${j.quedan === 1 ? "intento" : "intentos"}` : "Intentos de hoy hechos"}${j.mejor != null ? ` · tu mejor: ${j.mejor}` : ""}</span>` : `<span>3 intentos al día</span>`;
     const hecho = con && !j.quedan;
     return `<a class="juego${hecho ? " hecho" : ""}" href="${esc(j.pagina)}">
-      <img src="${esc(j.foto)}" alt="" loading="lazy">
+      <img src="${esc(String(j.foto).replace(/\.webp$/, "-mini.webp"))}" alt="" decoding="async">
       <div><span class="hab">${esc(j.habilidad)} · ${esc(j.sitio)}</span><h3>${esc(j.nombre)}</h3><div class="estado">${puntos}</div></div>
       <span class="ir">${hecho ? "Practicar" : "Jugar"}</span></a>`;
   }).join("") || `<p class="aviso-cuenta">Hoy no hay juegos.</p>`;
@@ -181,13 +181,13 @@ function pintarJuegos() {
 
 // Los siete juegos (mismo orden y datos que src/lib/liga/juegos.js)
 const TODOS = [
-  ["canasta", "Canasta en la Catedral", "Puntería", "/liga/fondo-v.jpg"],
-  ["tapas", "Tapeo en el Húmedo", "Reflejos", "/liga/fondos/humedo-v.jpg"],
-  ["botillo", "La torre del botillo", "Pulso", "/liga/fondos/botillo-v.jpg"],
-  ["cecina", "La loncha de cecina", "Precisión", "/liga/fondos/cecina-v.jpg"],
-  ["vidriera", "La Vidriera", "Memoria", "/liga/fondos/vidriera-v.jpg"],
-  ["pendon", "El Pendón", "Equilibrio", "/liga/fondos/pendon-v.jpg"],
-  ["esqui", "Bajada en San Isidro", "Esquí", "/liga/fondos/montes-v.jpg"],
+  ["canasta", "Canasta en la Catedral", "Puntería", "/liga/fondo-v-mini.webp"],
+  ["tapas", "Tapeo en el Húmedo", "Reflejos", "/liga/fondos/humedo-v-mini.webp"],
+  ["botillo", "La torre del botillo", "Pulso", "/liga/fondos/botillo-v-mini.webp"],
+  ["cecina", "La loncha de cecina", "Precisión", "/liga/fondos/cecina-v-mini.webp"],
+  ["vidriera", "La Vidriera", "Memoria", "/liga/fondos/vidriera-v-mini.webp"],
+  ["pendon", "El Pendón", "Equilibrio", "/liga/fondos/pendon-v-mini.webp"],
+  ["esqui", "Bajada en San Isidro", "Esquí", "/liga/fondos/montes-v-mini.webp"],
 ];
 $("todos").innerHTML = TODOS.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto}" alt="" loading="lazy"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
 

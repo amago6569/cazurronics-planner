@@ -1,8 +1,10 @@
+// OJO: ya no se carga en la web. Con esto se generó una vez public/inicio/rosa-recta.webp (la rosa recta y simétrica),
+// para que el móvil no tenga que recomponerla cada vez que se abre la portada. Se guarda por si hay que rehacerla.
 // La foto de la rosa está un poco girada y en perspectiva. Para que quede recta y simétrica se coge un solo gajo
 // (de un eje de simetría al siguiente: 15°, porque la rosa de León tiene 12 radios) y se repite 24 veces,
 // alternando espejo, como en un caleidoscopio. El medallón central se pinta encima, original pero enderezado.
 window.rosaSimetrica = function (img, px = 1000) {
-  const CX = 502, CY = 508;            // centro de la rosa en rosa.jpg (1000 × 1000)
+  const CX = 502, CY = 508;            // centro de la rosa en rosa.webp (1000 × 1000)
   const EJE = -90.85 * Math.PI / 180;  // eje vertical real de la foto (está girada casi un grado)
   const GAJO = Math.PI / 12;           // 15°
   const R_MEDALLON = 60;

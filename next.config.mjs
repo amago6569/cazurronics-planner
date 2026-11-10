@@ -54,6 +54,16 @@ const nextConfig = {
         ],
       },
       {
+        // Fotos, vídeos, letra y librerías de la cara nueva y de la Liga: el navegador las guarda un día y, durante una
+        // semana más, enseña la copia mientras comprueba si hay otra nueva. La segunda visita no vuelve a bajar nada.
+        source: "/:carpeta(inicio|liga)/:ruta*.:ext(webp|jpg|png|mp4|woff2)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+      {
+        source: "/:carpeta(inicio|liga)/vendor/:ruta*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+      {
         // La copia de la web en cazurronics-planner.vercel.app (y las de prueba de Vercel) no debe salir en Google:
         // solo cuenta cazurronics.es. Sigue funcionando igual, simplemente los buscadores no la guardan.
         source: "/:path*",

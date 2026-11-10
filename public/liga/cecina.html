@@ -9,11 +9,19 @@
 <meta name="description" content="Corta lonchas de cecina de León finas como el papel durante 40 segundos. Juego de la Liga Cazurra.">
 <link rel="icon" href="/favicon.ico">
 <link rel="preload" href="/inicio/vendor/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
+<!-- lo que el juego va a pedir de todas formas se pide ya, todo a la vez, en vez de en cadena -->
+<link rel="modulepreload" href="/liga/motor-cecina.js">
+<link rel="modulepreload" href="/liga/marco.js">
+<link rel="modulepreload" href="/liga/cuenta.js">
+<link rel="modulepreload" href="/liga/escena-cecina.js">
+<link rel="modulepreload" href="/liga/base-3d.js">
+<link rel="modulepreload" href="/liga/vendor/three-liga.js">
+<link rel="modulepreload" href="/liga/juego-cecina.js">
 <link rel="stylesheet" href="/inicio/vendor/archivo.css">
 <link rel="stylesheet" href="/liga/marco.css">
 </head>
 <body>
-<div class="fondo" aria-hidden="true"><img id="foto" alt="" src="fondos/cecina-v-lejos.jpg" decoding="async"></div>
+<div class="fondo" aria-hidden="true"><img id="foto" alt="" src="fondos/cecina-v-lejos.webp" decoding="async"></div>
 <canvas id="escena" aria-hidden="true"></canvas>
 <canvas id="lienzo" tabindex="-1" role="img" aria-label="Una cortadora de charcutería con una pieza de cecina que avanza hacia la cuchilla. Toca para cortar cuando el borde llega a la raya dorada."></canvas>
 

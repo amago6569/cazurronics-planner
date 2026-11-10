@@ -17,6 +17,8 @@
 <meta name="google-site-verification" content="95sdW_hUNT20HILlfi8C5gDdRjUkOPfVnULlE8AYuAI">
 <link rel="icon" href="/favicon.ico">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebSite","name":"Cazurronics Planner","alternateName":"Cazurronics","url":"https://www.cazurronics.es","inLanguage":"es-ES"},{"@context":"https://schema.org","@type":"Organization","name":"Cazurronics","url":"https://www.cazurronics.es","logo":"https://www.cazurronics.es/roseton.png","sameAs":["https://www.instagram.com/cazurronics"],"areaServed":{"@type":"AdministrativeArea","name":"Provincia de León"}}]</script>
+<link rel="preload" href="/inicio/leon-poster-v.webp" as="image" type="image/webp" media="(max-aspect-ratio: 999/1000)" fetchpriority="high">
+<link rel="preload" href="/inicio/leon-poster-h.webp" as="image" type="image/webp" media="(min-aspect-ratio: 1/1)" fetchpriority="high">
 <link rel="preload" href="/inicio/vendor/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/inicio/vendor/archivo.css">
 <style>
@@ -41,6 +43,8 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 /* ── Vídeo ── */
 .video { position: absolute; inset: 0; will-change: transform, clip-path; }
 .video video, .video img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.video video { opacity: 0; transition: opacity 700ms ease; }
+.video video.ya { opacity: 1; }
 .video::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,10,.55), rgba(7,6,10,0) 45%); } /* velo neutro bajo el texto */
 
 /* ── La palabra (se maqueta a tamaño final y la cámara la reduce) ── */
@@ -65,7 +69,7 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 @media (hover: hover) and (pointer: fine) { .desliza:hover b { text-decoration: underline; text-underline-offset: 4px; } }
 
 /* ── La ruleta ── */
-.ui { position: absolute; inset: 0; z-index: 3; display: grid; grid-template-rows: 1fr auto; justify-items: center; pointer-events: none;
+.ui { visibility: hidden; position: absolute; inset: 0; z-index: 3; display: grid; grid-template-rows: 1fr auto; justify-items: center; pointer-events: none;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 64px max(24px, env(safe-area-inset-bottom, 0px)); }
 .hueco { width: max(220px, min(80vw, calc(100svh - 400px), 440px)); aspect-ratio: 1; max-width: 100%; align-self: center; position: relative; }
 .aguja { position: absolute; left: 50%; top: calc(-9% - 18px); width: 2px; height: 14px; margin-left: -1px; background: var(--oro); border-radius: 2px; opacity: 0; transition: transform 120ms var(--ease-out); }
@@ -112,12 +116,12 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 <div class="recorrido" id="recorrido"></div>
 <div class="escena" id="escena">
   <div class="video" id="video">
-    <picture><source media="(min-aspect-ratio: 1/1)" srcset="/inicio/leon-poster-h.jpg"><img src="/inicio/leon-poster-v.jpg" alt=""></picture>
-    <video id="clip" muted loop playsinline aria-hidden="true"></video>
+    <picture><source media="(min-aspect-ratio: 1/1)" srcset="/inicio/leon-poster-h.webp"><img src="/inicio/leon-poster-v.webp" alt="" fetchpriority="high" decoding="async"></picture>
+    <video id="clip" muted loop playsinline preload="none" aria-hidden="true"></video>
   </div>
 
   <div class="plano" id="plano">
-    <h1 class="marca" id="marca" aria-label="Cazurronics"><span class="l">C</span><span class="l">a</span><span class="l">z</span><span class="l">u</span><span class="l">r</span><span class="l">r</span><span id="o" tabindex="-1" role="slider" aria-label="Gira el rosetón para elegir sección"><img id="rosa" src="/inicio/rosa.jpg" alt="" draggable="false"><span class="sombra" id="sombra"></span><canvas id="dial"></canvas></span><span class="l">n</span><span class="l">i</span><span class="l">c</span><span class="l">s</span></h1>
+    <h1 class="marca" id="marca" aria-label="Cazurronics"><span class="l">C</span><span class="l">a</span><span class="l">z</span><span class="l">u</span><span class="l">r</span><span class="l">r</span><span id="o" tabindex="-1" role="slider" aria-label="Gira el rosetón para elegir sección"><img id="rosa" src="/inicio/rosa-recta.webp" alt="" draggable="false" decoding="async"><span class="sombra" id="sombra"></span><canvas id="dial"></canvas></span><span class="l">n</span><span class="l">i</span><span class="l">c</span><span class="l">s</span></h1>
   </div>
 
   <button class="desliza" id="desliza" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg><b>Desliza hacia arriba</b></button>
@@ -137,7 +141,6 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 </div>
 
 <script src="/inicio/comun.js"></script>
-<script src="/inicio/rosa.js"></script>
 <script>
 // La Liga Cazurra se abre sola a esta hora (la misma que APERTURA_LIGA en src/lib/liga/pase.js). Antes, cuenta atrás.
 const APERTURA_LIGA = Date.parse("2026-11-14T12:00:00+01:00");
@@ -151,7 +154,6 @@ const N = SECCIONES.length, PASO = 360 / N;
 const $ = (id) => document.getElementById(id);
 const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const plano = $("plano"), marca = $("marca"), o = $("o"), rosa = $("rosa"), dial = $("dial"), video = $("video");
-ponerRosaSimetrica(rosa); // la foto está algo girada: se recompone recta y simétrica
 $("sombra").style.setProperty("--ancho", PASO + "deg");
 
 /* ═══════════ Anillo con los nombres y varillas de oro (gira con la rosa) ═══════════ */
@@ -220,6 +222,7 @@ function pintar(p, forzar) {
   $("desliza").style.opacity = tx;
   $("rosa").style.boxShadow = `0 0 0 ${.012 * (1 - t)}em rgba(243,234,216,.9)`;
   const ui = tramo(p, .86, 1);
+  $("ui").style.visibility = p > .6 ? "visible" : "hidden"; // mientras no se ve, no cuenta ni se pinta (y no «salta» al cargar la letra)
   $("panel").style.opacity = ui; $("panel").style.transform = `translateY(${(1 - ui) * 12}px)`;
   $("aguja").style.opacity = ui; dial.style.opacity = tramo(p, .7, .95); $("sombra").style.opacity = ui; $("info").style.opacity = ui;
   const ahora = p > .97;
@@ -376,7 +379,18 @@ CZ.registrarVisita();
   alScroll();
   // Un vídeo para pantallas verticales y otro para horizontales, cada uno a su resolución real. Con ahorro de datos o sin movimiento, se queda la foto
   const v = $("clip"), ahorra = navigator.connection && navigator.connection.saveData;
-  if (!reducir && !ahorra) { v.src = matchMedia("(min-aspect-ratio: 1/1)").matches ? "/inicio/leon-h.mp4" : "/inicio/leon-v.mp4"; v.play().catch(() => {}); }
+  // Con mala cobertura (2G/3G) también se queda la foto: la portada se ve al momento y no gasta megas.
+  // El vídeo no compite con lo importante: se pide cuando la página ya está cargada y el móvil está libre.
+  const lenta = navigator.connection && /(^|-)(2g|3g)$/.test(navigator.connection.effectiveType || "");
+  if (!reducir && !ahorra && !lenta) {
+    const poner = () => {
+      v.src = matchMedia("(min-aspect-ratio: 1/1)").matches ? "/inicio/leon-h.mp4" : "/inicio/leon-v.mp4";
+      v.addEventListener("playing", () => v.classList.add("ya"), { once: true }); // aparece fundido sobre la foto, sin salto
+      v.play().catch(() => {});
+    };
+    const libre = () => (window.requestIdleCallback ? requestIdleCallback(poner, { timeout: 2000 }) : setTimeout(poner, 300));
+    if (document.readyState === "complete") libre(); else addEventListener("load", libre, { once: true });
+  }
 });
 </script>
 </body>
