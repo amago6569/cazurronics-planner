@@ -144,3 +144,11 @@ a.pn-cifra:hover, a.pn-enlace:hover { border-color: rgba(243, 234, 216, .32); tr
 @media (prefers-reduced-motion: reduce) {
   .panel-noche *, .panel-noche *::before, .panel-noche *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Premios de la Liga (Negocios): fichas que flotan un poco y hoja que sube desde abajo en el móvil */
+.premio-ficha { transition: transform .25s var(--suave), border-color .2s; }
+.premio-ficha:hover { transform: translateY(-2px); border-color: rgba(233, 180, 76, .4); }
+.premio-hoja { animation: premio-sube .28s var(--suave); }
+@media (min-width: 768px) { .premio-hoja { border-radius: 24px !important; } }
+@keyframes premio-sube { from { transform: translateY(28px); opacity: .5; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .premio-ficha, .premio-hoja { transition: none; animation: none; } }

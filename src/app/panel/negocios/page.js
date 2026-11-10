@@ -1,8 +1,9 @@
 "use client";
-// /panel/negocios — una sola lista: quién te ha escrito, a quién escribir y quién no ha contestado.
+// /panel/negocios — los premios de la Liga Cazurra y una sola lista: quién te ha escrito, a quién escribir y quién no ha contestado.
 // Nada se envía solo: los botones dejan el mensaje preparado y lo mandas tú.
 import { useCallback, useState } from "react";
 import Captacion from "../../components/Captacion";
+import PremiosLiga from "./PremiosLiga";
 import { Entrada, Marco, pedir, useClave } from "../comun";
 
 const whatsapp = (t) => `https://wa.me/${t.replace(/\D/g, "").replace(/^(?!34)(\d{9})$/, "34$1")}`;
@@ -52,6 +53,7 @@ export default function Negocios() {
 
   return (
     <Marco>
+      <PremiosLiga clave={acceso.clave} />
       <section className="mb-5">
         <h2 className="pn-titulo mb-2">Te han escrito ellos</h2>
         {aviso && <p className="text-sm mb-2" style={{ color: "var(--mal)" }} role="alert">{aviso}</p>}
