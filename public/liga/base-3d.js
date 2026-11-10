@@ -7,6 +7,7 @@
 // La foto del sitio va detrás (una imagen de la web, bajo este lienzo transparente), desenfocada, y se mueve mucho
 // menos que lo de delante cuando la cámara se mueve: eso da la sensación de distancia.
 import * as THREE from "./vendor/three-liga.js";
+import { crearEfectos } from "./efectos-3d.js";
 
 export { THREE };
 export const SUAVE = (k) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
@@ -33,6 +34,22 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
   let ultimo = 0;
   const desplaza = new THREE.Vector3(), objetivo = new THREE.Vector3(), desde = new THREE.Vector3();
   let cuentaVista = -1;
+  // efectos (migas, humo, polvo, temblor) y la cámara «viva» mientras se juega
+  const efectos = crearEfectos({ escena, reducido });
+  let vivo = 0; // 0 en el menú, 1 jugando: cuánto se mece la cámara
+  const mece = { x: 0, y: 0 };
+  let cxAhora = NaN, yOjoAhora = NaN;
+
+  // La proyección, con el punto de fuga donde haga falta. Si la cámara se aparta (ox, oy) y el punto de fuga se
+  // corre lo mismo en píxeles, el plano del juego (z = 0) NO se mueve en la pantalla: el dedo sigue coincidiendo,
+  // y lo que está delante o detrás se desplaza un poco, como al mover la cabeza delante de una ventana.
+  function proyectar(cx, yOjo) {
+    if (cx === cxAhora && yOjo === yOjoAhora) return;
+    cxAhora = cx; yOjoAhora = yOjo;
+    const n = 0.05, f = 400, fpx = plano.k * plano.D;
+    camara.projectionMatrix.makePerspective(-n * cx / fpx, n * (ancho - cx) / fpx, n * yOjo / fpx, -n * (alto - yOjo) / fpx, n, f);
+    camara.projectionMatrixInverse.copy(camara.projectionMatrix).invert();
+  }
 
   // m: medidas del marco. vista: { cx, yPlano, k, D, yc } (píxeles, unidades del juego)
   function medir(m, vista) {
@@ -41,10 +58,8 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
     ratio = Math.min(dpr, 2, Math.sqrt(3.0e6 / (ancho * alto))); // en pantallas grandes no hace falta más
     renderer.setPixelRatio(ratio);
     renderer.setSize(ancho, alto, false);
-    const n = 0.05, f = 400, fpx = plano.k * plano.D;
     const yOjo = plano.yPlano - plano.k * plano.yc;
-    camara.projectionMatrix.makePerspective(-n * plano.cx / fpx, n * (ancho - plano.cx) / fpx, n * yOjo / fpx, -n * (alto - yOjo) / fpx, n, f);
-    camara.projectionMatrixInverse.copy(camara.projectionMatrix).invert();
+    cxAhora = NaN; proyectar(plano.cx, yOjo);
     foto.style.transformOrigin = `${plano.cx}px ${yOjo}px`;
   }
 
@@ -64,7 +79,14 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
       desplaza.copy(desde).multiplyScalar(1 - SUAVE(k));
     } else if (enMenu) desplaza.lerp(objetivo, 1 - Math.exp(-dt * 1.6));
     else desplaza.set(0, 0, 0);
-    const ex = extra?.x || 0, ey = extra?.y || 0, ez = extra?.z || 0;
+    // jugando, la cámara se mece muy despacio (sin mover el plano del juego) y tiembla un instante con los golpes
+    vivo += ((d.estado === "juego" && !reducido ? 1 : 0) - vivo) * Math.min(1, dt * 2);
+    const t = d.ahora / 1000, amp = 0.012 * plano.D * vivo;
+    mece.x = amp * (Math.sin(t * 0.43) + 0.4 * Math.sin(t * 0.97 + 1)) + (extra?.mx || 0) * vivo;
+    mece.y = amp * 0.45 * Math.sin(t * 0.37 + 2);
+    proyectar(plano.cx + plano.k * mece.x, plano.yPlano - plano.k * plano.yc - plano.k * mece.y);
+    const golpe = 0.0022 * plano.D;
+    const ex = (extra?.x || 0) + mece.x + efectos.tiembla.x * golpe, ey = (extra?.y || 0) + mece.y + efectos.tiembla.y * golpe, ez = extra?.z || 0;
     camara.position.set(desplaza.x + ex, plano.yc + desplaza.y + ey, plano.D + desplaza.z + ez);
     camara.updateMatrixWorld();
     // la foto, como algo que está a «lejos» unidades
@@ -72,13 +94,16 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
     // (sin pasarse: la foto solo tiene un 12 % de sobra por los bordes)
     const tope = (v, m) => Math.max(-m, Math.min(m, v));
     const tx = tope(-fpx * ox / L, ancho * 0.05), ty = tope(fpx * oy / L, alto * 0.05);
-    const tr = `translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) scale(${(SOBRANTE * s).toFixed(4)})`;
+    // el fondo también respira: se acerca un pelo y vuelve, muy despacio
+    const respira = reducido ? 1 : 1 + 0.004 * (1 + Math.sin(t * 0.21));
+    const tr = `translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) scale(${(SOBRANTE * s * respira).toFixed(4)})`;
     if (foto.style.transform !== tr) foto.style.transform = tr;
   }
 
   function pintar(ahora) {
     const dt = Math.min(0.1, Math.max(0, (ahora - (ultimo || ahora)) / 1000));
     ultimo = ahora;
+    efectos.actualizar(dt);
     renderer.render(escena, camara);
     if (primerCuadro) { primerCuadro = false; lienzo.style.opacity = "1"; }
     // si el móvil va justo, se baja la resolución (nunca por debajo de 1)
@@ -97,7 +122,7 @@ export function crearBase({ lienzo, contexto, foto, reducido = false, cielo, lej
   const aPlano = (px, py) => ({ x: (px - plano.cx) / plano.k, y: (plano.yPlano - py) / plano.k });
 
   return {
-    THREE, renderer, escena, camara, medir, moverCamara, pintar, aPlano, plano,
+    THREE, renderer, escena, camara, medir, moverCamara, pintar, aPlano, plano, efectos,
     info: () => ({ ratio, llamadas: renderer.info.render.calls, triangulos: renderer.info.render.triangles }),
   };
 }

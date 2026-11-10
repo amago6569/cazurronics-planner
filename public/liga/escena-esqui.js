@@ -45,7 +45,7 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
     for (const x0 of [60, 70, 180, 190]) { g.beginPath(); g.moveTo(x0, 0); g.bezierCurveTo(x0 + 30, h * 0.3, x0 - 30, h * 0.6, x0, h); g.stroke(); }
   }, { repetir: true });
   nieve.repeat.set(22, 60 / LARGO_TEX);
-  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(90, 60), new THREE.MeshStandardMaterial({ map: nieve, roughness: 0.95 }));
+  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(90, 60), new THREE.MeshStandardMaterial({ map: nieve, bumpMap: nieve, bumpScale: 0.6, roughness: 0.9 }));
   suelo.rotation.x = -Math.PI / 2 + Math.atan(PENDIENTE);
   suelo.position.set(0, yEn(-24), -24);
   suelo.receiveShadow = true;
@@ -143,10 +143,45 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
 
   function medir(m) { base.medir(m, { cx: m.campo.cx, yPlano: m.campo.ySki, k: m.campo.hw, D, yc: YC }); }
 
+  // Las huellas de los esquís: dos surcos que quedan detrás del esquiador, por donde ha pasado de verdad (adorno)
+  const TRAMOS = 26, PASO_HUELLA = 0.09, historia = [];
+  const matHuella = new THREE.MeshBasicMaterial({ color: 0xa9b8d2, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
+  const huellas = [-1, 1].map((lado) => {
+    const g = new THREE.PlaneGeometry(1, 1, 1, TRAMOS - 1);
+    const o = new THREE.Mesh(g, matHuella); o.frustumCulled = false; o.renderOrder = 1;
+    escena.add(o);
+    return { lado, p: g.attributes.position };
+  });
+  const xHace = (r) => { // por dónde iba cuando llevaba «r» de recorrido
+    for (let i = historia.length - 1; i > 0; i--) if (historia[i - 1].r <= r) { const a = historia[i - 1], b = historia[i]; return a.x + (b.x - a.x) * Math.min(1, (r - a.r) / Math.max(1e-6, b.r - a.r)); }
+    return historia.length ? historia[0].x : 0;
+  };
+  const fx = base.efectos;
+  let caidoAntes = 0;
+  const bienVistas = new Set();
+
   function dibujar(d) {
     const v = d.vista;
     const dt = Math.min(0.1, (d.ahora - (dibujar.antes || d.ahora)) / 1000); dibujar.antes = d.ahora;
-    base.moverCamara(d, { x: 0.3, y: 0.15, z: 0.8 }, dt);
+    // la cámara se echa un poco hacia donde gira el esquiador (sin mover el plano del dedo)
+    base.moverCamara(d, { x: 0.3, y: 0.15, z: 0.8 }, dt, { mx: Math.max(-0.07, Math.min(0.07, v.vx * 0.035)) });
+    // huellas
+    if (!historia.length || v.recorrido < historia[historia.length - 1].r) { historia.length = 0; bienVistas.clear(); }
+    if (!historia.length || v.recorrido - historia[historia.length - 1].r > 0.05) { historia.push({ r: v.recorrido, x: v.x }); if (historia.length > 80) historia.shift(); }
+    for (const h of huellas) {
+      for (let j = 0; j < TRAMOS; j++) {
+        const z = j * PASO_HUELLA, xc = j === 0 ? v.x : xHace(v.recorrido - z), cx = xc + h.lado * 0.044, y = yEn(z) + 0.004;
+        h.p.setXYZ(j * 2, cx - 0.01, y, z); h.p.setXYZ(j * 2 + 1, cx + 0.01, y, z);
+      }
+      h.p.needsUpdate = true;
+    }
+    // caída: nieve por los aires y un buen temblor
+    if (v.caido > 0 && caidoAntes <= 0 && d.estado === "juego") {
+      fx.sacudir(0.85);
+      fx.trozos({ x: v.x, y: 0.08, z: 0.05, ancho: 0.1, n: 26, colores: [0xffffff, 0xeef3fb, 0xdfe8f6], fuerza: 1.1, arriba: 2.2, tam: [0.01, 0.028], suelo: 0.005, vida: 1.0 });
+      fx.humo({ x: v.x, y: 0.12, z: 0.1, n: 5, color: 0xffffff, tam: [0.15, 0.7], opacidad: 0.6, abre: 0.6, sube: 0.4, vida: 0.9 });
+    }
+    caidoAntes = v.caido;
     // la nieve corre hacia la cámara
     nieve.offset.y = v.recorrido / LARGO_TEX;
     for (const b of bosque) {
@@ -169,6 +204,7 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
         p.o.position.set(c.x, y, z);
         p.a.position.x = -c.medio; p.b.position.x = c.medio;
         p.lona.scale.x = c.medio * 2;
+        if (c.res?.bien && !bienVistas.has(c.n)) { bienVistas.add(c.n); fx.humo({ x: c.x, y: y + 0.42, z, ancho: c.medio, n: 3, color: 0x9fe8b4, tam: [0.06, 0.3], opacidad: 0.5, luz: true, vida: 0.4 }); }
         p.lona.material = c.res ? (c.res.bien ? lonaBien : lonaMal) : c.color ? lonaAzul : lonaRoja;
       }
     }
@@ -181,6 +217,10 @@ export function crearEscena({ lienzo, contexto, foto, reducido }) {
     cuerpo.position.y = v.caido ? 0 : -Math.abs(giro) * 0.04;
     // polvo de nieve en los giros
     const fuerza = Math.min(1, Math.abs(v.vx) / 2);
+    if (!reducido && d.estado === "juego" && fuerza > 0.45 && !v.caido && (dibujar.nube = (dibujar.nube || 0) + dt) > 0.09) { // nube de nieve en los giros fuertes
+      dibujar.nube = 0;
+      fx.humo({ x: v.x - Math.sign(v.vx) * 0.06, y: 0.05, z: 0.12, n: 1, color: 0xffffff, tam: [0.06, 0.34], opacidad: 0.5 * fuerza, vx: -Math.sign(v.vx) * 0.5, abre: 0.1, sube: 0.2, vida: 0.55 });
+    }
     if (!reducido && d.estado === "juego" && fuerza > 0.15) {
       for (let k = 0; k < 2; k++) {
         const i = siguientePolvo++ % N, s = Math.random;

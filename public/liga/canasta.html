@@ -15,6 +15,7 @@
 <link rel="modulepreload" href="/liga/cuenta.js">
 <link rel="modulepreload" href="/liga/escena-3d.js">
 <link rel="modulepreload" href="/liga/vendor/three-liga.js">
+<link rel="modulepreload" href="/liga/efectos-3d.js">
 <link rel="stylesheet" href="/inicio/vendor/archivo.css">
 <style>
 /* Layout: la foto real de la Catedral a pantalla completa, el juego encima en un lienzo y los marcadores arriba.
@@ -45,6 +46,9 @@ canvas:focus { outline: none; } /* recibe el foco al empezar (para el lector de 
 /* la escena 3D va entre la foto y el lienzo del dedo; aparece en cuanto está lista */
 #escena { pointer-events: none; opacity: 0; transition: opacity 500ms ease; }
 .fondo img { will-change: transform; }
+/* viñeta: oscurece un poco las esquinas, como una cámara de verdad (por debajo de marcadores y botones) */
+body::before { content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse 120% 85% at 50% 46%, rgba(7,6,10,0) 52%, rgba(7,6,10,.34) 100%); }
 
 /* marcadores */
 .hud { position: fixed; z-index: 2; left: 0; right: 0; top: 0; pointer-events: none; text-shadow: 0 1px 3px rgba(7,6,10,.65), 0 0 14px rgba(7,6,10,.45);

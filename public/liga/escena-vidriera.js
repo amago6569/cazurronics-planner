@@ -142,6 +142,11 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
   function medir(m) { base.medir(m, { cx: m.campo.cx, yPlano: m.campo.cy, k: m.campo.R, D, yc: YC }); }
 
   const rojo = new THREE.Color(0xff2a1a), tmp = new THREE.Color();
+  // polvo flotando en el sol de la fachada, destellos del color del cristal y arenilla de piedra si fallas (adorno)
+  const fx = base.efectos;
+  fx.ponerMotas({ n: 46, caja: [-1.7, 1.7, -1.9, 1.9, 0.15, 1.1], color: 0xfff4dc, tam: 0.02, opacidad: 0.4 });
+  const antes = { brillo: new Array(PANELES).fill(0), mal: new Array(PANELES).fill(0), fiesta: 0 };
+  const sitio = (i, r = 0.62) => { const a = (i * 2 * Math.PI) / PANELES; return [r * Math.sin(a), r * Math.cos(a)]; };
   function dibujar(d) {
     const v = d.vista;
     const dt = Math.min(0.1, (d.ahora - (dibujar.antes || d.ahora)) / 1000); dibujar.antes = d.ahora;
@@ -157,7 +162,22 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
       c.halo.scale.setScalar(0.85 + 0.35 * b);
       c.o.position.x = mal > 0 && !reducido ? Math.sin(d.ahora / 18) * 0.012 * mal : 0;
       if (b > bMejor) { bMejor = b; mejor = i; }
+      if (v.fase !== "menu") {
+        const [px, py] = sitio(i);
+        if (v.brillo[i] > 0.6 && antes.brillo[i] <= 0.6) fx.humo({ x: px, y: py, z: 0.18, ancho: 0.12, altoZona: 0.12, n: 3, color: c.base, tam: [0.06, 0.34], opacidad: 0.4, luz: true, vida: 0.55, abre: 0.3, sube: 0.1 });
+        if (mal > 0.6 && antes.mal[i] <= 0.6) {
+          fx.sacudir(0.5);
+          fx.trozos({ x: px, y: py, z: 0.1, ancho: 0.15, n: 9, colores: [0xd8cbb0, 0xb8a888, 0xeee3c8], fuerza: 0.35, arriba: 0.5, gravedad: 5, tam: [0.008, 0.02], vida: 1.0 });
+          fx.humo({ x: px, y: py, z: 0.15, n: 2, color: 0xd8cbb0, tam: [0.1, 0.4], opacidad: 0.3, sube: -0.15 });
+        }
+      }
+      antes.brillo[i] = v.brillo[i]; antes.mal[i] = mal;
     });
+    if (fiesta > 0.9 && antes.fiesta <= 0.9) { // serie entera: chispas de todos los colores
+      fx.sacudir(0.15);
+      vidrios.forEach((c, i) => { const [px, py] = sitio(i, 0.8); fx.humo({ x: px, y: py, z: 0.2, n: 2, color: c.base, tam: [0.05, 0.3], opacidad: 0.5, luz: true, vida: 0.7, abre: 0.5 }); });
+    }
+    antes.fiesta = fiesta;
     for (const mat of ojoMats) mat.emissiveIntensity = 0.2 + 2 * fiesta;
     matCentro.emissiveIntensity = 0.25 + 2.2 * fiesta;
     if (mejor >= 0 && bMejor > 0.05) {

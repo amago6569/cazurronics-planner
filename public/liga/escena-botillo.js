@@ -124,13 +124,26 @@ export function crearEscena({ lienzo, contexto, foto, reducido, marco }) {
   let partidaVista = null;
   let golpe = { t: -1e9, h: 0 }; // para que la torre se mueva un poco al recibir uno
   let alturaAntes = 0;
+  // polvo en la luz de la plaza, y lo que salta cuando un botillo cae encima de otro (solo adorno)
+  const fx = base.efectos;
+  fx.ponerMotas({ n: 40, caja: [-1.7, 1.7, 0, 6, -0.5, 0.9], color: 0xfff0d0, tam: 0.02, opacidad: 0.4 });
+  const caidosVistos = new Set();
   function dibujar(d) {
     const v = d.vista;
     const dt = Math.min(0.1, (d.ahora - (dibujar.antes || d.ahora)) / 1000); dibujar.antes = d.ahora;
     base.moverCamara(d, { x: 0.35, y: 0.2, z: 1.4 }, dt, { y: v.elev });
-    if (marco.partida !== partidaVista) { partidaVista = marco.partida; for (const o of porN.values()) { escena.remove(o); } porN.clear(); alturaAntes = 0; }
+    if (marco.partida !== partidaVista) { partidaVista = marco.partida; for (const o of porN.values()) { escena.remove(o); } porN.clear(); alturaAntes = 0; caidosVistos.clear(); }
     for (const o of porN.values()) o.visible = false;
-    if (v.altura > alturaAntes) golpe = { t: d.ahora, h: v.altura };
+    if (v.altura > alturaAntes) {
+      golpe = { t: d.ahora, h: v.altura };
+      const arriba = v.torre[v.torre.length - 1];
+      if (arriba && d.estado === "juego") { // pimentón y polvo donde apoya, y un temblor (más cuanto más alta)
+        fx.sacudir(0.28 + Math.min(0.3, v.altura * 0.03));
+        fx.humo({ x: arriba.x, y: arriba.y + 0.02, z: 0.12, n: 3, color: 0xe2c4a8, tam: [0.08, 0.32], opacidad: 0.28, abre: 0.35, sube: 0.12 });
+        fx.trozos({ x: arriba.x, y: arriba.y + 0.03, z: 0.08, ancho: 0.1, n: 7, colores: [0x8a2a1c, 0xb8431f, 0xe8d2a8], fuerza: 0.7, arriba: 1.3, tam: [0.008, 0.018], suelo: 0.005, vida: 0.9 });
+      }
+    }
+    for (const b of v.caidos) if (!caidosVistos.has(b.n)) { caidosVistos.add(b.n); fx.sacudir(0.55); fx.humo({ x: b.x, y: b.y, z: 0.1, n: 2, color: 0xe2c4a8, tam: [0.1, 0.4], opacidad: 0.3 }); }
     alturaAntes = v.altura;
     // la torre se balancea un poco al recibir cada botillo (solo estética: cuanto más alta, más)
     const s = (d.ahora - golpe.t) / 1000;
