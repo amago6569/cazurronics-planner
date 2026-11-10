@@ -1,18 +1,31 @@
 // ============ LIGA CAZURRA: la contraseña de mientras ============
 // Regla de Alejandro (8-11-2026): la liga va a la web de verdad, pero con contraseña para que solo entre él hasta que
-// todo esté en su sitio. La contraseña es la misma del panel (PANEL_CLAVE en Vercel): no hay que crear nada nuevo.
+// todo esté en su sitio. La contraseña la eligió él (10-11-2026). En el código solo va su huella (SHA-256), no la
+// contraseña. Si quiere otra, basta con cambiar HUELLA_CLAVE (o poner LIGA_CLAVE en Vercel, que manda sobre ella).
 // Para abrirla a todo el mundo: pon LIGA_CON_CLAVE = false (o LIGA_ABIERTA=1 en Vercel) y vuelve a publicar.
 export const LIGA_CON_CLAVE = true;
 export const COOKIE_PASE = "liga_pase";
+export const HUELLA_CLAVE = "35db7c15e3a998afae7090e846496594cda548516d3083ee4d3a95410df072cd";
+
+async function sha256(texto) {
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(texto))));
+  return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+// ¿Es la contraseña de la liga?
+export async function claveBuena(clave, env = process.env) {
+  if (env.LIGA_CLAVE) return iguales(clave, env.LIGA_CLAVE);
+  return iguales(await sha256(String(clave || "").trim().toLowerCase()), HUELLA_CLAVE);
+}
+// Con qué se firma la cookie: la contraseña y un secreto del servidor (así no se puede fabricar leyendo el código)
+export const secretoPase = (env = process.env) => `${env.LIGA_CLAVE || HUELLA_CLAVE}:${env.PANEL_CLAVE || env.SUPABASE_SECRET_KEY || "local"}`;
 
 export function ligaConClave(env = process.env) {
   if (!LIGA_CON_CLAVE || env.LIGA_ABIERTA === "1") return false;
-  // sin clave puesta: en local y en las pruebas de Vercel se deja pasar; en la web de verdad, cerrada
-  if (!env.PANEL_CLAVE) return env.VERCEL_ENV === "production";
-  return true;
+  // en local (sin secreto del servidor) se deja pasar; en Vercel, cerrada
+  return Boolean(env.PANEL_CLAVE || env.SUPABASE_SECRET_KEY || env.VERCEL_ENV === "production");
 }
 
-// Lo que se guarda en la cookie: una firma de la clave (no la clave). Si cambia PANEL_CLAVE, hay que volver a entrar.
+// Lo que se guarda en la cookie: una firma (no la contraseña). Si cambia la contraseña, hay que volver a entrar.
 export async function firmaPase(clave) {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(clave)), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const f = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("liga-cazurra-pase-v1")));
@@ -29,8 +42,8 @@ export function iguales(a, b) {
 
 export async function tienePase(cookie, env = process.env) {
   if (!ligaConClave(env)) return true;
-  if (!env.PANEL_CLAVE || !cookie) return false;
-  return iguales(cookie, await firmaPase(env.PANEL_CLAVE));
+  if (!cookie) return false;
+  return iguales(cookie, await firmaPase(secretoPase(env)));
 }
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

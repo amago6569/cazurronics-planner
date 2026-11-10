@@ -114,12 +114,27 @@ function ejecutarEnMemoria([cmd, ...a]) {
   }
 }
 
+// ---------- Cuántos comandos gasta cada petición ----------
+// Upstash cobra por comando (el plan gratis da 500.000 al mes). Cada petición que gasta muchos deja una línea en
+// los registros de Vercel («[almacén] 170 comandos»), que sale junto a su ruta: así se ve qué gasta sin pagar nada.
+const AVISA_DESDE = 20;
+let cuenta = 0, apuntado = false;
+function contar(n) {
+  cuenta += n;
+  if (apuntado) return;
+  apuntado = true;
+  const soltar = () => { if (cuenta >= AVISA_DESDE) console.log(`[almacén] ${cuenta} comandos`); cuenta = 0; apuntado = false; };
+  try { after(soltar); } catch { setTimeout(soltar, 0); } // fuera de una petición (pruebas): al momento
+}
+
 // ---------- API pública ----------
 export async function comando(c) {
+  if (usaRedis) contar(1);
   return usaRedis ? redis(c) : ejecutarEnMemoria(c);
 }
 
 export async function varios(comandos) {
+  if (usaRedis) contar(comandos.length);
   return usaRedis ? redisPipeline(comandos) : comandos.map(ejecutarEnMemoria);
 }
 
