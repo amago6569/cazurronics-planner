@@ -84,6 +84,7 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 @media (hover: hover) and (pointer: fine) { .entrar:hover { background: #fffaf0; } }
 .entrar:active { transform: scale(.97); }
 .entrar:disabled { opacity: .35; cursor: default; transform: none; }
+.entrar.cuenta { background: transparent; color: var(--oro); box-shadow: inset 0 0 0 1.5px var(--oro); font-variant-numeric: tabular-nums; letter-spacing: .02em; cursor: default; }
 .entrar:focus-visible, .punto:focus-visible, #o:focus-visible, .desliza:focus-visible { outline: 2px solid var(--oro); outline-offset: 4px; }
 .pista { font-size: 13px; color: var(--gris); }
 /* créditos de las imágenes y avisos legales: en una "i" discreta arriba a la derecha, fuera del camino del pulgar */
@@ -138,10 +139,13 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 <script src="/inicio/comun.js"></script>
 <script src="/inicio/rosa.js"></script>
 <script>
+// La Liga Cazurra se abre sola a esta hora (la misma que APERTURA_LIGA en src/lib/liga/pase.js). Antes, cuenta atrás.
+const APERTURA_LIGA = Date.parse("2026-11-14T12:00:00+01:00");
+const cerrada = (s) => s.abre && Date.now() < s.abre;
 const SECCIONES = [
   { nombre: "Planner",  completo: "Cazurronics Planner",        frase: "Dinos qué te apetece y te montamos el plan en León.", url: "/planner" },
   { nombre: "Despensa", completo: "La despensa de Cazurronics", frase: "Lo mejor de la tierra leonesa, del productor a tu mesa.", url: "/despensa" },
-  { nombre: "Pronto",   completo: "Próxima sección",            frase: "Lo próximo de Cazurronics irá aquí.", pronto: true, url: "/liga" }, // la Liga Cazurra: de momento pide contraseña
+  { nombre: "Juegos",   completo: "La Liga Cazurra",            frase: "La Liga Cazurra abre el sábado a las 12:00. ¿Te apuntas?", url: "/liga", abre: APERTURA_LIGA },
 ];
 const N = SECCIONES.length, PASO = 360 / N;
 const $ = (id) => document.getElementById(id);
@@ -163,13 +167,13 @@ function pintarDial(px) {
     c.strokeStyle = "rgba(233,180,76,.9)"; c.lineWidth = R * .006; c.lineCap = "round";
     c.beginPath(); c.moveTo(Math.cos(t) * rr * .2, Math.sin(t) * rr * .2); c.lineTo(Math.cos(t) * r1, Math.sin(t) * r1); c.stroke();
   }
-  const tam = R * .058; c.font = `800 ${tam}px Archivo, "Helvetica Neue", Arial, sans-serif`; try { c.fontStretch = "condensed"; } catch {}
-  c.fillStyle = "#f3ead8"; c.textAlign = "center"; c.textBaseline = "middle";
-  const rt = (r0 + r1) / 2, esp = tam * .35;
+  const tam = R * .074; c.font = `800 ${tam}px Archivo, "Helvetica Neue", Arial, sans-serif`; try { c.fontStretch = "condensed"; } catch {}
+  c.fillStyle = "#f3ead8"; c.textAlign = "center"; c.textBaseline = "middle"; c.shadowColor = "rgba(233,180,76,.45)"; c.shadowBlur = tam * .35;
+  const rt = (r0 + r1) / 2 + tam * .04, esp = tam * .3;
   SECCIONES.forEach((s, i) => {
     const txt = s.nombre.toUpperCase(), an = [...txt].map((ch) => c.measureText(ch).width + esp), tot = an.reduce((a, b) => a + b, 0) - esp;
     let ang = i * PASO * Math.PI / 180 - tot / 2 / rt;
-    [...txt].forEach((ch, k) => { const m = (an[k] - esp) / 2; ang += m / rt; c.save(); c.rotate(ang); c.translate(0, -rt); c.globalAlpha = s.pronto ? .45 : 1; c.fillText(ch, 0, 0); c.restore(); ang += (m + esp) / rt; });
+    [...txt].forEach((ch, k) => { const m = (an[k] - esp) / 2; ang += m / rt; c.save(); c.rotate(ang); c.translate(0, -rt); c.fillText(ch, 0, 0); c.restore(); ang += (m + esp) / rt; });
   });
 }
 
@@ -321,14 +325,34 @@ function mostrar(i) {
   $("nombre").textContent = s.nombre;
   const f = $("frase"); f.innerHTML = s.frase.split(" ").map((w) => `<span>${w}</span>`).join(" ");
   [...f.children].forEach((w, k) => setTimeout(() => { if (yo === turno) w.classList.add("on"); }, reducir ? 0 : 40 + k * 45));
-  $("entrar").disabled = !s.url; $("entrar").textContent = s.url ? "Entrar" : "Muy pronto";
+  ponerBoton(s);
   document.querySelectorAll(".punto").forEach((p, j) => p.setAttribute("aria-current", j === i));
   o.setAttribute("aria-valuenow", i + 1); o.setAttribute("aria-valuetext", s.completo);
   if (lista) { $("aguja").classList.add("tic"); setTimeout(() => $("aguja").classList.remove("tic"), 100); }
 }
+// Juegos antes de abrir: el botón es una cuenta atrás que se pone sola en «Entrar» al llegar la hora
+const dos = (n) => String(n).padStart(2, "0");
+function faltan(ms) {
+  const t = Math.max(0, Math.ceil(ms / 1000)), d = Math.floor(t / 86400), h = Math.floor(t / 3600) % 24, m = Math.floor(t / 60) % 60, sg = t % 60;
+  return (d ? `${d} d ` : "") + `${dos(h)}:${dos(m)}:${dos(sg)}`;
+}
+let reloj = 0;
+function ponerBoton(s) {
+  const b = $("entrar"); clearInterval(reloj);
+  const pinta = () => {
+    const espera = cerrada(s);
+    b.disabled = !s.url; b.classList.toggle("cuenta", !!espera);
+    b.textContent = espera ? `Abre en ${faltan(s.abre - Date.now())}` : "Entrar";
+    b.setAttribute("aria-label", espera ? "La Liga Cazurra abre el sábado 14 de noviembre a las 12:00" : "Entrar");
+    if (!espera) clearInterval(reloj);
+  };
+  pinta();
+  if (cerrada(s)) reloj = setInterval(pinta, 1000);
+}
 $("entrar").onclick = entrar;
 function entrar() {
   const s = SECCIONES[elegida]; if (!s || !s.url || !lista) return;
+  if (cerrada(s)) { $("entrar").animate([{ transform: "scale(1)" }, { transform: "scale(1.06)" }, { transform: "scale(1)" }], { duration: reducir ? 1 : 320, easing: "ease-out" }); return; }
   // la cámara sigue hacia dentro de la rosa, funde a negro y se abre la sección
   const r = o.getBoundingClientRect(), z = 6;
   const zoom = $("escena").animate([{ transform: "none", opacity: 1 }, { transform: `scale(${z})`, opacity: 0 }],

@@ -4,6 +4,9 @@
 // contraseña. Si quiere otra, basta con cambiar HUELLA_CLAVE (o poner LIGA_CLAVE en Vercel, que manda sobre ella).
 // Para abrirla a todo el mundo: pon LIGA_CON_CLAVE = false (o LIGA_ABIERTA=1 en Vercel) y vuelve a publicar.
 export const LIGA_CON_CLAVE = true;
+// Se abre sola a todo el mundo el sábado 14-11-2026 a las 12:00 de Madrid (regla de Alejandro, 10-11-2026).
+// La portada cuenta atrás hasta la misma hora (APERTURA_LIGA en public/inicio/index.html).
+export const APERTURA_LIGA = Date.parse("2026-11-14T12:00:00+01:00");
 export const COOKIE_PASE = "liga_pase";
 export const HUELLA_CLAVE = "35db7c15e3a998afae7090e846496594cda548516d3083ee4d3a95410df072cd";
 
@@ -19,8 +22,8 @@ export async function claveBuena(clave, env = process.env) {
 // Con qué se firma la cookie: la contraseña y un secreto del servidor (así no se puede fabricar leyendo el código)
 export const secretoPase = (env = process.env) => `${env.LIGA_CLAVE || HUELLA_CLAVE}:${env.PANEL_CLAVE || env.SUPABASE_SECRET_KEY || "local"}`;
 
-export function ligaConClave(env = process.env) {
-  if (!LIGA_CON_CLAVE || env.LIGA_ABIERTA === "1") return false;
+export function ligaConClave(env = process.env, ahora = Date.now()) {
+  if (!LIGA_CON_CLAVE || env.LIGA_ABIERTA === "1" || ahora >= APERTURA_LIGA) return false;
   // en local (sin secreto del servidor) se deja pasar; en Vercel, cerrada
   return Boolean(env.PANEL_CLAVE || env.SUPABASE_SECRET_KEY || env.VERCEL_ENV === "production");
 }
@@ -40,8 +43,8 @@ export function iguales(a, b) {
   return d === 0;
 }
 
-export async function tienePase(cookie, env = process.env) {
-  if (!ligaConClave(env)) return true;
+export async function tienePase(cookie, env = process.env, ahora = Date.now()) {
+  if (!ligaConClave(env, ahora)) return true;
   if (!cookie) return false;
   return iguales(cookie, await firmaPase(secretoPase(env)));
 }
