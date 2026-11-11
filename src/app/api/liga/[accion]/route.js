@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { dentroDelLimite } from "../../../../lib/freno";
 import { enMadrid, juegosDelDia, ligaAbierta, lunesDe, domingoDe } from "../../../../lib/liga/calendario";
-import { JUEGOS, EN_LIGA, comprobarPartida, semillaServidor } from "../../../../lib/liga/juegos";
+import { JUEGOS, enLigaEl, comprobarPartida, semillaServidor } from "../../../../lib/liga/juegos";
 import { comprobarApodo, limpiarCodigo, limpiarCorreo, SIN_PUEBLO } from "../../../../lib/liga/perfil";
 import { ErrorLiga, modoLiga, servicio } from "../../../../lib/liga/servicio";
 
@@ -46,7 +46,7 @@ async function quien(request, s, obligatorio = true) {
 
 function frenar(ok) { if (!ok) throw new ErrorLiga(429, "Vas muy rápido. Espera un momento y vuelve a probar."); }
 
-function juegosDeHoy(dia) { return juegosDelDia(dia, EN_LIGA).map((id) => JUEGOS[id]); }
+function juegosDeHoy(dia) { return juegosDelDia(dia, enLigaEl(dia)).map((id) => JUEGOS[id]); }
 
 function fichaPublica(j) { return { id: j.id, nombre: j.nombre, sitio: j.sitio, pagina: j.pagina, foto: j.foto, habilidad: j.habilidad }; }
 

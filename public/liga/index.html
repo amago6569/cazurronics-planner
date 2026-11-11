@@ -181,7 +181,7 @@ function pintarJuegos() {
   }).join("") || `<p class="aviso-cuenta">Hoy no hay juegos.</p>`;
 }
 
-// Los siete juegos (mismo orden y datos que src/lib/liga/juegos.js)
+// Todos los juegos (mismo orden y datos que src/lib/liga/juegos.js). Los que tienen fecha en ESTRENO no se enseñan hasta ese día.
 const TODOS = [
   ["canasta", "Canasta en la Catedral", "Puntería", "/liga/fondo-v.webp"],
   ["tapas", "Tapeo en el Húmedo", "Reflejos", "/liga/fondos/humedo-v.webp"],
@@ -190,8 +190,13 @@ const TODOS = [
   ["vidriera", "La Vidriera", "Memoria", "/liga/fondos/vidriera-v.webp"],
   ["pendon", "El Pendón", "Equilibrio", "/liga/fondos/pendon-v.webp"],
   ["esqui", "Bajada en San Isidro", "Esquí", "/liga/fondos/montes-v.webp"],
+  ["rebano", "Trashumancia", "Pastoreo", "/liga/fondos/riano-v.webp"],
+  ["trucha", "La trucha", "Pesca", "/liga/fondos/valle-v.webp"],
 ];
-$("todos").innerHTML = TODOS.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto.replace(/\.webp$/, "-mini.webp")}" alt="" loading="lazy" decoding="async"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
+const ESTRENO = { rebano: "2026-11-16", trucha: "2026-11-16" };
+const hoyMadrid = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const VISIBLES = TODOS.filter(([id]) => !ESTRENO[id] || hoyMadrid >= ESTRENO[id] || new URLSearchParams(location.search).has("todos"));
+$("todos").innerHTML = VISIBLES.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto.replace(/\.webp$/, "-mini.webp")}" alt="" loading="lazy" decoding="async"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
 
 async function cargar() {
   try { datos = await hoy(); } catch { datos = null; }
