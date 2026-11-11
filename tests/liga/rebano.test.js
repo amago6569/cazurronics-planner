@@ -90,11 +90,10 @@ describe("trashumancia: dificultad", () => {
   });
 });
 
-describe("juegos nuevos: entran en la liga el lunes de su estreno", () => {
-  it("hasta el 15 de noviembre puntúan los 7 de siempre; desde el 16, también los dos nuevos", () => {
-    expect(enLigaEl("2026-11-14")).toEqual(EN_LIGA.filter((id) => id !== "rebano" && id !== "trucha"));
-    expect(enLigaEl("2026-11-15")).toHaveLength(7);
-    expect(enLigaEl("2026-11-16")).toEqual(EN_LIGA);
-    expect(enLigaEl("2027-01-01")).toHaveLength(9);
+describe("juegos sin fecha de estreno: puntúan desde el primer día", () => {
+  it("Trashumancia y La trucha están en la liga desde ya", () => {
+    expect(enLigaEl("2026-11-14")).toEqual(EN_LIGA);
+    expect(enLigaEl("2026-11-14")).toContain("rebano");
+    expect(enLigaEl("2026-11-14")).toContain("trucha");
   });
 });
