@@ -8,6 +8,8 @@ import * as cecina from "../../../public/liga/motor-cecina.js";
 import * as vidriera from "../../../public/liga/motor-vidriera.js";
 import * as pendon from "../../../public/liga/motor-pendon.js";
 import * as esqui from "../../../public/liga/motor-esqui.js";
+import * as rebano from "../../../public/liga/motor-rebano.js";
+import * as trucha from "../../../public/liga/motor-trucha.js";
 
 export const JUEGOS = {
   canasta: {
@@ -104,6 +106,35 @@ export const JUEGOS = {
     repetir: (semilla, datos) => esqui.rejugar(semilla, datos?.movimientos),
     ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
   },
+  rebano: {
+    id: "rebano",
+    nombre: "Trashumancia",
+    sitio: "Riaño",
+    pagina: "/liga/rebano.html",
+    foto: "/liga/fondos/riano-v.webp",
+    habilidad: "Pastoreo",
+    version: rebano.VERSION,
+    duracionMs: rebano.DURACION_MS,
+    maxBytes: 40000, // como mucho 30 movimientos por segundo, de tres números cada uno
+    // datos = { movimientos: [t, x, y, t, x, y, …] } (ms de partida y adónde va el mastín ×10000)
+    repetir: (semilla, datos) => rebano.rejugar(semilla, datos?.movimientos),
+    ultimoMomento: (datos) => (Array.isArray(datos?.movimientos) && datos.movimientos.length >= 3 ? Number(datos.movimientos[datos.movimientos.length - 3]) || 0 : 0),
+    estreno: "2026-11-16",
+  },
+  trucha: {
+    id: "trucha",
+    nombre: "La trucha",
+    sitio: "Río de montaña",
+    pagina: "/liga/trucha.html",
+    foto: "/liga/fondos/valle-v.webp",
+    habilidad: "Pesca",
+    version: trucha.VERSION,
+    duracionMs: trucha.DURACION_MS,
+    // datos = { toques: [t, t, …] } (ms de partida en que aprieta, suelta, aprieta…)
+    repetir: (semilla, datos) => trucha.rejugar(semilla, datos?.toques),
+    ultimoMomento: ultimoToque,
+    estreno: "2026-11-16",
+  },
 };
 
 function ultimoToque(datos) {
@@ -117,7 +148,11 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui"];
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui", "rebano", "trucha"];
+
+// Los juegos que puntúan un día dado: los nuevos entran el día de su «estreno» (un lunes, para no cambiar los juegos
+// de una semana que ya está en marcha). dia = "2026-11-16" en hora de Madrid.
+export function enLigaEl(dia) { return EN_LIGA.filter((id) => !JUEGOS[id].estreno || dia >= JUEGOS[id].estreno); }
 
 export const MAX_BYTES_DATOS = 20000; // lo normal (una canasta ocupa unos 2 KB); cada juego puede subirlo con maxBytes
 

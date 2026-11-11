@@ -8,7 +8,7 @@ import { juegosDelDia, ligaAbierta, lunesDe, domingoDe, enMadrid } from "../../s
 import { jugarPartida } from "./bots.js";
 
 // Estas pruebas juegan a la canasta: que toque todos los días, salga lo que salga en la rotación de verdad
-vi.mock("../../src/lib/liga/juegos.js", async (original) => ({ ...(await original()), EN_LIGA: ["canasta"] }));
+vi.mock("../../src/lib/liga/juegos.js", async (original) => ({ ...(await original()), EN_LIGA: ["canasta"], enLigaEl: () => ["canasta"] }));
 
 let ip = 0;
 function pedir(metodo, accion, { cuerpo, token, query = "", conIp } = {}) {
