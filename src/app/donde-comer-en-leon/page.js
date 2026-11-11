@@ -42,10 +42,9 @@ export default async function DondeComer() {
       <section>
         <h2 className="text-xl font-bold tracking-tight text-slate-900 px-1 mb-3">Qué pedir en León</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {QUE_PEDIR.map(([icono, nombre, texto]) => (
+          {QUE_PEDIR.map(([, nombre, texto]) => (
             <div key={nombre} className={`${GLASS} rounded-[1.5rem] p-4`}>
-              <p className="text-2xl">{icono}</p>
-              <h3 className="font-semibold text-slate-900 mt-2">{nombre}</h3>
+              <h3 className="font-semibold text-slate-900">{nombre}</h3>
               <p className="text-sm text-slate-600 mt-0.5">{texto}</p>
             </div>
           ))}

@@ -65,7 +65,7 @@ export default async function PaginaDia({ offset }) {
             {capital.porDia[0] && <AgendaFranjas eventos={capital.porDia[0].grupos.flatMap((g) => g.eventos)} />}
             {capital.enMarcha.length > 0 && (
               <div>
-                <p className="text-sm font-semibold text-slate-700 px-1 mb-2">📌 Abierto estos días</p>
+                <p className="text-sm font-semibold text-slate-700 px-1 mb-2">Abierto estos días</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">{capital.enMarcha.slice(0, 6).map((e, i) => <TarjetaEvento key={i} e={e} mostrarCuando />)}</div>
               </div>
             )}
@@ -80,7 +80,7 @@ export default async function PaginaDia({ offset }) {
             {provincia.map(({ z, eventos }) => (
               <div key={z.id}>
                 <div className="flex items-center justify-between gap-2 px-1 mb-2">
-                  <p className="text-sm font-semibold text-slate-700">{z.emoji} {z.nombre}</p>
+                  <p className="text-sm font-semibold text-slate-700">{z.nombre}</p>
                   <Link href={rutaZona(z.id)} className="text-xs font-semibold text-rose-600 hover:underline underline-offset-2">Ver toda la zona</Link>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">{eventos.slice(0, MAX_POR_ZONA).map((e, i) => <TarjetaEvento key={i} e={e} />)}</div>

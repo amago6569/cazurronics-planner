@@ -69,7 +69,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
         aria-pressed={activa}
         className={`${PRESS} shrink-0 snap-start h-11 pl-3 pr-2.5 inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap ${activa ? "bg-slate-900 text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/70 text-slate-700 ring-1 ring-white hover:bg-white"} ${!total && !activa ? "opacity-60" : ""}`}
       >
-        <span aria-hidden>{emoji}</span>{texto}
+        {texto}
         <span className={`min-w-[1.4rem] h-[1.4rem] px-1 rounded-full text-[11px] leading-[1.4rem] tabular-nums ${activa ? "bg-white/20" : "bg-slate-900/5 text-slate-500"}`}>{total}</span>
       </button>
     );
@@ -125,7 +125,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
 
         {enMarchaZona.length > 0 && (
           <section aria-labelledby="en-marcha">
-            <h3 id="en-marcha" className="text-lg font-bold tracking-tight text-slate-900 px-1">📌 En marcha estos días</h3>
+            <h3 id="en-marcha" className="text-lg font-bold tracking-tight text-slate-900 px-1">En marcha estos días</h3>
             <p className="text-sm text-slate-500 px-1 mb-3">Exposiciones, ferias y mercados que puedes visitar cualquier día de su calendario.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {enMarchaZona.map((e, i) => <TarjetaEvento key={`m-${i}-${e.titulo}`} e={e} mostrarCuando />)}
@@ -145,10 +145,9 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
 
         {totalZona === 0 && (
           <div className={`${GLASS} rounded-[1.75rem] p-6 text-center`}>
-            <p className="text-3xl mb-2">🔎</p>
             <p className="font-semibold text-slate-900">Aún no tenemos nada en {nombreZona} estos días</p>
             <p className="text-sm text-slate-500 mt-1 mb-4">Cada mañana volvemos a rastrear toda la provincia. Mientras, mira lo que hay en la capital.</p>
-            <button type="button" onClick={() => elegirZona(ZONA_INICIAL)} className={`${PRESS} h-11 px-5 rounded-full bg-slate-900 text-white text-sm font-semibold`}>🦁 Ver León capital</button>
+            <button type="button" onClick={() => elegirZona(ZONA_INICIAL)} className={`${PRESS} h-11 px-5 rounded-full bg-slate-900 text-white text-sm font-semibold`}>Ver León capital</button>
           </div>
         )}
       </div>
