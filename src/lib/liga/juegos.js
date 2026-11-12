@@ -10,6 +10,10 @@ import * as pendon from "../../../public/liga/motor-pendon.js";
 import * as esqui from "../../../public/liga/motor-esqui.js";
 import * as rebano from "../../../public/liga/motor-rebano.js";
 import * as trucha from "../../../public/liga/motor-trucha.js";
+import * as justa from "../../../public/liga/motor-justa.js";
+import * as bolos from "../../../public/liga/motor-bolos.js";
+import * as lucha from "../../../public/liga/motor-lucha.js";
+import * as maragatos from "../../../public/liga/motor-maragatos.js";
 
 export const JUEGOS = {
   canasta: {
@@ -133,6 +137,59 @@ export const JUEGOS = {
     repetir: (semilla, datos) => trucha.rejugar(semilla, datos?.toques),
     ultimoMomento: ultimoToque,
   },
+  justa: {
+    id: "justa",
+    nombre: "La Justa del Paso Honroso",
+    sitio: "Hospital de Órbigo",
+    pagina: "/liga/justa.html",
+    foto: "/liga/fondos/vega-v.webp",
+    habilidad: "Puntería",
+    version: justa.VERSION,
+    duracionMs: justa.DURACION_MS,
+    // datos = { movimientos: [t, y, t, y, …] } (ms de partida y dónde quiere la punta de la lanza ×10000)
+    maxBytes: 40000, // como mucho 1.500 movimientos de dos números
+    repetir: (semilla, datos) => justa.rejugar(semilla, datos?.movimientos),
+    ultimoMomento: (datos) => ultimoPar(datos?.movimientos),
+  },
+  bolos: {
+    id: "bolos",
+    nombre: "Bolos leoneses",
+    sitio: "Bolera de pueblo",
+    pagina: "/liga/bolos.html",
+    foto: "/liga/fondos/valle-v.webp",
+    habilidad: "Efecto",
+    version: bolos.VERSION,
+    duracionMs: bolos.DURACION_MS,
+    // datos = { tiros: [t, x, a, c, s, …] } (ms de partida, salida, dirección, efecto y fuerza de cada bola)
+    repetir: (semilla, datos) => bolos.rejugar(semilla, datos?.tiros),
+    ultimoMomento: (datos) => (Array.isArray(datos?.tiros) && datos.tiros.length >= 5 ? Number(datos.tiros[datos.tiros.length - 5]) || 0 : 0),
+  },
+  lucha: {
+    id: "lucha",
+    nombre: "Lucha leonesa",
+    sitio: "Corro de aluches",
+    pagina: "/liga/lucha.html",
+    foto: "/liga/fondos/montes-v.webp",
+    habilidad: "Reflejos",
+    version: lucha.VERSION,
+    duracionMs: lucha.DURACION_MS,
+    // datos = { gestos: [t, d, t, d, …] } (ms de partida y hacia dónde desliza: 0 izq, 1 der, 2 arriba, 3 abajo)
+    repetir: (semilla, datos) => lucha.rejugar(semilla, datos?.gestos),
+    ultimoMomento: (datos) => ultimoPar(datos?.gestos),
+  },
+  maragatos: {
+    id: "maragatos",
+    nombre: "Los maragatos del reloj",
+    sitio: "Astorga",
+    pagina: "/liga/maragatos.html",
+    foto: "/liga/fondos/tarde-v.webp",
+    habilidad: "Ritmo",
+    version: maragatos.VERSION,
+    duracionMs: maragatos.DURACION_MS,
+    // datos = { toques: [t, lado, t, lado, …] } (ms de partida y lado: 0 izquierda, 1 derecha)
+    repetir: (semilla, datos) => maragatos.rejugar(semilla, datos?.toques),
+    ultimoMomento: (datos) => ultimoPar(datos?.toques),
+  },
 };
 
 function ultimoToque(datos) {
@@ -146,7 +203,7 @@ function ultimoPar(lista) {
 }
 
 // Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui", "rebano", "trucha"];
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui", "rebano", "trucha", "justa", "bolos", "lucha", "maragatos"];
 
 // Los juegos que puntúan un día dado: los nuevos entran el día de su «estreno» (un lunes, para no cambiar los juegos
 // de una semana que ya está en marcha). dia = "2026-11-16" en hora de Madrid.
