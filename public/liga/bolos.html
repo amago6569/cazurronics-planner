@@ -26,7 +26,7 @@
 <body>
 <div class="fondo" aria-hidden="true"><img id="foto" alt="" src="fondos/valle-v-lejos.webp" decoding="async"></div>
 <canvas id="escena" aria-hidden="true"></canvas>
-<canvas id="lienzo" tabindex="-1" role="img" aria-label="Una bolera de pueblo con nueve bolos y el miche. Desliza el dedo hacia delante para tirar la bola; si curvas el gesto, la bola coge efecto."></canvas>
+<canvas id="lienzo" tabindex="-1" role="img" aria-label="Una bolera de pueblo con el castro de nueve bolos y el miche. Desliza el dedo hacia el castro para tirar la media bola; si curvas el gesto, la bola tuerce."></canvas>
 
 <div class="hud" id="hud" hidden>
   <div class="tiempo" id="tiempo">0:50<small>TIEMPO</small></div>
@@ -44,11 +44,11 @@
   <p class="etiqueta">Liga Cazurra · Efecto</p>
   <h1 class="titulo" id="t-inicio">Bolos leoneses</h1>
   <ul class="reglas">
-    <li><b>50″</b><span>Derriba todos los bolos que puedas. Cada tirada son dos bolas.</span></li>
-    <li><b>☝</b><span id="regla-gesto">Desliza el dedo hacia delante para tirar. Si curvas el gesto, la bola tuerce.</span></li>
-    <li><b>+6</b><span>Cada bolo, 2. El del medio, 4. El miche, 6. Los nueve, 12 más (20 si es de una bola).</span></li>
+    <li><b>50″</b><span>Tira la media bola desde la mano. Tiene que entrar en el castro: si no, es cinca y no vale.</span></li>
+    <li><b>☝</b><span id="regla-gesto">Desliza el dedo hacia el castro para tirar. Si curvas el gesto, la bola tuerce.</span></li>
+    <li><b>+16</b><span>Si entra y sale por la raya del once, hacia el miche, es once: 16 tantos. Tirar el miche, 4 más. Si no, cada bolo vale 1.</span></li>
   </ul>
-  <p class="nota">La bola leonesa no va recta: con efecto entra torcida, se lleva más bolos y alcanza el miche. Más larga la pasada, más fuerte sale.</p>
+  <p class="nota">La media bola tuerce hacia su cara plana, y más cuanto más despacio va. Si se queda fuera de la raya de parada, se birla: otra tirada desde donde paró.</p>
   <div class="botones">
     <button class="principal" id="jugar" type="button">Jugar</button>
     <button class="secundario" id="liga-entrar" type="button" hidden>Entrar para puntuar</button>

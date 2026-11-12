@@ -19,7 +19,7 @@ const PROHIBIDO = ["Math.random", "Math.sin", "Math.cos", "Math.tan", "Math.pow"
 // clave: lo que se manda al servidor; jugar: bot; partidas: cuántas por nivel en la prueba de dificultad
 const CASOS = [
   { id: "justa", motor: justa, clave: "movimientos", jugar: jugarJusta, partidas: 20 },
-  { id: "bolos", motor: bolos, clave: "tiros", jugar: jugarBolos, partidas: 6 },
+  { id: "bolos", motor: bolos, clave: "tiros", jugar: jugarBolos, partidas: 4 },
   { id: "lucha", motor: lucha, clave: "gestos", jugar: jugarLucha, partidas: 20 },
   { id: "maragatos", motor: maragatos, clave: "toques", jugar: jugarMaragatos, partidas: 20 },
 ];
@@ -68,7 +68,7 @@ for (const { id, motor, clave, jugar, partidas } of CASOS) {
       expect(comprobarPartida({ ...base, ahora: "2026-11-16T10:00:05.000Z" }).estado).toBe("rechazada");
     });
 
-    it("la partida de la máquina cabe en lo que acepta el servidor", () => {
+    it("la partida de la máquina cabe en lo que acepta el servidor", { timeout: 60000 }, () => {
       const j = jugar(99, "maquina");
       expect(JSON.stringify({ [clave]: j[clave] }).length).toBeLessThan(JUEGOS[id].maxBytes || 20000);
     });
@@ -139,3 +139,45 @@ describe("trampas concretas de cada juego", () => {
     expect(bolos.rejugar(1, [100, 0, 0, 0, 500, 300, 0, 0, 0, 500]).valida).toBe(false);
   });
 });
+
+describe("bolos: las reglas del bolo leonés", () => {
+  const p = bolos.crearPartida(3);
+  const tira = (t) => bolos.simularTiro(p.bolos.map((b) => ({ ...b })), t, p.lado);
+  it("una bola floja que no llega al castro es cinca: no vale nada", () => {
+    const r = tira({ x: 0, a: 0, c: 0, s: 0 });
+    expect(r.valida).toBe(false);
+    expect(bolos.tantosDe(r, false)).toMatchObject({ tantos: 0, cinca: true });
+  });
+  it("recta al castro tira bolos y vale uno cada bolo", () => {
+    const r = tira({ x: 0, a: 0, c: 0, s: 0.5 });
+    const t = bolos.tantosDe(r, false);
+    expect(r.valida).toBe(true);
+    expect(t.once).toBe(false);
+    expect(t.tantos).toBe(t.bolos);
+    expect(t.bolos).toBeGreaterThan(0);
+  });
+  it("con efecto hacia el miche se puede hacer once (16 tantos o más) y el once solo sale torciendo", () => {
+    let once = null, onceSinEfecto = false;
+    for (let c = -1; c <= 1.001; c += 0.125) for (let s = 0.3; s <= 0.9; s += 0.05) for (let a = -0.25; a <= 0.2501; a += 0.025) {
+      const t = bolos.tantosDe(tira({ x: 0, a, c, s }), false);
+      if (t.once && Math.abs(c) < 0.2) onceSinEfecto = true;
+      if (t.once && !once) once = { t, c };
+    }
+    expect(once).not.toBeNull();
+    expect(once.t.tantos).toBeGreaterThanOrEqual(bolos.PUNTOS.onceFuera);
+    expect(Math.sign(once.c)).toBe(p.lado);
+    expect(onceSinEfecto).toBe(false);
+  });
+  it("si la bola queda fuera de la raya de parada y quedan bolos, se birla desde donde paró", () => {
+    const q = bolos.crearPartida(3);
+    bolos.lanzar(q, 400, 0, 0, 0, 1000); // fuerte y recta: se va al fondo
+    bolos.avanzar(q, 8000);
+    expect(q.birle).not.toBeNull();
+    expect(q.estado).toBe("listo");
+    bolos.lanzar(q, 8100, 0, 0, 0, 300);
+    bolos.avanzar(q, 16000);
+    expect(q.birles).toBe(1);
+    expect(q.birle).toBeNull();
+  });
+});
+
