@@ -119,7 +119,6 @@ export const JUEGOS = {
     // datos = { movimientos: [t, x, y, t, x, y, …] } (ms de partida y adónde va el mastín ×10000)
     repetir: (semilla, datos) => rebano.rejugar(semilla, datos?.movimientos),
     ultimoMomento: (datos) => (Array.isArray(datos?.movimientos) && datos.movimientos.length >= 3 ? Number(datos.movimientos[datos.movimientos.length - 3]) || 0 : 0),
-    estreno: "2026-11-16",
   },
   trucha: {
     id: "trucha",
@@ -133,7 +132,6 @@ export const JUEGOS = {
     // datos = { toques: [t, t, …] } (ms de partida en que aprieta, suelta, aprieta…)
     repetir: (semilla, datos) => trucha.rejugar(semilla, datos?.toques),
     ultimoMomento: ultimoToque,
-    estreno: "2026-11-16",
   },
 };
 

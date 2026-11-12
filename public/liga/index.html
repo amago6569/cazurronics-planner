@@ -193,7 +193,7 @@ const TODOS = [
   ["rebano", "Trashumancia", "Pastoreo", "/liga/fondos/riano-v.webp"],
   ["trucha", "La trucha", "Pesca", "/liga/fondos/valle-v.webp"],
 ];
-const ESTRENO = { rebano: "2026-11-16", trucha: "2026-11-16" };
+const ESTRENO = {};
 const hoyMadrid = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const VISIBLES = TODOS.filter(([id]) => !ESTRENO[id] || hoyMadrid >= ESTRENO[id] || new URLSearchParams(location.search).has("todos"));
 $("todos").innerHTML = VISIBLES.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto.replace(/\.webp$/, "-mini.webp")}" alt="" loading="lazy" decoding="async"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");

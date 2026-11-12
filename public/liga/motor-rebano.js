@@ -10,7 +10,7 @@
 // Unidades: el prado va de x = -1 a 1 (de lado a lado) y de y = 0 (cerca) a y = PARED (la pared del corral, al fondo).
 // El corral queda detrás de la pared y se entra por la portilla, en el centro. El tiempo, en ms de partida.
 
-export const VERSION = 1;
+export const VERSION = 2;
 export const DURACION_MS = 50000;
 export const PASOS_POR_SEGUNDO = 120;
 const DT = 1 / PASOS_POR_SEGUNDO;
@@ -21,9 +21,9 @@ export const PARED = 2.6; // y de la pared del corral
 export const PORTILLA = 0.21; // media anchura del hueco
 export const CORRAL = { medio: 0.56, fondo: 3.12 }; // el corral: de -medio a medio, de PARED a fondo
 export const OVEJA = 0.055; // radio de una oveja
-export const PERRO = { seguir: 14, velocidad: 2.3, aceleracion: 22, yMax: PARED - 0.09, xMax: 1.02 };
+export const PERRO = { seguir: 26, velocidad: 7, aceleracion: 90, yMax: PARED - 0.09, xMax: 1.02 };
 export const MIEDO = 0.62; // a esta distancia del perro empiezan a apartarse
-export const SUSTO = { distancia: 0.3, velocidad: 1.1, dura: 1100 }; // perro encima y corriendo: se espantan
+export const SUSTO = { distancia: 0.3, velocidad: 1.5, dura: 1100 }; // perro encima y corriendo: se espantan
 export const ANDAR = { pasto: 0.07, huye: 1.05, susto: 1.5, corral: 0.5 };
 export const PUNTOS = { oveja: 10, negra: 20, fila: 3, rebano: 25, rapido: 2 };
 export const SIN_PRISA_S = 16; // cada segundo que tardes menos que esto en encerrar un rebaño entero, PUNTOS.rapido más

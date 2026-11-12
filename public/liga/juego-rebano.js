@@ -39,8 +39,8 @@ let ladridoEn = -1e9, cencerroEn = 0;
 const recientes = []; // lo último que ha pasado, para que la escena lo anime: { tipo, t, id, x }
 
 const TEXTO = conRaton
-  ? { pista: "Lleva al mastín con el ratón. Ponte detrás de las ovejas y arrímalas al corral.", regla: "Mueve el ratón y el mastín va detrás." }
-  : { pista: "Lleva al mastín con el dedo. Ponte detrás de las ovejas y arrímalas al corral.", regla: "Arrastra el dedo y el mastín va hacia él." };
+  ? { pista: "Lleva al mastín con el ratón. Ponte detrás de las ovejas y arrímalas al corral.", regla: "Mueve el ratón y el mastín lo sigue." }
+  : { pista: "Arrastra el dedo sin soltar: el mastín lo sigue. Ponte detrás de las ovejas y arrímalas al corral.", regla: "Arrastra el dedo sin soltar: el mastín va pegado a él." };
 $("regla-gesto").textContent = TEXTO.regla;
 
 const m = crearMarco({
@@ -198,19 +198,8 @@ export function vista(tj, ahora) {
   };
 }
 
-// ── La marca de adónde va el perro (encima de todo, en plano) ──
-function dibujarEncima(ctx, tj) {
-  if (m.estado !== "juego" || !dedo || !partida) return false;
-  const dx = dedo.x - partida.perro.x, dy = dedo.y - partida.perro.y;
-  if (dx * dx + dy * dy < 0.004) return false;
-  const p = aPantalla(dedo.x, dedo.y), r = 13 * p.f * (m.campo.hw / 180);
-  ctx.save();
-  ctx.strokeStyle = "rgba(243,234,216,.75)"; ctx.lineWidth = 2;
-  ctx.setLineDash([5, 5]); ctx.lineDashOffset = -tj / 40;
-  ctx.beginPath(); ctx.ellipse(p.x, p.y, r, r * 0.62, 0, 0, Math.PI * 2); ctx.stroke();
-  ctx.restore();
-  return true;
-}
+// El mastín va pegado al dedo: no hace falta marca.
+function dibujarEncima() { return false; }
 
 // ── Dibujo en plano ──
 function dibujarPlano(ctx, tj, ahora) {
