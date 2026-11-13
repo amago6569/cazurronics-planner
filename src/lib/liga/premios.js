@@ -2,13 +2,13 @@
 // Los premios los ponen los negocios (Panel → Negocios → «Premios de la Liga»). Aquí van ya agrupados en packs
 // del 1.º al 5.º puesto, tal como los aprobó Alejandro el 13-11-2026. Sin precios en euros.
 // Para una semana nueva: añade otra entrada con la fecha del sábado en que empieza.
-// Si entra el gimnasio que falta por confirmar, va al 5.º puesto junto a Momentos Coquette (regla de Alejandro, 13-11-2026).
 
 export const PREMIOS = {
+  // Orden del 13-11-2026 (tarde): entra el gimnasio DLION y ESGAYA se queda para la semana siguiente.
   "2026-11-14": [
     {
       puesto: 1, titulo: "Belleza y bienestar",
-      texto: "Masaje facial (1 h) + masaje corporal (1 h) en Ataraxia con un 55 % de descuento y un neceser Eros con máscara de pestañas Revitalash.",
+      texto: "Masaje facial y corporal (1 h cada uno) en Ataraxia con un 55 % de descuento y un neceser Eros con máscara de pestañas Revitalash.",
       negocios: [
         { nombre: "Ataraxia Beauty Balance", logo: "/liga/premios/ataraxia.jpg", instagram: "ataraxiabeautybalance" },
         { nombre: "Eros perfumería", logo: "/liga/premios/eros.jpg", instagram: "eros_perfumeria" },
@@ -23,7 +23,14 @@ export const PREMIOS = {
       ],
     },
     {
-      puesto: 3, titulo: "Celebra y sal",
+      puesto: 3, titulo: "Ponte en forma",
+      texto: "Valoración y primera sesión de entrenamiento gratis en DLION Personal Training Studio.",
+      negocios: [
+        { nombre: "DLION Personal Training Studio", logo: "/liga/premios/dlion.jpg", instagram: "dlion.entrenamientopersonal" },
+      ],
+    },
+    {
+      puesto: 4, titulo: "Celebra y sal",
       texto: "Tu celebración con el local al 50 % en La Vuelta al Sol y entradas sin gastos de gestión en SBS Tickets.",
       negocios: [
         { nombre: "La Vuelta al Sol", logo: "/liga/premios/vuelta-al-sol.jpg", instagram: "lavueltaalsol_leon" },
@@ -31,17 +38,10 @@ export const PREMIOS = {
       ],
     },
     {
-      puesto: 4, titulo: "Estilo",
-      texto: "Descuento en una camiseta de ESGAYA y un 20 % de descuento en León en mí.",
+      puesto: 5, titulo: "Estilo",
+      texto: "Un 20 % de descuento en León en mí y un 10 % en Momentos Coquette.",
       negocios: [
-        { nombre: "ESGAYA", logo: "/liga/premios/esgaya.jpg", instagram: "esgaya.brand" },
         { nombre: "León en mí", logo: "/liga/premios/leon-en-mi.jpg", instagram: "leon_en_mi" },
-      ],
-    },
-    {
-      puesto: 5, titulo: "Un capricho",
-      texto: "Un 10 % de descuento en Momentos Coquette.",
-      negocios: [
         { nombre: "Momentos Coquette", logo: "/liga/premios/coquette.jpg", instagram: "momentos.coquette" },
       ],
     },

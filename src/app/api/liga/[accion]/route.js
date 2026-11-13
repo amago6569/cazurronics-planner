@@ -102,7 +102,7 @@ const ACCIONES = {
       cambio: momentoJornada(sumarDias(dia, 1)),
       semana: { desde: inicio, hasta: finSemana(inicio), cierre: cierreSemana(inicio), cierraEn: momentoJornada(cierreSemana(inicio)) },
       premiosDesde: conPremios, premiosCierre: conPremios ? cierreSemana(conPremios) : null,
-      premios: packs ? packs.map((p) => ({ puesto: p.puesto, titulo: p.titulo, texto: p.texto, negocios: p.negocios.map((n) => ({ nombre: n.nombre, logo: n.logo })) })) : null,
+      premios: packs ? packs.map((p) => ({ puesto: p.puesto, titulo: p.titulo, texto: p.texto, negocios: p.negocios.map((n) => ({ nombre: n.nombre, logo: n.logo, instagram: n.instagram || null })) })) : null,
       juegos: juegos.map((j) => {
         const m = mios.find((x) => x.juego === j.id);
         const usados = Number(m?.usados || 0);
