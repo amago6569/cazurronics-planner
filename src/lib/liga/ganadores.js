@@ -4,8 +4,8 @@
 import { cierreSemana, finSemana, momentoJornada } from "./calendario";
 import { PREMIOS, codigoPremio, premiosDeSemana } from "./premios";
 
-// Margen tras el cierre: una partida empezada a las 11:59 aún puede terminar (máximo 15 minutos)
-export const MARGEN_CIERRE_MS = 20 * 60 * 1000;
+// Margen tras el cierre: una partida empezada a las 11:59 aún puede terminar (cada intento dura 50 s como mucho)
+export const MARGEN_CIERRE_MS = 2 * 60 * 1000;
 
 export function semanaCerrada(inicio, ahora = Date.now()) {
   return ahora >= Date.parse(momentoJornada(cierreSemana(inicio))) + MARGEN_CIERRE_MS;

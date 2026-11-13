@@ -1,8 +1,9 @@
 // ============ LIGA CAZURRA: cierre de semana ============
-// Lo llama un cron cada día (vercel.json, /api/liga/cierre). Si una semana con premios cerró hace menos de 3 días:
+// Se lanza solo con la primera visita a la liga tras el cierre (sábado 12:02, cierreAlVisitar) y, de reserva,
+// con un cron cada día (vercel.json, /api/liga/cierre). Si una semana con premios cerró hace menos de 3 días:
 // saca los 5 primeros, manda a cada uno su correo de enhorabuena con su premio y su código, y le pasa a Alejandro
 // la lista por Telegram (apodo, puntos, código, correo). Cada ganador recibe su correo una sola vez.
-import { leerJSON, guardarJSON } from "../almacen";
+import { comando, enSegundoPlano, guardarJSON, leerJSON, olvidar, recordar } from "../almacen";
 import { enviarTelegram, leerDueno, telegramConfigurado } from "../telegram";
 import { cierreSemana, momentoJornada } from "./calendario";
 import { correoConfigurado, correoGanador, fechaLarga, mandarCorreo } from "./correo";
@@ -73,9 +74,34 @@ export async function cerrarSemanas(s, ahora = Date.now(), deps = {}) {
     }
     // A Alejandro solo le escribimos cuando hay algo nuevo (o falta configurar el correo)
     if (nuevos || !puedeMandar || lineas.some((l) => l.includes("no se pudo") || l.includes("no pude"))) {
-      await avisarAlejandro(`🏆 Liga Cazurra: ganadores de la semana del ${fechaLarga(inicio)} al ${fechaLarga(cierre)}\n\n${lineas.join("\n\n")}\n\nPasa a cada negocio el código de su ganador. Se comprueba en cazurronics.es/liga/premio.html`, deps);
+      await avisarAlejandro(`🏆 Liga Cazurra: ganadores de la semana del ${fechaLarga(inicio)} al ${fechaLarga(cierre)}\n\n${lineas.join("\n\n")}\n\nPasa a cada negocio el código de su ganador.`, deps);
     }
-    informe.push({ inicio, ganadores: ganadores.length, nuevos });
+    const listo = ganadores.every((g) => hechos[g.puesto]);
+    if (listo) await guardar(claveListo(inicio), true, 7 * 86400).catch(() => null);
+    informe.push({ inicio, ganadores: ganadores.length, nuevos, listo });
   }
   return informe;
+}
+
+const claveListo = (inicio) => `liga:cierre:listo:${inicio}`;
+const listos = new Set(); // semanas ya cerradas del todo, en esta instancia del servidor
+
+// Desde una visita a la liga: si una semana con premios acaba de cerrar y faltan correos, los manda en segundo
+// plano (la visita no espera). Gasto en Upstash: nada fuera de los 3 días tras el cierre; dentro, como mucho una
+// lectura cada 10 minutos por servidor y un candado de 30 minutos para que dos visitas no lo hagan a la vez.
+export function cierreAlVisitar(s, ahora = Date.now(), deps = {}) {
+  const pendientes = semanasPorAvisar(ahora).filter((i) => !listos.has(i));
+  if (!pendientes.length) return null;
+  return enSegundoPlano(async () => {
+    const leer = deps.leer || leerJSON, mandarComando = deps.comando || comando;
+    const faltan = [];
+    for (const inicio of pendientes) {
+      const hecho = await recordar(claveListo(inicio), 10 * 60000, () => leer(claveListo(inicio)));
+      if (hecho) listos.add(inicio); else faltan.push(inicio);
+    }
+    if (!faltan.length) return;
+    if (!(await mandarComando(["SET", "liga:cierre:candado", "1", "NX", "EX", 30 * 60]))) return;
+    const informe = await cerrarSemanas(s, ahora, deps);
+    for (const r of informe) if (r.listo || r.ganadores === 0) { listos.add(r.inicio); olvidar(claveListo(r.inicio)); }
+  }, "liga cierre");
 }

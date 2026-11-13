@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { servicio } from "../../src/lib/liga/servicio.js";
 import { PREMIOS, codigoPremio, limpiarCodigoPremio } from "../../src/lib/liga/premios.js";
 import { ganadoresDe, comprobarCodigo, semanaCerrada } from "../../src/lib/liga/ganadores.js";
-import { cerrarSemanas, semanasPorAvisar } from "../../src/lib/liga/cierre.js";
+import { cerrarSemanas, cierreAlVisitar, semanasPorAvisar } from "../../src/lib/liga/cierre.js";
 import { correoGanador } from "../../src/lib/liga/correo.js";
 
 const s = servicio();
@@ -56,7 +56,7 @@ describe("ganadores y cierre", () => {
 
   it("antes del cierre no hay ganadores; después, los 5 primeros con su pack", async () => {
     expect(semanaCerrada("2026-11-14", CIERRE - 60000)).toBe(false);
-    expect(await ganadoresDe(s, "2026-11-14", { ahora: CIERRE + 5 * 60000 })).toEqual([]); // aún en el margen
+    expect(await ganadoresDe(s, "2026-11-14", { ahora: CIERRE + 60000 })).toEqual([]); // aún en el margen
     const g = await ganadoresDe(s, "2026-11-14", { ahora: CIERRE + 30 * 60000 });
     expect(g.map((x) => x.apodo)).toEqual(["Jugador0", "Jugador1", "Jugador2", "Jugador3", "Jugador4"]);
     expect(g[0].premio.titulo).toBe("Belleza y bienestar");
@@ -99,6 +99,22 @@ describe("ganadores y cierre", () => {
     expect(avisos[0]).toMatch(/j0@x\.es/);
   });
 
+  it("con la primera visita tras el cierre salen los correos, una sola vez", async () => {
+    const guardado = {}, mandados = [], candados = new Set();
+    const deps = {
+      env: { LIGA_SMTP_USUARIO: "liga@x.es", LIGA_SMTP_CLAVE: "x" },
+      leer: async (k) => guardado[k] || null, guardar: async (k, v) => { guardado[k] = JSON.parse(JSON.stringify(v)); },
+      mandar: async (para) => { mandados.push(para); }, telegram: async () => {},
+      comando: async ([, k]) => (candados.has(k) ? null : (candados.add(k), "OK")),
+    };
+    expect(cierreAlVisitar(s, CIERRE - 60000, deps)).toBeNull(); // antes del cierre no hace nada
+    await cierreAlVisitar(s, CIERRE + 3 * 60000, deps); // sábado 12:03
+    expect(mandados).toHaveLength(5);
+    expect(guardado["liga:cierre:listo:2026-11-14"]).toBe(true);
+    expect(cierreAlVisitar(s, CIERRE + 10 * 60000, deps)).toBeNull(); // ya hecho: ni lo mira
+    expect(mandados).toHaveLength(5);
+  });
+
   it("si no puede leer a quién avisó ya, no manda nada (para no repetir)", async () => {
     const mandados = [];
     await cerrarSemanas(s, CIERRE + 70 * 60000, {
@@ -117,5 +133,8 @@ describe("el correo", () => {
     expect(c.texto).toMatch(/Floristería La Cala/);
     expect(c.html).not.toMatch(/<b>Pepe<\/b>/);
     expect(c.html).toMatch(/CZ-2ABCD-EFGH/);
+    expect(c.texto).toMatch(/@floristerialacala/);
+    expect(c.html).toMatch(/instagram\.com\/floristerialacala/);
+    expect(c.texto).toMatch(/Liga Cazurra de Cazurronics\. Mi código de ganador es CZ-2ABCD-EFGH/);
   });
 });

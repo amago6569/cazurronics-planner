@@ -6,7 +6,6 @@
 //   LIGA_SMTP_HOST      (opcional) smtp.strato.de
 //   LIGA_SMTP_PUERTO    (opcional) 465
 // Cada correo va con copia oculta a esa misma dirección, para que Alejandro tenga todos en su buzón.
-import { DOMINIO_LIGA } from "./textos";
 
 const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -16,8 +15,9 @@ export function correoConfigurado(env = process.env) { return Boolean(env.LIGA_S
 
 // El correo de un ganador: { asunto, texto, html }
 export function correoGanador({ apodo, puesto, codigo, premio }, { desde, cierre }) {
-  const enlace = `${DOMINIO_LIGA}/liga/premio.html?c=${encodeURIComponent(codigo)}`;
   const negocios = premio.negocios.map((n) => n.nombre).join(" y ");
+  const ig = (n) => (n.instagram ? `https://instagram.com/${n.instagram}` : "");
+  const mensaje = `Hola, soy ${apodo} y he quedado ${puesto}.º en la Liga Cazurra de Cazurronics. Mi código de ganador es ${codigo}.`;
   const asunto = `🏆 ¡Enhorabuena, ${apodo}! Has quedado ${puesto}.º en la Liga Cazurra`;
   const texto = [
     `¡Enhorabuena, ${apodo}!`,
@@ -29,11 +29,13 @@ export function correoGanador({ apodo, puesto, codigo, premio }, { desde, cierre
     `Tu código: ${codigo}`,
     "",
     "Cómo canjearlo:",
-    "1. Contesta a este correo (o escríbenos por Instagram a @cazurronics) en los próximos 7 días.",
-    `2. Te ponemos en contacto con ${negocios}.`,
-    "3. Enseña tu código en el negocio. Ellos ya saben que es el bueno.",
+    `1. Escribe por Instagram a cada negocio de tu premio (${negocios}) en los próximos 7 días:`,
+    ...premio.negocios.map((n) => `   · ${n.nombre}${n.instagram ? `: @${n.instagram} (${ig(n)})` : ""}`),
+    "2. Diles que has ganado en la Liga Cazurra de Cazurronics y mándales tu código. Puedes copiar esto:",
+    `   «${mensaje}»`,
+    "3. Ellos comprueban el código y te dicen cómo recoger tu premio.",
     "",
-    `Cualquiera puede comprobar el código aquí: ${enlace}`,
+    "¿Algún problema? Contesta a este correo.",
     "",
     "Gracias por jugar. Nos vemos en la próxima liga.",
     "Cazurronics",
@@ -48,11 +50,15 @@ export function correoGanador({ apodo, puesto, codigo, premio }, { desde, cierre
   <p style="margin:0;font-size:30px;font-weight:900;letter-spacing:.08em;font-family:ui-monospace,Menlo,monospace">${esc(codigo)}</p>
   <p style="margin:18px 0 6px;font-weight:700">Cómo canjearlo</p>
   <ol style="margin:0;padding-left:20px">
-    <li>Contesta a este correo (o escríbenos por Instagram a @cazurronics) en los próximos 7 días.</li>
-    <li>Te ponemos en contacto con ${esc(negocios)}.</li>
-    <li>Enseña tu código en el negocio. Ellos ya saben que es el bueno.</li>
+    <li>Escribe por Instagram a cada negocio de tu premio en los próximos 7 días:
+      <ul style="margin:6px 0;padding-left:18px">${premio.negocios.map((n) => `<li><b>${esc(n.nombre)}</b>${n.instagram ? `: <a href="${esc(ig(n))}">@${esc(n.instagram)}</a>` : ""}</li>`).join("")}</ul>
+    </li>
+    <li>Diles que has ganado en la Liga Cazurra de Cazurronics y mándales tu código. Puedes copiar esto:
+      <p style="margin:6px 0;padding:10px 14px;border-left:3px solid #b07d1a;background:#f6efe1">${esc(mensaje)}</p>
+    </li>
+    <li>Ellos comprueban el código y te dicen cómo recoger tu premio.</li>
   </ol>
-  <p style="margin:18px 0 0;font-size:14px;color:#5b554c">Cualquiera puede comprobar el código aquí: <a href="${esc(enlace)}">${esc(enlace.replace(/^https?:\/\//, ""))}</a></p>
+  <p style="margin:12px 0 0">¿Algún problema? Contesta a este correo.</p>
   <p style="margin:24px 0 0">Gracias por jugar. Nos vemos en la próxima liga.<br>Cazurronics</p>
 </div>`;
   return { asunto, texto, html };
