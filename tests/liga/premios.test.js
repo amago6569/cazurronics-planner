@@ -32,7 +32,9 @@ describe("packs de premios", () => {
     expect(packs[0].texto).toMatch(/Eros/);
     for (const p of packs) for (const n of p.negocios) expect(n.logo).toMatch(/^\/liga\/premios\/.+\.jpg$/);
     const todos = packs.flatMap((p) => p.negocios.map((n) => n.nombre));
-    expect(new Set(todos).size).toBe(9); // los 9 negocios, cada uno una vez
+    expect(new Set(todos).size).toBe(9); // 9 negocios (sin ESGAYA esta semana, con DLION), cada uno una vez
+    expect(todos).toContain("DLION Personal Training Studio");
+    for (const p of packs) for (const n of p.negocios) expect(n.instagram).toMatch(/^[a-z0-9._]+$/);
   });
 });
 

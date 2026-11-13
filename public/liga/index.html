@@ -89,7 +89,7 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
 .vacio { padding: 22px 16px; color: #cfc6b6; font-size: 15px; text-align: center; display: block !important; }
 /* Premios: cinco filas, la primera con borde de oro */
 .premios { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.premio { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 16px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); }
+.premio { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 4px 12px; padding: 16px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); }
 .premio.oro { border-color: rgba(233,180,76,.7); background: linear-gradient(160deg, rgba(233,180,76,.18), rgba(233,180,76,.04) 60%); }
 .premio .num { grid-row: span 3; font-weight: 900; font-stretch: 62%; font-size: 48px; line-height: .8; color: var(--gris); font-variant-numeric: tabular-nums; }
 .premio.oro .num, .premio:nth-child(-n+3) .num { color: var(--oro); }
@@ -97,7 +97,12 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
 .premio h3 { margin: 0; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 24px; line-height: .95; }
 .premio p { margin: 0; font-size: 15px; line-height: 1.4; color: #e4dccd; }
 .logos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.logos img { height: 48px; width: 84px; object-fit: contain; padding: 4px 6px; border-radius: 10px; background: #fff; }
+.logos a, .logos .sin { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 4px 12px 4px 4px; border-radius: 14px; background: rgba(243,234,216,.08); border: 1px solid var(--borde); color: var(--crema); text-decoration: none; font-size: 13px; font-weight: 700; transition: background-color 160ms ease, transform 160ms var(--ease-out); }
+.logos .sin { padding: 4px; }
+.logos a:active { transform: scale(.97); }
+@media (hover: hover) { .logos a:hover { background: rgba(243,234,216,.16); } }
+.logos a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.logos img { flex: none; height: 44px; width: 72px; object-fit: contain; padding: 4px 6px; border-radius: 10px; background: #fff; box-sizing: border-box; }
 .nota-premios { margin: -4px 0 12px; font-size: 14px; color: #cfc6b6; line-height: 1.4; }
 .cuenta-atras { display: inline-block; margin-top: 10px; padding: 6px 12px; border-radius: 999px; background: var(--vidrio); border: 1px solid var(--borde); font-size: 14px; font-weight: 700; color: var(--crema); font-variant-numeric: tabular-nums; }
 .pie { margin: 34px 0 0; font-size: 14px; line-height: 1.5; color: var(--gris); }
@@ -250,7 +255,12 @@ function pintarPremios() {
     <span class="num" aria-label="Puesto ${p.puesto}">${p.puesto}<small>.º</small></span>
     <h3>${esc(p.titulo)}</h3>
     <p>${esc(p.texto)}</p>
-    <div class="logos">${p.negocios.map((n) => `<img src="${esc(n.logo)}" alt="${esc(n.nombre)}" loading="lazy" decoding="async">`).join("")}</div>
+    <div class="logos">${p.negocios.map((n) => {
+      const logo = `<img src="${esc(n.logo)}" alt="" loading="lazy" decoding="async">`;
+      return n.instagram
+        ? `<a href="https://www.instagram.com/${encodeURIComponent(n.instagram)}/" target="_blank" rel="noopener" aria-label="${esc(n.nombre)} en Instagram">${logo}<span>@${esc(n.instagram)}</span></a>`
+        : `<span class="sin">${logo}</span>`;
+    }).join("")}</div>
   </li>`).join("");
 }
 
