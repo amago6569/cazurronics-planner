@@ -202,8 +202,10 @@ function ultimoPar(lista) {
   return Number(lista[lista.length - 2]) || 0;
 }
 
-// Orden en que rotan por los días (calendario.juegosDelDia)
-export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui", "rebano", "trucha", "justa", "bolos", "lucha", "maragatos"];
+// Orden en que rotan por las jornadas (calendario.juegosDelDia)
+// Los Bolos leoneses están ocultos (regla de Alejandro, 13-11-2026: «no me convence», hasta nuevo aviso). El juego sigue
+// en public/liga/bolos.html; para volver a meterlo, añade "bolos" aquí y quita OCULTOS en public/liga/index.html.
+export const EN_LIGA = ["canasta", "tapas", "botillo", "cecina", "vidriera", "pendon", "esqui", "rebano", "trucha", "justa", "lucha", "maragatos"];
 
 // Los juegos que puntúan un día dado: los nuevos entran el día de su «estreno» (un lunes, para no cambiar los juegos
 // de una semana que ya está en marcha). dia = "2026-11-16" en hora de Madrid.

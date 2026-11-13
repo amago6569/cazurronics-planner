@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { dentroDelLimite } from "../../../../lib/freno";
-import { enMadrid, juegosDelDia, ligaAbierta, lunesDe, domingoDe } from "../../../../lib/liga/calendario";
+import { cierreSemana, finSemana, inicioSemana, jornadaDe, juegosDelDia, ligaAbierta, momentoJornada, sumarDias } from "../../../../lib/liga/calendario";
+import { comprobarCodigo } from "../../../../lib/liga/ganadores";
+import { limpiarCodigoPremio, premiosDeSemana } from "../../../../lib/liga/premios";
 import { JUEGOS, enLigaEl, comprobarPartida, semillaServidor } from "../../../../lib/liga/juegos";
 import { comprobarApodo, limpiarCodigo, limpiarCorreo, SIN_PUEBLO } from "../../../../lib/liga/perfil";
 import { ErrorLiga, modoLiga, servicio } from "../../../../lib/liga/servicio";
@@ -14,6 +16,7 @@ import { ErrorLiga, modoLiga, servicio } from "../../../../lib/liga/servicio";
 // POST /api/liga/empezar  { juego }                     → { partida, semilla, intento, quedan }
 // POST /api/liga/terminar { partida, datos }            → puntos comprobados aquí, no los del móvil
 // GET  /api/liga/ranking?de=dia|semana
+// GET  /api/liga/premio?c=CZ-1ABCD-EFGH          → ¿es un código de premio de verdad? (para los negocios)
 // POST /api/liga/borrar   { confirmar: true }           → borra la cuenta y todas sus partidas
 // La sesión va en la cabecera Authorization: Bearer <access>.
 
@@ -85,12 +88,21 @@ const ACCIONES = {
 
   async hoy(request, s) {
     const u = await quien(request, s, false);
-    const { dia } = enMadrid();
+    const dia = jornadaDe();
     const juegos = juegosDeHoy(dia);
+    const inicio = inicioSemana(dia);
+    // los premios de esta semana o, si aún no tiene, los de la que viene (para anunciarlos antes)
+    const conPremios = premiosDeSemana(inicio) ? inicio : premiosDeSemana(sumarDias(inicio, 7)) ? sumarDias(inicio, 7) : null;
+    const packs = conPremios ? premiosDeSemana(conPremios) : null;
     const perfil = u ? await s.perfil(u.id) : null;
     const mios = u && perfil ? await s.hoy(u.id, dia) : [];
     return responder({
-      dia, abierta: ligaAbierta(), semana: { desde: lunesDe(dia), hasta: domingoDe(dia) },
+      dia, abierta: ligaAbierta(),
+      // la jornada cambia a las 12:00 y la semana cierra el sábado a las 12:00 (calendario.js)
+      cambio: momentoJornada(sumarDias(dia, 1)),
+      semana: { desde: inicio, hasta: finSemana(inicio), cierre: cierreSemana(inicio), cierraEn: momentoJornada(cierreSemana(inicio)) },
+      premiosDesde: conPremios, premiosCierre: conPremios ? cierreSemana(conPremios) : null,
+      premios: packs ? packs.map((p) => ({ puesto: p.puesto, titulo: p.titulo, texto: p.texto, negocios: p.negocios.map((n) => ({ nombre: n.nombre, logo: n.logo })) })) : null,
       juegos: juegos.map((j) => {
         const m = mios.find((x) => x.juego === j.id);
         const usados = Number(m?.usados || 0);
@@ -117,15 +129,15 @@ const ACCIONES = {
     const { juego } = await cuerpo(request);
     const j = JUEGOS[juego];
     if (!j) throw new ErrorLiga(400, "Ese juego no existe.");
-    if (!ligaAbierta()) throw new ErrorLiga(409, "La semana cerró el domingo a las 22:00. El lunes empieza otra liga.", "cerrada");
-    const { dia } = enMadrid();
-    if (!juegosDeHoy(dia).some((x) => x.id === j.id)) throw new ErrorLiga(409, "Hoy este juego no puntúa. Mira los juegos de hoy en la liga.", "no_toca");
+    if (!ligaAbierta()) throw new ErrorLiga(409, "La liga está cerrada ahora mismo.", "cerrada");
+    const dia = jornadaDe();
+    if (!juegosDeHoy(dia).some((x) => x.id === j.id)) throw new ErrorLiga(409, "Este juego ya no puntúa: a las 12:00 cambiaron los juegos. Mira los de ahora en la liga.", "no_toca");
     frenar(await dentroDelLimite(request, "liga-empezar", 30, 600));
     const semilla = semillaServidor();
     const r = await s.empezar(u.id, j.id, dia, semilla, j.version);
     if (r.error === "sin_perfil") throw new ErrorLiga(409, "Elige tu apodo antes de jugar.", "sin_perfil");
     if (r.error === "bloqueado") throw new ErrorLiga(403, "Tu cuenta no puede jugar en la liga. Escríbenos si crees que es un error.", "bloqueado");
-    if (r.error === "sin_intentos") throw new ErrorLiga(409, "Ya has gastado tus 3 intentos de hoy en este juego. Mañana más.", "sin_intentos");
+    if (r.error === "sin_intentos") throw new ErrorLiga(409, "Ya has gastado tus 3 intentos en este juego. A las 12:00 salen juegos nuevos.", "sin_intentos");
     if (r.error || !r.partida) throw new ErrorLiga(502, "No se pudo empezar la partida. Prueba otra vez.", `empezar: ${r.error}`);
     return responder({ partida: r.partida, semilla, intento: Number(r.intento), quedan: Number(r.quedan), version: j.version });
   },
@@ -147,7 +159,7 @@ const ACCIONES = {
     }
     const dia = String(p.dia).slice(0, 10);
     const [mios, posDia, posSemana] = await Promise.all([
-      s.hoy(u.id, dia), posicionDe(s, dia, dia, u.id), posicionDe(s, lunesDe(dia), domingoDe(dia), u.id),
+      s.hoy(u.id, dia), posicionDe(s, dia, dia, u.id), posicionDe(s, inicioSemana(dia), finSemana(dia), u.id),
     ]);
     const m = mios.find((x) => x.juego === p.juego);
     return responder({
@@ -159,14 +171,26 @@ const ACCIONES = {
   async ranking(request, s) {
     const de = new URL(request.url).searchParams.get("de") === "semana" ? "semana" : "dia";
     const u = await quien(request, s, false);
-    const { dia } = enMadrid();
-    const desde = de === "semana" ? lunesDe(dia) : dia, hasta = de === "semana" ? domingoDe(dia) : dia;
+    const dia = jornadaDe();
+    const desde = de === "semana" ? inicioSemana(dia) : dia, hasta = de === "semana" ? finSemana(dia) : dia;
     const filas = await s.ranking(desde, hasta, LIMITE_RANKING, u?.id);
     return responder(
       { de, desde, hasta, filas: filas.map((f) => ({ posicion: Number(f.posicion), apodo: f.apodo, puntos: Number(f.puntos), yo: Boolean(f.yo) })) },
       200,
       u ? "no-store" : "public, s-maxage=20, stale-while-revalidate=40", // sin sesión, Vercel lo guarda 20 s
     );
+  },
+
+  async premio(request, s) {
+    const codigo = limpiarCodigoPremio(new URL(request.url).searchParams.get("c"));
+    if (!codigo) throw new ErrorLiga(400, "Ese código no tiene el formato de los premios (CZ-1ABCD-EFGH).");
+    frenar(await dentroDelLimite(request, "liga-premio", 20, 900));
+    const g = await comprobarCodigo(s, codigo);
+    if (!g) return responder({ valido: false, codigo });
+    return responder({
+      valido: true, codigo, puesto: g.puesto, apodo: g.apodo, desde: g.inicio, cierre: cierreSemana(g.inicio),
+      premio: { titulo: g.premio.titulo, texto: g.premio.texto, negocios: g.premio.negocios.map((n) => n.nombre) },
+    });
   },
 
   async borrar(request, s) {
@@ -179,7 +203,7 @@ const ACCIONES = {
   },
 };
 
-const SOLO_GET = new Set(["hoy", "ranking"]);
+const SOLO_GET = new Set(["hoy", "ranking", "premio"]);
 
 async function atender(request, params, metodo) {
   const { accion } = await params;

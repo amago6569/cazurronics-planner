@@ -92,6 +92,12 @@ const supabase = {
     if (!r.ok || !r.json?.id) throw new ErrorLiga(503, "La liga no responde ahora mismo. Prueba en un momento.", `user ${r.status}`);
     return { id: r.json.id, email: r.json.email };
   },
+  async correoDe(id) { // solo para avisar a los ganadores (con la clave secreta, desde el servidor)
+    const r = await pedir(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { metodo: "GET" });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new ErrorLiga(502, "No se pudo leer el correo del ganador.", `correo ${r.status}`);
+    return r.json?.email || null;
+  },
   async borrarUsuario(id) {
     const r = await pedir(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { metodo: "DELETE" });
     if (!r.ok && r.status !== 404) throw new ErrorLiga(502, "No se pudo borrar la cuenta. Prueba otra vez.", `borrar ${r.status}`);
@@ -182,6 +188,7 @@ const memoria = {
     const u = M.usuarios.get(s.usuario);
     return { id: u.id, email: u.email };
   },
+  async correoDe(uid) { return M.usuarios.get(uid)?.email || null; },
   async borrarUsuario(uid) {
     M.usuarios.delete(uid);
     for (const [k, v] of M.sesiones) if (v.usuario === uid) M.sesiones.delete(k);

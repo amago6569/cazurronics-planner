@@ -173,9 +173,9 @@ export function crearMarco(juego) {
   const TEXTO_LIGA = {
     sin_cuenta: "De práctica: no cuenta para la liga.",
     sin_perfil: "Elige tu apodo para que cuente en la liga.",
-    cerrada: "La semana está cerrada: hasta el lunes, de práctica.",
-    no_toca: "Hoy este juego no puntúa en la liga: es de práctica.",
-    sin_intentos: "Ya has hecho tus 3 intentos de hoy. Sigue de práctica.",
+    cerrada: "La liga está cerrada ahora mismo: de práctica.",
+    no_toca: "Ahora este juego no puntúa en la liga: es de práctica.",
+    sin_intentos: "Ya has hecho tus 3 intentos. A las 12:00 salen juegos nuevos. Sigue de práctica.",
     error: "Sin conexión con la liga: jugarás de práctica.",
   };
   const ORD = (n) => `${n}.º`;
@@ -184,7 +184,7 @@ export function crearMarco(juego) {
     if (!i) { e.textContent = ""; b.hidden = true; return; }
     if (i.oficial) {
       const intento = 4 - i.quedan;
-      e.innerHTML = `Cuenta para la liga · <b>intento ${intento} de 3</b>${i.mejor != null ? ` · tu mejor hoy: ${i.mejor}` : ""}`;
+      e.innerHTML = `Cuenta para la liga · <b>intento ${intento} de 3</b>${i.mejor != null ? ` · tu mejor: ${i.mejor}` : ""}`;
       e.classList.add("oficial");
       b.hidden = true;
       if (!empezando && !empezarAlCargar) $("jugar").textContent = "Jugar";
@@ -283,7 +283,7 @@ export function crearMarco(juego) {
         if (res?.estado === "valida") {
           fl.classList.add("oficial");
           const pos = [res.posicionDia && `vas <b>${ORD(res.posicionDia)}</b> hoy`, res.posicionSemana && `<b>${ORD(res.posicionSemana)}</b> en la semana`].filter(Boolean).join(" y ");
-          fl.innerHTML = `Guardado en la liga${pos ? `: ${pos}` : ""}.${res.quedan ? ` Te ${res.quedan === 1 ? "queda 1 intento" : `quedan ${res.quedan} intentos`}.` : " Ya no te quedan intentos hoy."}`;
+          fl.innerHTML = `Guardado en la liga${pos ? `: ${pos}` : ""}.${res.quedan ? ` Te ${res.quedan === 1 ? "queda 1 intento" : `quedan ${res.quedan} intentos`}.` : " Ya no te quedan intentos: a las 12:00 salen juegos nuevos."}`;
         } else if (res?.estado === "rechazada") fl.textContent = res.motivo;
         else fl.textContent = `${res?.error || "No se pudo guardar."} Lo volveremos a intentar al abrir la liga.`;
         prepararLiga();

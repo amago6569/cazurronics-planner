@@ -35,6 +35,7 @@ export default function Privacidad() {
           <li><strong>Google</strong> (Gemini, Maps y Hojas de cálculo): crear el plan con IA, fotos y datos de los sitios, y guardar las solicitudes de negocios.</li>
           <li><strong>OpenStreetMap</strong>: el mapa donde eliges la zona.</li>
           <li><strong>Supabase</strong> (servidores en Fráncfort, Alemania): cuentas y partidas de la Liga Cazurra.</li>
+          <li><strong>Strato</strong> (Alemania): el correo de Cazurronics, desde el que salen los códigos para entrar en la Liga y los avisos a los ganadores.</li>
         </ul>
         <p>Algunos de estos servicios pueden tratar datos fuera de la Unión Europea, siempre con las garantías que exige el RGPD (cláusulas contractuales tipo o el Marco de Privacidad de Datos UE-EE. UU.).</p>
       </Apartado>

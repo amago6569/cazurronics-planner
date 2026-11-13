@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060a">
+<meta name="robots" content="noindex">
+<title>Comprobar premio | Liga Cazurra</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/inicio/vendor/archivo.css">
+<style>
+/* Para los negocios: meten el código que les enseña el ganador y ven si es bueno y qué premio le toca. */
+:root { --noche: #07060a; --crema: #f3ead8; --gris: #a39c90; --oro: #e9b44c; --vidrio: rgba(243,234,216,.08); --borde: rgba(243,234,216,.16);
+  --letra: "Archivo", "Helvetica Neue", Arial, sans-serif; color-scheme: dark; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100dvh; background: var(--noche); color: var(--crema); font-family: var(--letra); -webkit-font-smoothing: antialiased; }
+main { max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top, 0px)) 16px 40px; }
+.volver { display: inline-block; margin-bottom: 28px; color: var(--crema); font-weight: 800; text-decoration: none; }
+.etiqueta { margin: 0 0 8px; font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--oro); }
+h1 { margin: 0 0 12px; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: clamp(52px, 16vw, 80px); line-height: .85; }
+p { line-height: 1.45; color: #ddd5c6; }
+form { display: grid; gap: 10px; margin-top: 22px; }
+input { height: 56px; border-radius: 16px; border: 1px solid var(--borde); background: var(--vidrio); color: var(--crema); font: 800 22px/1 ui-monospace, Menlo, monospace; letter-spacing: .08em; text-align: center; text-transform: uppercase; padding: 0 12px; }
+button { height: 52px; border: 0; border-radius: 999px; background: var(--crema); color: var(--noche); font: 800 17px var(--letra); cursor: pointer; transition: transform 160ms cubic-bezier(.23,1,.32,1); }
+button:active { transform: scale(.98); }
+.resultado { margin-top: 22px; padding: 18px; border-radius: 22px; border: 1px solid var(--borde); background: var(--vidrio); }
+.resultado.bueno { border-color: rgba(120,200,120,.6); background: rgba(120,200,120,.1); }
+.resultado.malo { border-color: rgba(255,140,120,.6); background: rgba(255,140,120,.08); }
+.resultado h2 { margin: 0 0 8px; font-size: 22px; }
+.resultado p { margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <a class="volver" href="/liga/">← Liga Cazurra</a>
+  <p class="etiqueta">Para los negocios</p>
+  <h1>Comprobar premio</h1>
+  <p>Escribe el código que te enseña el ganador. Si es bueno, verás su puesto y qué premio le toca.</p>
+  <form id="f">
+    <input id="c" name="c" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CZ-1ABCD-EFGH" aria-label="Código del premio" maxlength="20" required>
+    <button type="submit">Comprobar</button>
+  </form>
+  <div class="resultado" id="r" hidden aria-live="polite"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const fecha = (d) => { const [, m, dd] = d.split("-").map(Number); return `${dd} de ${MESES[m - 1]}`; };
+async function comprobar(codigo) {
+  const r = $("r");
+  r.hidden = false; r.className = "resultado"; r.textContent = "Comprobando…";
+  try {
+    const res = await fetch(`/api/liga/premio?c=${encodeURIComponent(codigo)}`);
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || "No se ha podido comprobar. Prueba otra vez.");
+    if (!j.valido) { r.className = "resultado malo"; r.innerHTML = `<h2>❌ Código no válido</h2><p>Revisa que esté bien escrito. Si no cuadra, no des el premio y escríbenos a @cazurronics.</p>`; return; }
+    r.className = "resultado bueno";
+    r.innerHTML = `<h2>✅ Código bueno: ${j.puesto}.º puesto</h2>
+      <p>Ganador: <b>${esc(j.apodo)}</b>, semana del ${fecha(j.desde)} al ${fecha(j.cierre)}.</p>
+      <p>Premio: ${esc(j.premio.texto)}</p>
+      <p style="color:var(--gris);font-size:14px">Negocios: ${esc(j.premio.negocios.join(", "))}.</p>`;
+  } catch (e) { r.className = "resultado malo"; r.textContent = e.message; }
+}
+$("f").addEventListener("submit", (e) => { e.preventDefault(); comprobar($("c").value); });
+const pre = new URLSearchParams(location.search).get("c");
+if (pre) { $("c").value = pre; comprobar(pre); }
+</script>
+</body>
+</html>
