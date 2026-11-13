@@ -4,7 +4,7 @@
 // Para una semana nueva: añade otra entrada con la fecha del sábado en que empieza.
 
 export const PREMIOS = {
-  // Orden del 13-11-2026 (tarde): entra el gimnasio DLION y ESGAYA se queda para la semana siguiente.
+  // Orden del 13-11-2026 (tarde, aprobado por Alejandro): 10 negocios en 5 packs de 2. Entran DLION y ESGAYA.
   "2026-11-14": [
     {
       puesto: 1, titulo: "Belleza y bienestar",
@@ -23,10 +23,11 @@ export const PREMIOS = {
       ],
     },
     {
-      puesto: 3, titulo: "Ponte en forma",
-      texto: "Valoración y primera sesión de entrenamiento gratis en DLION Personal Training Studio.",
+      puesto: 3, titulo: "Ponte en forma con estilo",
+      texto: "Valoración y primera sesión de entrenamiento gratis en DLION y un 50 % de descuento en una prenda de ESGAYA.",
       negocios: [
         { nombre: "DLION Personal Training Studio", logo: "/liga/premios/dlion.jpg", instagram: "dlion.entrenamientopersonal" },
+        { nombre: "ESGAYA", logo: "/liga/premios/esgaya.jpg", instagram: "esgaya.brand" },
       ],
     },
     {
