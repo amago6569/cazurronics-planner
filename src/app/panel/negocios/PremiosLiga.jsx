@@ -155,6 +155,24 @@ function Ficha({ p, alEditar, alQuitar }) {
   );
 }
 
+// Manda a Alejandro (al buzón de la Liga) el correo que recibe un ganador, con un código de prueba.
+function PruebaCorreo({ clave }) {
+  const [estado, setEstado] = useState({ cargando: false, texto: "", bien: false });
+  const probar = async () => {
+    setEstado({ cargando: true, texto: "", bien: false });
+    const d = await pedir("/api/liga/cierre", clave, { prueba: true });
+    setEstado({ cargando: false, texto: d.mensaje || (d.exito ? "Enviado." : "No se pudo mandar."), bien: !!d.exito });
+  };
+  return (
+    <div className="flex flex-col items-start gap-1.5 mb-3">
+      <button className="pn-boton flojo" style={{ minHeight: 38, fontSize: 13 }} onClick={probar} disabled={estado.cargando}>
+        {estado.cargando ? "Enviando…" : "Probar correo de ganador"}
+      </button>
+      {estado.texto && <p className="text-sm" style={{ color: estado.bien ? "var(--bien)" : "var(--mal)" }} role="status">{estado.texto}</p>}
+    </div>
+  );
+}
+
 export default function PremiosLiga({ clave }) {
   const [premios, setPremios] = useState(null);
   const [abierto, setAbierto] = useState(null); // null cerrado · {} nuevo · premio para editar
@@ -192,6 +210,7 @@ export default function PremiosLiga({ clave }) {
         </div>
         <button className="pn-boton" style={{ background: "var(--oro)" }} onClick={() => setAbierto({})}>+ Añadir negocio</button>
       </div>
+      <PruebaCorreo clave={clave} />
       {aviso && <p className="text-sm mb-2" style={{ color: "var(--mal)" }} role="alert">{aviso}</p>}
       {premios && !lista.length && (
         <div className="pn-bloque text-center flex flex-col items-center gap-1" style={{ borderStyle: "dashed", padding: 28 }}>
