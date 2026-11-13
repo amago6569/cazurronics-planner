@@ -117,5 +117,8 @@ describe("el correo", () => {
     expect(c.texto).toMatch(/Floristería La Cala/);
     expect(c.html).not.toMatch(/<b>Pepe<\/b>/);
     expect(c.html).toMatch(/CZ-2ABCD-EFGH/);
+    expect(c.texto).toMatch(/@floristerialacala/);
+    expect(c.html).toMatch(/instagram\.com\/floristerialacala/);
+    expect(c.texto).toMatch(/Liga Cazurra de Cazurronics\. Mi código de ganador es CZ-2ABCD-EFGH/);
   });
 });
