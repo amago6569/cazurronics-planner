@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dentroDelLimite } from "../../../../lib/freno";
 import { cierreSemana, finSemana, inicioSemana, jornadaDe, juegosDelDia, ligaAbierta, momentoJornada, sumarDias } from "../../../../lib/liga/calendario";
 import { comprobarCodigo } from "../../../../lib/liga/ganadores";
+import { cierreAlVisitar } from "../../../../lib/liga/cierre";
 import { limpiarCodigoPremio, premiosDeSemana } from "../../../../lib/liga/premios";
 import { JUEGOS, enLigaEl, comprobarPartida, semillaServidor } from "../../../../lib/liga/juegos";
 import { comprobarApodo, limpiarCodigo, limpiarCorreo, SIN_PUEBLO } from "../../../../lib/liga/perfil";
@@ -87,6 +88,7 @@ const ACCIONES = {
   },
 
   async hoy(request, s) {
+    cierreAlVisitar(s); // si la semana acaba de cerrar, los correos de los ganadores salen ya (en segundo plano)
     const u = await quien(request, s, false);
     const dia = jornadaDe();
     const juegos = juegosDeHoy(dia);
