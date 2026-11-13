@@ -6,7 +6,6 @@
 //   LIGA_SMTP_HOST      (opcional) smtp.strato.de
 //   LIGA_SMTP_PUERTO    (opcional) 465
 // Cada correo va con copia oculta a esa misma dirección, para que Alejandro tenga todos en su buzón.
-import { DOMINIO_LIGA } from "./textos";
 
 const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -16,7 +15,6 @@ export function correoConfigurado(env = process.env) { return Boolean(env.LIGA_S
 
 // El correo de un ganador: { asunto, texto, html }
 export function correoGanador({ apodo, puesto, codigo, premio }, { desde, cierre }) {
-  const enlace = `${DOMINIO_LIGA}/liga/premio.html?c=${encodeURIComponent(codigo)}`;
   const negocios = premio.negocios.map((n) => n.nombre).join(" y ");
   const ig = (n) => (n.instagram ? `https://instagram.com/${n.instagram}` : "");
   const mensaje = `Hola, soy ${apodo} y he quedado ${puesto}.º en la Liga Cazurra de Cazurronics. Mi código de ganador es ${codigo}.`;
@@ -38,8 +36,6 @@ export function correoGanador({ apodo, puesto, codigo, premio }, { desde, cierre
     "3. Ellos comprueban el código y te dicen cómo recoger tu premio.",
     "",
     "¿Algún problema? Contesta a este correo.",
-    "",
-    `Cualquiera puede comprobar el código aquí: ${enlace}`,
     "",
     "Gracias por jugar. Nos vemos en la próxima liga.",
     "Cazurronics",
@@ -63,7 +59,6 @@ export function correoGanador({ apodo, puesto, codigo, premio }, { desde, cierre
     <li>Ellos comprueban el código y te dicen cómo recoger tu premio.</li>
   </ol>
   <p style="margin:12px 0 0">¿Algún problema? Contesta a este correo.</p>
-  <p style="margin:18px 0 0;font-size:14px;color:#5b554c">Cualquiera puede comprobar el código aquí: <a href="${esc(enlace)}">${esc(enlace.replace(/^https?:\/\//, ""))}</a></p>
   <p style="margin:24px 0 0">Gracias por jugar. Nos vemos en la próxima liga.<br>Cazurronics</p>
 </div>`;
   return { asunto, texto, html };
