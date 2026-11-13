@@ -47,8 +47,9 @@ for (const { id, motor, clave, jugar, partidas } of CASOS) {
       expect(r.puntos).toBe(0);
     });
 
-    it("está en la liga, con su página y su versión", () => {
-      expect(EN_LIGA).toContain(id);
+    it("está en la liga (salvo los Bolos, ocultos hasta nuevo aviso), con su página y su versión", () => {
+      if (id === "bolos") expect(EN_LIGA).not.toContain(id);
+      else expect(EN_LIGA).toContain(id);
       expect(JUEGOS[id].version).toBe(motor.VERSION);
     });
   });

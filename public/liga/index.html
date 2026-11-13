@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#07060a">
 <meta name="robots" content="noindex">
 <title>Liga Cazurra | Cazurronics</title>
-<meta name="description" content="Minijuegos de León con ranking semanal. Cada día, dos juegos y tres intentos.">
+<meta name="description" content="Minijuegos de León con ranking semanal y premios de negocios de León. Cada día a las 12:00, dos juegos nuevos con tres intentos.">
 <link rel="icon" href="/favicon.ico">
 <link rel="preload" href="/inicio/vendor/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/inicio/vendor/archivo.css">
@@ -87,6 +87,19 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
 .tabla li.yo .quien b::after { content: " · tú"; color: var(--oro); font-weight: 700; }
 .tabla li.salto { padding: 4px 16px; color: var(--gris); text-align: center; display: block; font-size: 18px; letter-spacing: .3em; }
 .vacio { padding: 22px 16px; color: #cfc6b6; font-size: 15px; text-align: center; display: block !important; }
+/* Premios: cinco filas, la primera con borde de oro */
+.premios { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.premio { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 16px; border-radius: 22px; background: var(--vidrio); border: 1px solid var(--borde); }
+.premio.oro { border-color: rgba(233,180,76,.7); background: linear-gradient(160deg, rgba(233,180,76,.18), rgba(233,180,76,.04) 60%); }
+.premio .num { grid-row: span 3; font-weight: 900; font-stretch: 62%; font-size: 48px; line-height: .8; color: var(--gris); font-variant-numeric: tabular-nums; }
+.premio.oro .num, .premio:nth-child(-n+3) .num { color: var(--oro); }
+.premio .num small { font-size: 22px; }
+.premio h3 { margin: 0; font-weight: 900; font-stretch: 62%; text-transform: uppercase; font-size: 24px; line-height: .95; }
+.premio p { margin: 0; font-size: 15px; line-height: 1.4; color: #e4dccd; }
+.logos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.logos img { height: 48px; width: 84px; object-fit: contain; padding: 4px 6px; border-radius: 10px; background: #fff; }
+.nota-premios { margin: -4px 0 12px; font-size: 14px; color: #cfc6b6; line-height: 1.4; }
+.cuenta-atras { display: inline-block; margin-top: 10px; padding: 6px 12px; border-radius: 999px; background: var(--vidrio); border: 1px solid var(--borde); font-size: 14px; font-weight: 700; color: var(--crema); font-variant-numeric: tabular-nums; }
 .pie { margin: 34px 0 0; font-size: 14px; line-height: 1.5; color: var(--gris); }
 .pie a { color: #d7cfbf; }
 .cargando { opacity: .5; }
@@ -112,11 +125,12 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
   <header class="cabecera">
     <p class="etiqueta">Minijuegos de León</p>
     <h1>Liga<br>Cazurra</h1>
-    <p class="semana" id="semana">Cada día, dos juegos y tres intentos en cada uno. Cuenta tu mejor intento.</p>
+    <p class="semana" id="semana">Cada día a las 12:00, dos juegos nuevos con tres intentos en cada uno. Cuenta tu mejor intento.</p>
+    <span class="cuenta-atras" id="cambio" hidden></span>
   </header>
 
   <section aria-labelledby="t-hoy">
-    <h2 id="t-hoy">Hoy se juega</h2>
+    <h2 id="t-hoy">Ahora se juega</h2>
     <div class="juegos" id="juegos" aria-busy="true"></div>
     <div class="aviso-cuenta" id="aviso-cuenta" hidden>
       <span>Sin cuenta puedes jugar de práctica. Entra con tu correo para salir en el ranking.</span>
@@ -124,22 +138,28 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
     </div>
   </section>
 
+  <section aria-labelledby="t-premios" id="sec-premios" hidden>
+    <h2 id="t-premios">Premios</h2>
+    <p class="nota-premios" id="nota-premios"></p>
+    <ol class="premios" id="premios"></ol>
+  </section>
+
   <section aria-labelledby="t-todos">
     <h2 id="t-todos">Todos los juegos</h2>
-    <p class="nota-todos">Para practicar cuando quieras. Para la liga cuentan los de hoy.</p>
+    <p class="nota-todos">Para practicar cuando quieras. Para la liga solo cuentan los de arriba.</p>
     <div class="todos" id="todos"></div>
   </section>
 
   <section aria-labelledby="t-ranking">
     <h2 id="t-ranking">Ranking</h2>
     <div class="pestanas" role="tablist" aria-label="Qué ranking ver">
-      <button role="tab" id="p-dia" aria-selected="true" aria-controls="tabla">Hoy</button>
+      <button role="tab" id="p-dia" aria-selected="true" aria-controls="tabla">Jornada</button>
       <button role="tab" id="p-semana" aria-selected="false" aria-controls="tabla">Semana</button>
     </div>
     <ol class="tabla" id="tabla" role="tabpanel" aria-live="polite"></ol>
   </section>
 
-  <p class="pie">La semana va de lunes a domingo y se cierra el domingo a las 22:00. Suma tu mejor marca de cada juego de cada día: quien juega todos los días tiene ventaja.<br>
+  <p class="pie">Cada día a las 12:00 salen dos juegos nuevos. La semana va de sábado a las 12:00 al sábado siguiente a las 12:00 y suma tu mejor marca de cada juego: quien juega todos los días tiene ventaja. Al cerrar, los 5 primeros reciben por correo su premio y un código para canjearlo.<br>
     <a href="/liga/bases.html">Bases de la liga</a> · <a href="/privacidad">Privacidad</a></p>
 </main>
 
@@ -167,8 +187,10 @@ function pintarJuegos() {
   caja.setAttribute("aria-busy", "false");
   if (!datos) { caja.innerHTML = `<p class="aviso-cuenta">No se ha podido cargar la liga. Revisa la conexión y recarga.</p>`; return; }
   const s = datos.semana;
-  const mismoMes = s.desde.slice(5, 7) === s.hasta.slice(5, 7);
-  $("semana").innerHTML = `Semana del <b>${mismoMes ? Number(s.desde.slice(8)) : fecha(s.desde)}</b> al <b>${fecha(s.hasta)}</b>. ${datos.abierta ? "Cierra el domingo a las 22:00." : "<b>La semana ya está cerrada.</b> El lunes empieza otra."}`;
+  const mismoMes = s.desde.slice(5, 7) === s.cierre.slice(5, 7);
+  $("semana").innerHTML = `Semana del sábado <b>${mismoMes ? Number(s.desde.slice(8)) : fecha(s.desde)}</b> al sábado <b>${fecha(s.cierre)}</b>, a las 12:00. Cada día a las 12:00 salen dos juegos nuevos.`;
+  cuentaAtras();
+  pintarPremios();
   caja.innerHTML = datos.juegos.map((j) => {
     const con = Boolean(datos.perfil);
     const puntos = con ? `<span class="puntitos" aria-hidden="true">${[0, 1, 2].map((i) => `<i class="${i < j.usados ? "gastado" : ""}"></i>`).join("")}</span>
@@ -193,14 +215,44 @@ const TODOS = [
   ["rebano", "Trashumancia", "Pastoreo", "/liga/fondos/riano-v.webp"],
   ["trucha", "La trucha", "Pesca", "/liga/fondos/valle-v.webp"],
   ["justa", "La Justa del Paso Honroso", "Puntería", "/liga/fondos/vega-v.webp"],
-  ["bolos", "Bolos leoneses", "Efecto", "/liga/fondos/valle-v.webp"],
   ["lucha", "Lucha leonesa", "Reflejos", "/liga/fondos/montes-v.webp"],
   ["maragatos", "Los maragatos del reloj", "Ritmo", "/liga/fondos/tarde-v.webp"],
 ];
 const ESTRENO = {};
+// Los Bolos leoneses están ocultos hasta nuevo aviso (regla de Alejandro, 13-11-2026). Su página sigue en /liga/bolos.html.
 const hoyMadrid = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const VISIBLES = TODOS.filter(([id]) => !ESTRENO[id] || hoyMadrid >= ESTRENO[id] || new URLSearchParams(location.search).has("todos"));
 $("todos").innerHTML = VISIBLES.map(([id, nombre, hab, foto]) => `<a class="mini" href="/liga/${id}.html"><img src="${foto.replace(/\.webp$/, "-mini.webp")}" alt="" loading="lazy" decoding="async"><span class="hab">${hab}</span><b>${nombre}</b></a>`).join("");
+
+// Cuánto falta para que cambien los juegos (a las 12:00)
+let reloj = null;
+function cuentaAtras() {
+  const el = $("cambio");
+  clearInterval(reloj);
+  if (!datos?.cambio) { el.hidden = true; return; }
+  const pinta = () => {
+    const ms = Date.parse(datos.cambio) - Date.now();
+    if (ms <= 0) { clearInterval(reloj); el.textContent = "Juegos nuevos: recarga"; setTimeout(cargar, 3000); return; }
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    el.textContent = `Juegos nuevos en ${h ? `${h} h ` : ""}${m} min`;
+  };
+  el.hidden = false; pinta(); reloj = setInterval(pinta, 30000);
+}
+
+function pintarPremios() {
+  const lista = datos?.premios;
+  $("sec-premios").hidden = !lista?.length;
+  if (!lista?.length) return;
+  const esta = datos.premiosDesde === datos.semana.desde;
+  $("t-premios").textContent = esta ? "Premios de la semana" : "Premios de la primera liga";
+  $("nota-premios").innerHTML = `${esta ? "Para" : "Desde el sábado <b>" + Number(datos.premiosDesde.slice(8)) + "</b> a las 12:00 y hasta el sábado <b>" + fecha(datos.premiosCierre) + "</b>. Para"} los 5 primeros del ranking de la semana. Los ponen negocios de León.`;
+  $("premios").innerHTML = lista.map((p) => `<li class="premio${p.puesto === 1 ? " oro" : ""}">
+    <span class="num" aria-label="Puesto ${p.puesto}">${p.puesto}<small>.º</small></span>
+    <h3>${esc(p.titulo)}</h3>
+    <p>${esc(p.texto)}</p>
+    <div class="logos">${p.negocios.map((n) => `<img src="${esc(n.logo)}" alt="${esc(n.nombre)}" loading="lazy" decoding="async">`).join("")}</div>
+  </li>`).join("");
+}
 
 async function cargar() {
   try { datos = await hoy(); } catch { datos = null; }
@@ -214,7 +266,7 @@ async function cargarRanking() {
   try {
     const r = await ranking(de);
     const filas = r.filas;
-    if (!filas.length) { t.innerHTML = `<li class="vacio">${de === "dia" ? "Hoy aún no ha puntuado nadie. Estrena el ranking." : "Esta semana aún no ha puntuado nadie."}</li>`; }
+    if (!filas.length) { t.innerHTML = `<li class="vacio">${de === "dia" ? "En estos juegos aún no ha puntuado nadie. Estrena el ranking." : "Esta semana aún no ha puntuado nadie."}</li>`; }
     else {
       let html = "", anterior = 0;
       for (const f of filas) {

@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { GET, POST } from "../../src/app/api/liga/[accion]/route.js";
 import { servicio } from "../../src/lib/liga/servicio.js";
 import { comprobarApodo, comprobarPueblo, limpiarCorreo } from "../../src/lib/liga/perfil.js";
-import { juegosDelDia, ligaAbierta, lunesDe, domingoDe, enMadrid } from "../../src/lib/liga/calendario.js";
+import { juegosDelDia, inicioSemana, finSemana, cierreSemana, enMadrid, jornadaDe, momentoJornada } from "../../src/lib/liga/calendario.js";
 import { jugarPartida } from "./bots.js";
 
 // Estas pruebas juegan a la canasta: que toque todos los días, salga lo que salga en la rotación de verdad
@@ -148,8 +148,10 @@ describe("partidas", () => {
     const cuarto = await pedir("POST", "empezar", { token: t, cuerpo: { juego: "canasta" } });
     expect(cuarto.status).toBe(409);
     expect(cuarto.json.codigo).toBe("sin_intentos");
-    // al día siguiente vuelve a tener 3
-    const t2 = await despuesDe(new Date("2026-11-11T09:00:00Z"), "h@x.es");
+    // antes de las 12:00 del día siguiente sigue sin intentos; a partir de las 12:00 vuelve a tener 3
+    const t1 = await despuesDe(new Date("2026-11-11T10:30:00Z"), "h@x.es"); // miércoles 11:30 en Madrid
+    expect((await pedir("POST", "empezar", { token: t1, cuerpo: { juego: "canasta" } })).json.codigo).toBe("sin_intentos");
+    const t2 = await despuesDe(new Date("2026-11-11T11:00:00Z"), "h@x.es"); // miércoles 12:00
     expect((await pedir("POST", "empezar", { token: t, cuerpo: { juego: "canasta" } })).status).toBe(401); // la vieja caducó
     const hoy = await pedir("GET", "hoy", { token: t2 });
     expect(hoy.json.juegos.find((j) => j.id === "canasta").quedan).toBe(3);
@@ -193,7 +195,7 @@ describe("partidas", () => {
     const b = await jugadorConPerfil("m@x.es", "Manu");
     const a1 = await jugar(a, "bueno", 1), a2 = await jugar(a, "experto", 2);
     const b1 = await jugar(b, "normal", 3);
-    const a3 = await jugar(await despuesDe(new Date("2026-11-11T09:00:00Z"), "l@x.es"), "novato", 4); // miércoles
+    const a3 = await jugar(await despuesDe(new Date("2026-11-11T11:30:00Z"), "l@x.es"), "novato", 4); // miércoles 12:30
     const dia = await pedir("GET", "ranking", { query: "?de=dia" });
     expect(dia.json.filas).toHaveLength(1);
     expect(dia.json.filas[0].puntos).toBe(a3.json.puntos);
@@ -208,12 +210,30 @@ describe("partidas", () => {
     expect(mia.json.filas.find((f) => f.yo).apodo).toBe("Manu");
   });
 
-  it("el domingo a partir de las 22:00 la semana está cerrada", async () => {
-    vi.setSystemTime(new Date("2026-11-15T21:30:00Z")); // domingo 22:30 en Madrid
+  it("el sábado a las 12:00 cierra la semana y empieza otra sin hueco", async () => {
+    vi.setSystemTime(new Date("2026-11-21T10:50:00Z")); // sábado 11:50 en Madrid: aún es la semana del 14
     const t = await jugadorConPerfil("n@x.es", "Nico");
-    const r = await pedir("POST", "empezar", { token: t, cuerpo: { juego: "canasta" } });
-    expect(r.status).toBe(409);
-    expect(r.json.codigo).toBe("cerrada");
+    await jugar(t);
+    let semana = await pedir("GET", "ranking", { query: "?de=semana" });
+    expect(semana.json.desde).toBe("2026-11-14");
+    expect(semana.json.filas).toHaveLength(1);
+    const t2 = await despuesDe(new Date("2026-11-21T11:00:00Z"), "n@x.es"); // 12:00: semana nueva
+    const hoy = await pedir("GET", "hoy", { token: t2 });
+    expect(hoy.json.semana).toMatchObject({ desde: "2026-11-21", hasta: "2026-11-27", cierre: "2026-11-28" });
+    expect(hoy.json.juegos.find((j) => j.id === "canasta").quedan).toBe(3);
+    semana = await pedir("GET", "ranking", { query: "?de=semana" });
+    expect(semana.json.filas).toHaveLength(0);
+  });
+
+  it("enseña los premios de la semana del 14 ya antes de empezar", async () => {
+    vi.setSystemTime(new Date("2026-11-13T16:00:00Z")); // viernes 17:00
+    const hoy = await pedir("GET", "hoy");
+    expect(hoy.json.premiosDesde).toBe("2026-11-14");
+    expect(hoy.json.premiosCierre).toBe("2026-11-21");
+    expect(hoy.json.premios.map((p) => p.puesto)).toEqual([1, 2, 3, 4, 5]);
+    expect(JSON.stringify(hoy.json.premios)).not.toMatch(/€|euro/i);
+    vi.setSystemTime(new Date("2026-12-05T12:00:00Z")); // una semana sin premios: no sale nada
+    expect((await pedir("GET", "hoy")).json.premios).toBeNull();
   });
 
   it("un bloqueado no juega ni sale en el ranking", async () => {
@@ -246,15 +266,32 @@ describe("piezas sueltas", () => {
   });
   it("calendario de Madrid, cierre y juegos que rotan", () => {
     expect(enMadrid(new Date("2026-11-09T23:30:00Z")).dia).toBe("2026-11-10"); // 00:30 del martes aquí
-    expect(lunesDe("2026-11-15")).toBe("2026-11-09");
-    expect(domingoDe("2026-11-09")).toBe("2026-11-15");
-    expect(ligaAbierta(new Date("2026-11-15T20:59:00Z"))).toBe(true); // domingo 21:59
-    expect(ligaAbierta(new Date("2026-11-15T21:00:00Z"))).toBe(false); // domingo 22:00
-    expect(ligaAbierta(new Date("2026-11-15T23:00:00Z"))).toBe(true); // lunes 00:00
-    const siete = ["a", "b", "c", "d", "e", "f", "g"];
-    const veces = {};
-    for (let i = 0; i < 7; i++) for (const j of juegosDelDia(`2026-11-${String(9 + i).padStart(2, "0")}`, siete)) veces[j] = (veces[j] || 0) + 1;
-    expect(Object.values(veces)).toEqual([2, 2, 2, 2, 2, 2, 2]);
+    // la jornada cambia a las 12:00 de Madrid
+    expect(jornadaDe(new Date("2026-11-14T10:59:00Z"))).toBe("2026-11-13"); // sábado 11:59
+    expect(jornadaDe(new Date("2026-11-14T11:00:00Z"))).toBe("2026-11-14"); // sábado 12:00
+    expect(jornadaDe(new Date("2026-11-15T10:59:00Z"))).toBe("2026-11-14"); // domingo 11:59
+    expect(jornadaDe(new Date("2027-07-03T10:30:00Z"))).toBe("2027-07-03"); // en verano, 12:30
+    // la semana: de sábado a viernes (jornadas) y cierra el sábado siguiente a las 12:00
+    for (const d of ["2026-11-14", "2026-11-17", "2026-11-20"]) {
+      expect(inicioSemana(d)).toBe("2026-11-14");
+      expect(finSemana(d)).toBe("2026-11-20");
+      expect(cierreSemana(d)).toBe("2026-11-21");
+    }
+    expect(inicioSemana("2026-11-21")).toBe("2026-11-21");
+    expect(momentoJornada("2026-11-21")).toBe("2026-11-21T11:00:00.000Z");
+    expect(momentoJornada("2027-07-03")).toBe("2027-07-03T10:00:00.000Z");
+    // con 12 juegos, en las 6 primeras jornadas salen todos y nunca el mismo dos jornadas seguidas
+    const doce = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
+    const vistos = new Set();
+    let antes = [];
+    for (let i = 0; i < 7; i++) {
+      const hoy = juegosDelDia(`2026-11-${String(14 + i).padStart(2, "0")}`, doce);
+      expect(hoy).toHaveLength(2);
+      expect(hoy.some((j) => antes.includes(j))).toBe(false);
+      if (i < 6) hoy.forEach((j) => vistos.add(j));
+      antes = hoy;
+    }
+    expect(vistos.size).toBe(12);
     expect(juegosDelDia("2026-11-09", ["solo"])).toEqual(["solo"]);
   });
 });
