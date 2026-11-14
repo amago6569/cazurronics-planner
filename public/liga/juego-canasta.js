@@ -5,7 +5,7 @@ import {
   crearPartida, lanzar, resumen, xAro, proyectar, motivoInvalido, nivelDe,
   DURACION_MS, LIMITES, SALIDA, R_BALON, R_ARO, ALTURA_ARO, ARO_TABLERO, TABLERO, PASO,
 } from "./motor-canasta.js";
-import { crearLiga, abrirEntrada, alCambiar, resultadoLiga } from "./cuenta.js";
+import { crearLiga, abrirEntrada, alCambiar, resultadoLiga, conectado, cartelPractica } from "./cuenta.js";
 
 const $ = (id) => document.getElementById(id);
 const lienzo = $("lienzo");
@@ -614,7 +614,7 @@ const TEXTO_LIGA = {
   cerrada: "La semana está cerrada: hasta el lunes, de práctica.",
   no_toca: "Hoy este juego no puntúa en la liga: es de práctica.",
   sin_intentos: "Ya has hecho tus 3 intentos de hoy. Sigue de práctica.",
-  error: "Sin conexión con la liga: jugarás de práctica.",
+  error: "Sin conexión con la liga. Pulsa «Reintentar» para que tu partida cuente.",
 };
 function pintarLiga() {
   const i = liga.info, e = $("liga-estado"), b = $("liga-entrar");
@@ -631,8 +631,10 @@ function pintarLiga() {
     e.classList.remove("oficial");
     b.hidden = !(i.motivo === "sin_cuenta" || i.motivo === "sin_perfil");
     b.textContent = i.motivo === "sin_perfil" ? "Elegir mi apodo" : "Entrar para puntuar";
-    if (!empezando && !empezarAlCargar) $("jugar").textContent = "Jugar de práctica";
-    $("otra").textContent = "Otra de práctica";
+    // con cuenta pero sin conexión con la liga no se juega «de práctica» sin querer: primero se reintenta
+    const reintentar = i.motivo === "error" && conectado();
+    if (!empezando && !empezarAlCargar) $("jugar").textContent = reintentar ? "Reintentar" : "Jugar de práctica";
+    $("otra").textContent = reintentar ? "Reintentar" : "Otra de práctica";
   }
 }
 async function prepararLiga() { await liga.preparar(); pintarLiga(); }
@@ -647,6 +649,16 @@ async function empezar() {
   abrirAudio();
   if (modo === "cargando") { empezarAlCargar = true; $("jugar").textContent = "Cargando…"; return; }
   // partida de liga: primero el servidor (gasta el intento y da la semilla)
+  // Con cuenta, si la última vez falló la conexión con la liga, se pregunta otra vez antes de jugar.
+  // Antes la partida empezaba «de práctica» sin avisar: no gastaba intento (de ahí un «4.º intento») y sus puntos no se guardaban.
+  if (conectado() && (!liga.info || liga.info.motivo === "error")) {
+    empezando = true;
+    const boton = estado === "fin" ? $("otra") : $("jugar");
+    boton.textContent = "Conectando…"; boton.disabled = true;
+    await prepararLiga();
+    empezando = false; boton.disabled = false; pintarLiga();
+    if (liga.info?.motivo === "error") { $(estado === "fin" ? "fin-liga" : "liga-estado").textContent = "No hay conexión con la liga y esta partida no contaría. Revisa la cobertura y vuelve a pulsar."; return; }
+  }
   oficial = false;
   let semilla = null;
   if (liga.info?.oficial) {
@@ -666,6 +678,7 @@ async function empezar() {
   }
   $("jugar").textContent = "Jugar";
   partida = crearPartida(oficial ? semilla : semillaNueva());
+  cartelPractica(!oficial && conectado(), liga.info?.motivo === "sin_intentos" ? "De práctica · ya hiciste tus 3 intentos" : undefined);
   vuelos = []; tiros = []; aroAnterior = null; fallosSeguidos = 0; redSacudida = -1e9; avisoDiez = false;
   if (tiroPendiente) { clearTimeout(tiroPendiente); tiroPendiente = null; }
   $("inicio").hidden = true; $("fin").hidden = true; $("volver").hidden = true;
@@ -691,6 +704,7 @@ async function empezar() {
 function terminar() {
   estado = "fin";
   arrastre = null;
+  cartelPractica(false);
   sonar("pito");
   const r = resumen(partida);
   let mejor = 0;
