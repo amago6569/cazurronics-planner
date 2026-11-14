@@ -177,6 +177,7 @@ describe("partidas", () => {
     expect(buena.json.estado).toBe("valida");
     const otraVez = await pedir("POST", "terminar", { token: t, cuerpo: { partida: e3.json.partida, datos: { tiros: [] } } });
     expect(otraVez.status).toBe(409);
+    expect(otraVez.json.codigo).toBe("ya_guardada"); // el móvil sabe que llegó (no la da por perdida)
     // nada rechazado suma
     const rk = await pedir("GET", "ranking", { query: "?de=dia" });
     expect(rk.json.filas[0].puntos).toBe(buena.json.puntos);

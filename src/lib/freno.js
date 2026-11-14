@@ -12,8 +12,10 @@ export function ipDe(request) {
 
 // true = puede seguir · false = se ha pasado de "max" peticiones en "segundos".
 // Si el almacén falla, nunca bloquea: es mejor un plan de más que dejar a alguien sin el suyo.
-export async function dentroDelLimite(request, nombre, max, segundos) {
-  const clave = `freno:${nombre}:${ipDe(request)}`;
+// «quien»: cuenta por persona (id de su cuenta) en vez de por conexión. Sirve donde hay sesión: en una wifi o con
+// datos móviles muchos comparten la misma IP y se frenarían entre ellos.
+export async function dentroDelLimite(request, nombre, max, segundos, quien = null) {
+  const clave = `freno:${nombre}:${quien ? `u:${quien}` : ipDe(request)}`;
   try {
     const [, cuenta] = await varios([["SET", clave, "0", "NX", "EX", segundos], ["INCRBY", clave, 1]]);
     return Number(cuenta) <= max;
