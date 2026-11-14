@@ -334,10 +334,12 @@ export function crearLiga(juego) {
       if (guardando) { try { await guardando; } catch { /* sigue apuntada */ } }
       if (pendientes().length) await mandarPendientes();
       partida = null;
-      if (!conLiga || !info?.oficial) return { oficial: false, semilla: null };
+      // Si la liga no respondió al abrir el juego, se prueba igual a empezar en ella: el servidor decide.
+      // Así una partida con cuenta nunca pasa a práctica por un fallo de conexión.
+      if (!conLiga || !(info?.oficial || (info?.motivo === "error" && conectado()))) return { oficial: false, semilla: null };
       const r = await empezar(juego); // si falla, lanza: el juego avisa y no empieza
       partida = r.partida;
-      info = { ...info, quedan: r.quedan, intento: r.intento };
+      info = { ...info, oficial: true, motivo: undefined, quedan: r.quedan, intento: r.intento };
       return { oficial: true, semilla: r.semilla, intento: r.intento, quedan: r.quedan };
     },
     terminar(datos) {

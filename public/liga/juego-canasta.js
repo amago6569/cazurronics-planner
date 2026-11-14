@@ -614,7 +614,7 @@ const TEXTO_LIGA = {
   cerrada: "La semana está cerrada: hasta el lunes, de práctica.",
   no_toca: "Hoy este juego no puntúa en la liga: es de práctica.",
   sin_intentos: "Ya has hecho tus 3 intentos de hoy. Sigue de práctica.",
-  error: "Sin conexión con la liga. Pulsa «Reintentar» para que tu partida cuente.",
+  error: "La liga tarda en responder. Al pulsar «Jugar» lo volvemos a intentar y tu partida contará.",
 };
 function pintarLiga() {
   const i = liga.info, e = $("liga-estado"), b = $("liga-entrar");
@@ -633,8 +633,8 @@ function pintarLiga() {
     b.textContent = i.motivo === "sin_perfil" ? "Elegir mi apodo" : "Entrar para puntuar";
     // con cuenta pero sin conexión con la liga no se juega «de práctica» sin querer: primero se reintenta
     const reintentar = i.motivo === "error" && conectado();
-    if (!empezando && !empezarAlCargar) $("jugar").textContent = reintentar ? "Reintentar" : "Jugar de práctica";
-    $("otra").textContent = reintentar ? "Reintentar" : "Otra de práctica";
+    if (!empezando && !empezarAlCargar) $("jugar").textContent = reintentar ? "Jugar" : "Jugar de práctica";
+    $("otra").textContent = reintentar ? "Otro intento" : "Otra de práctica";
   }
 }
 async function prepararLiga() { await liga.preparar(); pintarLiga(); }
@@ -657,11 +657,10 @@ async function empezar() {
     boton.textContent = "Conectando…"; boton.disabled = true;
     await prepararLiga();
     empezando = false; boton.disabled = false; pintarLiga();
-    if (liga.info?.motivo === "error") { $(estado === "fin" ? "fin-liga" : "liga-estado").textContent = "No hay conexión con la liga y esta partida no contaría. Revisa la cobertura y vuelve a pulsar."; return; }
   }
   oficial = false;
   let semilla = null;
-  if (liga.info?.oficial) {
+  if (liga.info?.oficial || (conectado() && liga.info?.motivo === "error")) { // sin respuesta de la liga se prueba igual a empezar en ella
     empezando = true;
     const boton = estado === "fin" ? $("otra") : $("jugar"), texto = boton.textContent;
     boton.textContent = "Preparando…"; boton.disabled = true;
