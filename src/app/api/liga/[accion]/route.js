@@ -134,7 +134,7 @@ const ACCIONES = {
     if (!ligaAbierta()) throw new ErrorLiga(409, "La liga está cerrada ahora mismo.", "cerrada");
     const dia = jornadaDe();
     if (!juegosDeHoy(dia).some((x) => x.id === j.id)) throw new ErrorLiga(409, "Este juego ya no puntúa: a las 12:00 cambiaron los juegos. Mira los de ahora en la liga.", "no_toca");
-    frenar(await dentroDelLimite(request, "liga-empezar", 30, 600));
+    frenar(await dentroDelLimite(request, "liga-empezar", 30, 600, u.id)); // por cuenta, no por IP (wifis y datos móviles la comparten)
     const semilla = semillaServidor();
     const r = await s.empezar(u.id, j.id, dia, semilla, j.version);
     if (r.error === "sin_perfil") throw new ErrorLiga(409, "Elige tu apodo antes de jugar.", "sin_perfil");
@@ -148,9 +148,11 @@ const ACCIONES = {
     const u = await quien(request, s);
     const { partida, datos } = await cuerpo(request);
     if (typeof partida !== "string" || !/^[0-9a-f-]{36}$/i.test(partida)) throw new ErrorLiga(400, "Partida desconocida.");
-    frenar(await dentroDelLimite(request, "liga-terminar", 30, 600));
+    frenar(await dentroDelLimite(request, "liga-terminar", 30, 600, u.id));
     const p = await s.partida(partida, u.id);
     if (!p) throw new ErrorLiga(404, "Partida desconocida.");
+    // ya llegó antes (un reintento tras cortarse la red): está guardada, el móvil no debe decir que se perdió
+    if (p.estado === "valida") throw new ErrorLiga(409, "Esta partida ya está guardada en la liga.", "ya_guardada");
     if (p.estado !== "jugando") throw new ErrorLiga(409, "Esta partida ya estaba cerrada.", "cerrada");
     const r = comprobarPartida({ juego: p.juego, version: p.version, semilla: p.semilla, empezada: p.empezada, ahora: p.ahora, datos });
     const guardado = await s.terminar(partida, u.id, r.estado, r.puntos, r.motivo, r.motivo === "demasiados datos" ? null : datos);
@@ -159,13 +161,16 @@ const ACCIONES = {
       console.warn("[liga] partida rechazada", partida, r.motivo);
       return responder({ estado: "rechazada", puntos: null, motivo: "Esta partida no ha contado: algo no cuadraba al repetirla. Si te pasa más veces, avísanos." });
     }
+    // Los puntos ya están guardados. Lo de abajo es solo para enseñarlo: si falla, no puede parecer que no se guardó
+    // (antes daba error y el reintento del móvil chocaba con «ya estaba cerrada»).
     const dia = String(p.dia).slice(0, 10);
-    const [mios, posDia, posSemana] = await Promise.all([
+    const [mios, posDia, posSemana] = (await Promise.allSettled([
       s.hoy(u.id, dia), posicionDe(s, dia, dia, u.id), posicionDe(s, inicioSemana(dia), finSemana(dia), u.id),
-    ]);
-    const m = mios.find((x) => x.juego === p.juego);
+    ])).map((x) => (x.status === "fulfilled" ? x.value : null));
+    const m = mios?.find((x) => x.juego === p.juego);
+    const mejor = m?.mejor != null ? Math.max(Number(m.mejor), r.puntos) : r.puntos;
     return responder({
-      estado: "valida", puntos: r.puntos, mejor: m?.mejor ?? r.puntos, quedan: Math.max(0, 3 - Number(m?.usados || 0)),
+      estado: "valida", puntos: r.puntos, mejor, quedan: m ? Math.max(0, 3 - Number(m.usados || 0)) : null,
       posicionDia: posDia, posicionSemana: posSemana,
     });
   },

@@ -272,21 +272,45 @@ export function abrirEntrada({ motivo = "", perfilActual = null, soloPerfil = fa
 //   await liga.preparar()  → { oficial: bool, texto, quedan, … } para pintar el botón
 //   const { semilla, oficial } = await liga.empezar()   (si no puede ser oficial, devuelve oficial:false y semilla null)
 //   const r = await liga.terminar(datos)                 → { estado, puntos, posicionDia, … } o null si era de práctica
-// Partidas que no se pudieron mandar (sin cobertura al acabar): se reintentan la próxima vez que se abre un juego.
+// Cada partida de liga se apunta en este navegador ANTES de mandarla y se borra cuando el servidor la tiene.
+// Así no se pierde si se corta la red, si cierras la página mientras se guarda o si el servidor tarda.
+// Se reintenta al volver la cobertura, al volver a la página, al abrir un juego y, sobre todo, antes de empezar
+// otro intento: empezar uno nuevo da por abandonado el que siga a medias en el servidor, y con él sus puntos.
 const PENDIENTES = "liga-pendientes";
-function pendientes() { try { return JSON.parse(localStorage.getItem(PENDIENTES) || "[]"); } catch { return []; } }
+function pendientes() { try { const l = JSON.parse(localStorage.getItem(PENDIENTES) || "[]"); return Array.isArray(l) ? l : []; } catch { return []; } }
 function guardarPendientes(l) { try { if (l.length) localStorage.setItem(PENDIENTES, JSON.stringify(l.slice(-5))); else localStorage.removeItem(PENDIENTES); } catch { /* nada */ } }
-async function mandarPendientes() {
-  const quedan = [];
-  for (const p of pendientes()) {
-    if (Date.now() - p.hora > 86400000) continue; // de hace más de un día: ya no cuenta
-    try { await terminar(p.partida, p.datos); } catch (e) { if (!e.status || e.status >= 500 || e.status === 429) quedan.push(p); }
+function apuntar(p) { guardarPendientes([...pendientes().filter((x) => x.partida !== p.partida), p]); }
+function tachar(partida) { guardarPendientes(pendientes().filter((x) => x.partida !== partida)); }
+// ¿Merece la pena volver a mandarla? Sin red, fallo del servidor o «vas muy rápido»: sí. Lo demás es definitivo.
+const reintentable = (e) => !e?.status || e.status >= 500 || e.status === 429;
+// El servidor ya la tenía (llegó la primera vez aunque la respuesta se perdiera)
+const yaGuardada = (e) => e?.status === 409 && e.codigo === "ya_guardada";
+
+const enVuelo = new Map(); // partida → promesa: la misma partida nunca se manda dos veces a la vez
+function mandarUna(p) {
+  if (!enVuelo.has(p.partida)) {
+    enVuelo.set(p.partida, terminar(p.partida, p.datos)
+      .then((r) => { tachar(p.partida); return r; },
+        (e) => { if (!reintentable(e)) tachar(p.partida); throw e; })
+      .finally(() => enVuelo.delete(p.partida)));
   }
-  guardarPendientes(quedan);
+  return enVuelo.get(p.partida);
 }
+let mandando = null;
+function mandarPendientes() {
+  mandando ||= (async () => {
+    for (const p of pendientes()) {
+      if (Date.now() - p.hora > 86400000) { tachar(p.partida); continue; } // de hace más de un día: ya no cuenta
+      try { await mandarUna(p); } catch { /* se queda apuntada si se puede reintentar */ }
+    }
+  })().finally(() => { mandando = null; });
+  return mandando;
+}
+addEventListener("online", () => { if (pendientes().length) mandarPendientes(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && pendientes().length) mandarPendientes(); });
 
 export function crearLiga(juego) {
-  let info = null, partida = null;
+  let info = null, partida = null, guardando = null;
   return {
     get info() { return info; },
     async preparar() {
@@ -305,6 +329,10 @@ export function crearLiga(juego) {
       return info;
     },
     async empezar(conLiga = true) {
+      // Antes de gastar otro intento, la partida anterior tiene que estar en el servidor: si no, al empezar
+      // esta se daría por abandonada y sus puntos se perderían (pasaba al pulsar «Otro intento» enseguida).
+      if (guardando) { try { await guardando; } catch { /* sigue apuntada */ } }
+      if (pendientes().length) await mandarPendientes();
       partida = null;
       if (!conLiga || !info?.oficial) return { oficial: false, semilla: null };
       const r = await empezar(juego); // si falla, lanza: el juego avisa y no empieza
@@ -312,18 +340,51 @@ export function crearLiga(juego) {
       info = { ...info, quedan: r.quedan, intento: r.intento };
       return { oficial: true, semilla: r.semilla, intento: r.intento, quedan: r.quedan };
     },
-    async terminar(datos) {
-      if (!partida) return null;
-      const p = partida;
+    terminar(datos) {
+      if (!partida) return Promise.resolve(null);
+      const p = { partida, datos, juego, hora: Date.now() };
       partida = null;
-      // si se corta la red, se reintenta un par de veces: la partida sigue «jugando» en el servidor hasta que llegue
-      let ultimo;
-      for (let i = 0; i < 3; i++) {
-        try { const r = await terminar(p, datos); info = { ...info, quedan: r.quedan, mejor: r.mejor }; return r; }
-        catch (e) { ultimo = e; if (e.status && e.status < 500 && e.status !== 429) break; await new Promise((ok) => setTimeout(ok, 1200 * (i + 1))); }
-      }
-      if (!ultimo?.status || ultimo.status >= 500 || ultimo.status === 429) guardarPendientes([...pendientes(), { partida: p, datos, juego, hora: Date.now() }]);
-      return { estado: "error", error: ultimo?.message || "No se pudo guardar la partida." };
+      apuntar(p); // primero se apunta: si cierras la página ahora, se manda la próxima vez
+      guardando = (async () => {
+        // si se corta la red, se reintenta unas veces: la partida sigue «jugando» en el servidor hasta que llegue
+        let ultimo;
+        for (let i = 0; i < 4; i++) {
+          try {
+            const r = await mandarUna(p);
+            const quedan = r.quedan ?? info?.quedan ?? 0;
+            info = quedan > 0 ? { ...info, quedan, mejor: r.mejor } : { oficial: false, motivo: "sin_intentos", mejor: r.mejor };
+            return r;
+          } catch (e) {
+            ultimo = e;
+            if (yaGuardada(e)) return { estado: "valida", puntos: null, mejor: null, quedan: null, yaGuardada: true };
+            if (!reintentable(e)) break;
+            await new Promise((ok) => setTimeout(ok, 1500 * (i + 1)));
+          }
+        }
+        if (reintentable(ultimo)) return { estado: "error", error: "No hay conexión con la liga ahora mismo. Tu partida está guardada en este móvil y se mandará sola en cuanto vuelva la conexión." };
+        return { estado: "error", error: ultimo?.message || "No se pudo guardar la partida." };
+      })();
+      const esta = guardando;
+      esta.finally(() => { if (guardando === esta) guardando = null; });
+      return esta;
     },
   };
+}
+
+// Lo que se enseña en la pantalla final cuando responde el servidor (igual en todos los juegos).
+// Devuelve { oficial, html, puntos, record }: «puntos» son los que ha contado el servidor (los que valen en el ranking)
+// y «record» la frase de tu mejor marca de hoy en la liga, que es la que cuenta (no la de práctica de este móvil).
+export function resultadoLiga(res) {
+  const ord = (n) => `${n}.º`;
+  if (res?.estado === "valida") {
+    const pos = [res.posicionDia && `vas <b>${ord(res.posicionDia)}</b> hoy`, res.posicionSemana && `<b>${ord(res.posicionSemana)}</b> en la semana`].filter(Boolean).join(" y ");
+    const quedan = res.quedan == null ? "" : res.quedan ? ` Te ${res.quedan === 1 ? "queda 1 intento" : `quedan ${res.quedan} intentos`}.` : " Ya no te quedan intentos: a las 12:00 salen juegos nuevos.";
+    const record = res.mejor == null || res.puntos == null ? null
+      : res.puntos >= res.mejor ? "¡Tu mejor marca de hoy! Es la que cuenta en la liga."
+        : `Cuenta tu mejor de hoy: ${res.mejor} puntos.`;
+    return { oficial: true, html: `Guardado en la liga${pos ? `: ${pos}` : ""}.${quedan}`, puntos: res.puntos, record };
+  }
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  if (res?.estado === "rechazada") return { oficial: false, html: esc(res.motivo), puntos: null, record: null };
+  return { oficial: false, html: esc(res?.error || "No se pudo guardar."), puntos: null, record: null };
 }

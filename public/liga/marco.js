@@ -2,7 +2,7 @@
 // Aquí va lo que no cambia de un juego a otro: 3D o plano, foto de fondo, sonido, cuenta atrás, marcadores,
 // pantalla final, compartir y la liga (semilla del servidor, intentos y envío de la partida).
 // Cada juego pone su motor, su escena 3D, su dibujo en plano y cómo se maneja con el dedo.
-import { crearLiga, abrirEntrada, alCambiar } from "./cuenta.js";
+import { crearLiga, abrirEntrada, alCambiar, resultadoLiga } from "./cuenta.js";
 
 export const $ = (id) => document.getElementById(id);
 export const reducido = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -178,8 +178,7 @@ export function crearMarco(juego) {
     sin_intentos: "Ya has hecho tus 3 intentos. A las 12:00 salen juegos nuevos. Sigue de práctica.",
     error: "Sin conexión con la liga: jugarás de práctica.",
   };
-  const ORD = (n) => `${n}.º`;
-  function pintarLiga() {
+    function pintarLiga() {
     const i = liga.info, e = $("liga-estado"), b = $("liga-entrar");
     if (!i) { e.textContent = ""; b.hidden = true; return; }
     if (i.oficial) {
@@ -279,13 +278,14 @@ export function crearMarco(juego) {
     fl.classList.remove("oficial");
     if (oficial) {
       fl.textContent = "Guardando en la liga…";
+      rec.textContent = ""; rec.classList.remove("nuevo"); // en liga manda tu mejor de hoy, no la de práctica de este móvil
       liga.terminar(juego.datosLiga(m.partida)).then((res) => {
-        if (res?.estado === "valida") {
-          fl.classList.add("oficial");
-          const pos = [res.posicionDia && `vas <b>${ORD(res.posicionDia)}</b> hoy`, res.posicionSemana && `<b>${ORD(res.posicionSemana)}</b> en la semana`].filter(Boolean).join(" y ");
-          fl.innerHTML = `Guardado en la liga${pos ? `: ${pos}` : ""}.${res.quedan ? ` Te ${res.quedan === 1 ? "queda 1 intento" : `quedan ${res.quedan} intentos`}.` : " Ya no te quedan intentos: a las 12:00 salen juegos nuevos."}`;
-        } else if (res?.estado === "rechazada") fl.textContent = res.motivo;
-        else fl.textContent = `${res?.error || "No se pudo guardar."} Lo volveremos a intentar al abrir la liga.`;
+        // lo que vale es lo que cuenta el servidor: su número y tu mejor de hoy en la liga
+        const v = resultadoLiga(res);
+        fl.classList.toggle("oficial", v.oficial);
+        fl.innerHTML = v.html;
+        if (v.puntos != null) $("fin-puntos").textContent = v.puntos;
+        if (v.record) { rec.textContent = v.record; rec.classList.toggle("nuevo", v.record.startsWith("¡")); }
         prepararLiga();
       });
     } else fl.textContent = liga.info && !liga.info.oficial ? TEXTO_LIGA[liga.info.motivo] || "" : "";
