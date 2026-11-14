@@ -334,10 +334,12 @@ export function crearLiga(juego) {
       if (guardando) { try { await guardando; } catch { /* sigue apuntada */ } }
       if (pendientes().length) await mandarPendientes();
       partida = null;
-      if (!conLiga || !info?.oficial) return { oficial: false, semilla: null };
+      // Si la liga no respondió al abrir el juego, se prueba igual a empezar en ella: el servidor decide.
+      // Así una partida con cuenta nunca pasa a práctica por un fallo de conexión.
+      if (!conLiga || !(info?.oficial || (info?.motivo === "error" && conectado()))) return { oficial: false, semilla: null };
       const r = await empezar(juego); // si falla, lanza: el juego avisa y no empieza
       partida = r.partida;
-      info = { ...info, quedan: r.quedan, intento: r.intento };
+      info = { ...info, oficial: true, motivo: undefined, quedan: r.quedan, intento: r.intento };
       return { oficial: true, semilla: r.semilla, intento: r.intento, quedan: r.quedan };
     },
     terminar(datos) {
@@ -387,4 +389,22 @@ export function resultadoLiga(res) {
   const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   if (res?.estado === "rechazada") return { oficial: false, html: esc(res.motivo), puntos: null, record: null };
   return { oficial: false, html: esc(res?.error || "No se pudo guardar."), puntos: null, record: null };
+}
+
+// Si tienes cuenta y la partida NO cuenta (sin intentos, juego que no toca…), un cartel lo dice durante la partida:
+// así nadie cree que está jugando un 4.º intento o que sus puntos se van a guardar.
+export function cartelPractica(mostrar, texto = "De práctica · no cuenta en la liga") {
+  let el = document.getElementById("cartel-practica");
+  if (!mostrar) { if (el) el.hidden = true; return; }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "cartel-practica";
+    el.setAttribute("role", "status");
+    el.style.cssText = "position:fixed;z-index:3;left:50%;transform:translateX(-50%);top:calc(max(12px, env(safe-area-inset-top, 0px)) + 96px);"
+      + "padding:6px 14px;border-radius:999px;background:rgba(7,6,10,.72);border:1px solid rgba(243,234,216,.28);color:#f3ead8;"
+      + "font:700 13px/1.2 var(--letra, 'Archivo', sans-serif);letter-spacing:.04em;text-transform:uppercase;pointer-events:none;white-space:nowrap";
+    document.body.appendChild(el);
+  }
+  el.textContent = texto;
+  el.hidden = false;
 }
