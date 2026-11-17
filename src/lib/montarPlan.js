@@ -36,6 +36,33 @@ export const planesConGoogle = () => /^(1|si|sí|true)$/i.test(String(process.en
 const MS_MINIMO_AMPLIAR = 20000;
 const RADIO_PROVINCIA = 150;
 
+// Pedidos solo de comer o beber ("comer y luego unas cañas", "cenar cocido"): no necesitan buscar eventos en Google.
+// La agenda guardada sigue entrando; lo que se ahorra es la búsqueda a medida, la llamada más cara de cada plan.
+const COMER_BEBER = /\b(?:comer|comida|cena|cenar|almorzar|almuerzo|desayun\w*|merendar|merienda|tapas?|tapeo|tapear|pinchos?|vinos?|vermu\w*|canas?|cervezas?|copas?|cocido|cecina|botillo|restaurantes?|bar|bares|cafe|cafeteria|brunch|menu|raciones?|asador|mesones?|pizza|hamburguesa|sushi|vegano|vegetariano|chuleton|cordero|lechazo|marisco|pulpo|dulces?|postres?|chocolate)\b/g;
+const OTRA_COSA = /\b(?:concierto|musica|fiesta|evento|plan|planes|hacer|ver|visita|museo|exposicion|ruta|teatro|cine|mercad\w*|feria|charla|jornadas?|cata|catas|festival|deporte|partido|ninos|familia|actividad\w*|sorprend\w*|ocio|baile|bailar|discoteca)\b/;
+const sinTildes = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function soloComerYBeber(apetece) {
+  const t = sinTildes(apetece);
+  return new RegExp(COMER_BEBER.source).test(t) && !OTRA_COSA.test(t.replace(COMER_BEBER, ' '));
+}
+
+// Plan para hoy: fuera lo que empezó hace más de una hora (y no dura varios días) o ya ha terminado
+export function quitarPasados(agenda, fecha, ahora = new Date()) {
+  const hoy = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(ahora);
+  if (fecha !== hoy) return agenda;
+  const [h, m] = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ahora).split(':').map(Number);
+  const yaSon = h * 60 + m;
+  return agenda.filter((e) => {
+    if (e?.permanente || e?.diasSemana?.length || (e?.fechaFin && e.fechaFin > e.fecha)) {
+      const { fin } = leerHora(e?.hora);
+      return fin == null || fin > yaSon;
+    }
+    const { min, fin } = leerHora(e?.hora);
+    if (fin != null) return fin > yaSon;
+    return min == null || min + 60 > yaSon;
+  });
+}
+
 // El aviso que ve la persona encima del plan
 export function avisoCercano({ apetece, radio, lat, lon, plan }) {
   const pedido = String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas';
@@ -80,14 +107,15 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
   const [tiempo, eventosDia, eventosAMedida, prefs, sitios] = await Promise.all([
     obtenerPrevisionTiempo(lat, lon, fecha),
     sinRomper(eventosDelDia(fecha, { lat, lon, radio }), 'eventos'),
-    ampliado ? null : sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
+    ampliado || soloComerYBeber(apetece) ? null : sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
     sinRomper(preferenciasComunidad(lat, lon, radio), 'preferencias'),
     conGoogle ? null : sinRomper(sitiosComprobados(lat, lon, radio), 'sitios comprobados'),
   ]);
   const previsionTiempo = tiempo?.texto || null; // lo que ve la persona; lo de "día malo" es solo para la IA
 
   // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
-  const agendaDelDia = unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha));
+  // Y si el plan es para hoy, nada que ya haya empezado hace rato o terminado
+  const agendaDelDia = quitarPasados(unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha)), fecha);
   const bloqueAgenda = eventosParaPrompt(agendaParaRutas(agendaDelDia, apetece));
   const bloqueComunidad = [
     prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
@@ -132,6 +160,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
       INSTRUCCIONES:
       ${instruccionBusqueda}
       2. No inventes nada. No te salgas del radio ni de la provincia de León: nada de Zamora, Asturias, Palencia, Galicia ni otras provincias, aunque estén cerca. Si lo que pide es en otra provincia, devuelve []. No repitas el mismo sitio o evento con otro nombre. Ordena las paradas por hora.
+      ABIERTO ESE DÍA: solo sitios que abran la fecha del plan y a la hora de la parada. Fuera de mayo a septiembre no propongas chiringuitos, merenderos, piscinas, quioscos ni terrazas de verano: suelen estar cerrados aunque Google diga otra cosa.
       BARES Y RESTAURANTES: si no conoces con seguridad uno real en esa zona (pasa mucho en los pueblos), no te inventes el nombre: pon de título el tipo y el pueblo (por ejemplo "Restaurante en Boñar") y lo buscamos en Google Maps. En su descripción no inventes especialidades, platos, premios ni historia.
       3. Devuelve SOLO JSON estricto con este formato:
       [{"hora": "12:00", "titulo": "Nombre Oficial", "descripcion": "Descripción del sitio.", "precio": "10€", "resenas": "4.5/5", "transporte": "5 min andando", "lat": 42.59, "lon": -5.56, "tipo": "bar", "lugar": null, "telefono": "No disponible", "web": "No disponible", "horario": "12:00 - 16:00", "fuente": "URL del evento o null"}]
@@ -149,7 +178,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
 
   // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
-  const contexto = { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal, fuentes: conGoogle ? null : new Set(agendaDelDia.map((e) => e.fuente).filter(Boolean)) };
+  const contexto = { fecha, lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal, fuentes: conGoogle ? null : new Set(agendaDelDia.map((e) => e.fuente).filter(Boolean)) };
   const enriquecidas = await Promise.all(
     quitarNoPedidas(rutaBruta
       .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece)
