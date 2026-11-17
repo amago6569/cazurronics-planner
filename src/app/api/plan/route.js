@@ -34,7 +34,7 @@ export async function POST(request) {
     }
     contados.push(cupo.clave);
     // Techo de gasto por día: por conexión y para toda la web (se cambian con PLANES_MAX_IP_DIA y PLANES_MAX_DIA en Vercel; 0 = sin tope).
-    // 25 al día para no pasar de 30 € al mes aunque haya un pico: decisión de Alejandro y del council (5-11-2026)
+    // 40 al día (Alejandro, 17-11-2026; antes 25). Con 3 por hora y persona, nadie lo agota solo; peor caso ~7 € más al mes
     // El de conexión es más bajo que el total para que una sola no deje a todos sin planes; si el almacén falla, el total no deja pasar
     contados.push(claveTopeDiario('plan', request));
     if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 6), request))) {
@@ -42,7 +42,7 @@ export async function POST(request) {
       return NextResponse.json({ exito: false, mensaje: 'Hoy has montado muchos planes 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
     }
     contados.push(claveTopeDiario('plan'));
-    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 25), null, false))) {
+    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 40), null, false))) {
       await devolver();
       return NextResponse.json({ exito: false, mensaje: 'Hoy se han agotado los planes gratuitos 🦁 Vuelve mañana y te montamos el planazo.' }, { status: 429 });
     }
