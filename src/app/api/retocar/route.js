@@ -73,7 +73,7 @@ export async function POST(request) {
     const { texto: textoIA } = await llamarGemini(prompt, { sistema: REGLA_DATOS, para: 'usuario', tarea: 'retoques', temperatura: 0.3, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + MS_IA - Date.now()) });
     const propuesta = extraerJSON(textoIA, '{');
     if (!propuesta || typeof propuesta.titulo !== 'string' || !propuesta.titulo.trim()) throw new SyntaxError('La IA no devolvió una parada');
-    const { parada } = await enriquecerParada(propuesta, { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });
+    const { parada } = await enriquecerParada(propuesta, { fecha, lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + MS_TOTAL });
 
     // Si Google ha cambiado el nombre inventado por el de un sitio que ya está en el plan, no vale
     if (!parada || !enProvinciaLeon(parada.lat, parada.lon) || nombresYa.includes(parada.titulo)) return NextResponse.json({ exito: false, mensaje: "No hay alternativas viables." }, { status: 200 });

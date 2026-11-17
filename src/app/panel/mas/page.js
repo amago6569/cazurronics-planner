@@ -72,7 +72,7 @@ function Barridos({ clave, barrido, agenda, alTerminar }) {
   return (
     <section className="pn-bloque">
       <h2 className="pn-titulo">Agenda y barridos</h2>
-      <p className="pn-apunte mb-3">{barrido ? `Última pasada: ${new Date(barrido.fin || barrido.inicio).toLocaleString("es-ES")} · ${barrido.total ?? 0} planes en la agenda${barrido.descartados ? ` · ${barrido.descartados} descartados por fuente falsa` : ""}` : "Todavía no se ha hecho ningún barrido"}</p>
+      <p className="pn-apunte mb-3">{barrido ? `Última pasada: ${new Date(barrido.fin || barrido.inicio).toLocaleString("es-ES")} · ${barrido.total ?? 0} eventos en la agenda (no son planes de la gente)${barrido.descartados ? ` · ${barrido.descartados} descartados por fuente falsa` : ""}` : "Todavía no se ha hecho ningún barrido"}</p>
       <p className="pn-apunte mb-2">Se hacen solos cada noche. Lanzarlos a mano puede gastar búsquedas de Google; si se hizo hace poco, no se repite.</p>
       <div className="flex flex-wrap gap-2 mb-3">
         {Object.entries(BARRIDOS).map(([tipo, b]) => (

@@ -48,10 +48,15 @@ export function respuestaClave(acceso) {
 // peticiones desde muchas conexiones); con "request" cuenta solo a esa conexión.
 // max <= 0 lo desactiva. Si el almacén falla no se puede contar, y "siFalla" decide: por defecto deja pasar,
 // pero los techos de gasto pasan false, porque sin contador no hay techo y la factura quedaría sin freno.
+// La clave del contador de hoy (para devolver un intento que no dio plan con devolverCupo)
+export function claveTopeDiario(nombre, request = null) {
+  const dia = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }); // 2026-10-04
+  return `freno:dia:${nombre}:${request ? ipDe(request) : "todos"}:${dia}`;
+}
+
 export async function dentroDelTopeDiario(nombre, max, request = null, siFalla = true) {
   if (!(max > 0)) return true;
-  const dia = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }); // 2026-10-04
-  const clave = `freno:dia:${nombre}:${request ? ipDe(request) : "todos"}:${dia}`;
+  const clave = claveTopeDiario(nombre, request);
   try {
     const [, cuenta] = await varios([["SET", clave, "0", "NX", "EX", 36 * 3600], ["INCRBY", clave, 1]]);
     return Number(cuenta) <= max;
@@ -59,4 +64,35 @@ export async function dentroDelTopeDiario(nombre, max, request = null, siFalla =
     console.error("[freno]", e?.message || e);
     return siFalla;
   }
+}
+
+// ---------- Planes por hora y persona ----------
+// Regla de Alejandro (17-11-2026): cada persona, como mucho 3 planes por hora. Cuenta por conexión (IP).
+// Devuelve { ok, minutos, clave }: minutos = cuánto falta para que se libere el cupo (cuando ok es false).
+// Si el almacén falla, deja pasar: los techos diarios de gasto siguen frenando.
+export async function cupoPorHora(request, nombre, max, segundos = 3600) {
+  const clave = `freno:hora:${nombre}:${ipDe(request)}`;
+  try {
+    const [, cuenta, ttl] = await varios([["SET", clave, "0", "NX", "EX", segundos], ["INCRBY", clave, 1], ["TTL", clave]]);
+    if (Number(cuenta) <= max) return { ok: true, minutos: 0, clave };
+    // El intento rechazado no se queda contado: así nadie se alarga la espera por darle otra vez al botón
+    await comando(["DECR", clave]).catch(() => null);
+    return { ok: false, minutos: Math.max(1, Math.ceil(Math.max(0, Number(ttl) || segundos) / 60)), clave };
+  } catch (e) {
+    console.error("[freno]", e?.message || e);
+    return { ok: true, minutos: 0, clave: null };
+  }
+}
+
+// Devuelve un intento que no ha dado plan (la IA falló, no había nada...): un fallo nuestro no gasta cupo
+export async function devolverCupo(...claves) {
+  for (const clave of claves.filter(Boolean)) {
+    try { await comando(["DECR", clave]); } catch (e) { console.error("[freno]", e?.message || e); }
+  }
+}
+
+// Mensaje para la persona cuando ya ha hecho sus planes de esta hora
+export function mensajeCupoHora(max, minutos) {
+  const espera = minutos >= 60 ? "una hora" : minutos === 1 ? "1 minuto" : `${minutos} minutos`;
+  return `Ya has montado ${max} planes en la última hora 🦁 Para que la web siga siendo gratis para todos, el siguiente podrás pedirlo en ${espera}. Mientras, puedes cambiar paradas del plan que ya tienes.`;
 }

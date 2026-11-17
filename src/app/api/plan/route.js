@@ -3,7 +3,7 @@ import { NextResponse, after } from 'next/server';
 import { leerPeticionPlan } from '../../../lib/planUtils';
 import { montarPlan } from '../../../lib/montarPlan';
 import { enSegundoPlano, guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
-import { dentroDelLimite, dentroDelTopeDiario } from '../../../lib/freno';
+import { claveTopeDiario, cupoPorHora, dentroDelTopeDiario, devolverCupo, mensajeCupoHora } from '../../../lib/freno';
 import { asegurarBarridoReciente } from '../../../lib/eventos';
 import { claveLugar, esNegocio, esPrueba, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
@@ -16,27 +16,38 @@ export const maxDuration = 60;
 const MS_IA = 55000;
 const MS_TOTAL = 58000;
 
-// Una persona normal no pide 20 planes en 10 minutos; un script que vacía la cuota, sí
-const MAX_PLANES = 20;
-const VENTANA_S = 600;
+// Regla de Alejandro (17-11-2026): cada persona, como mucho 3 planes por hora (se cambia con PLANES_MAX_HORA en Vercel).
+// Un plan que no sale (fallo de la IA, nada que encaje) no gasta cupo: se devuelve.
+const maxPorHora = () => Math.max(1, Number(process.env.PLANES_MAX_HORA ?? 3) || 3);
 
 export async function POST(request) {
   const inicio = Date.now();
+  // Lo que se ha contado para esta petición: si al final no hay plan (también si algo revienta), se devuelve
+  const contados = [];
+  const devolver = () => devolverCupo(...contados.splice(0));
   try {
     const peticion = leerPeticionPlan(await request.json().catch(() => null));
     if (peticion.error) return NextResponse.json({ exito: false, mensaje: peticion.error }, { status: 400 });
-    if (!(await dentroDelLimite(request, 'plan', MAX_PLANES, VENTANA_S))) {
-      return NextResponse.json({ exito: false, mensaje: 'Has pedido muchos planes seguidos 🦁 Espera unos minutos y vuelve a probar.' }, { status: 429 });
+    const cupo = await cupoPorHora(request, 'plan', maxPorHora());
+    if (!cupo.ok) {
+      return NextResponse.json({ exito: false, mensaje: mensajeCupoHora(maxPorHora(), cupo.minutos), esperaMin: cupo.minutos }, { status: 429 });
     }
+    contados.push(cupo.clave);
     // Techo de gasto por día: por conexión y para toda la web (se cambian con PLANES_MAX_IP_DIA y PLANES_MAX_DIA en Vercel; 0 = sin tope).
     // 25 al día para no pasar de 30 € al mes aunque haya un pico: decisión de Alejandro y del council (5-11-2026)
     // El de conexión es más bajo que el total para que una sola no deje a todos sin planes; si el almacén falla, el total no deja pasar
+    contados.push(claveTopeDiario('plan', request));
     if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 6), request))) {
+      await devolver();
       return NextResponse.json({ exito: false, mensaje: 'Hoy has montado muchos planes 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
     }
+    contados.push(claveTopeDiario('plan'));
     if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 25), null, false))) {
+      await devolver();
       return NextResponse.json({ exito: false, mensaje: 'Hoy se han agotado los planes gratuitos 🦁 Vuelve mañana y te montamos el planazo.' }, { status: 429 });
     }
+    // El techo de toda la web sí se queda contado aunque el plan falle: ese intento ya gasta IA
+    contados.pop();
     const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
     // Si la agenda diaria está vacía o caducada (p. ej. en local, sin cron), se rellena en segundo plano
     after(() => sinRomper(asegurarBarridoReciente(), 'barrido diario'));
@@ -44,7 +55,10 @@ export async function POST(request) {
     const montado = await montarPlan(peticion, { inicio, msIA: MS_IA, msTotal: MS_TOTAL });
     // Cuántos planes salen vacíos y cuántos se salvan con toda la provincia (para decidir con datos el tope de ampliados)
     if (montado.vacio || montado.ampliado) enSegundoPlano(() => registrar(montado.ampliado ? 'plan_ampliado' : 'plan_vacio'), 'estadísticas');
-    if (!montado.exito) return NextResponse.json({ exito: false, mensaje: montado.mensaje }, { status: 200 });
+    if (!montado.exito) {
+      await devolver();
+      return NextResponse.json({ exito: false, mensaje: montado.mensaje }, { status: 200 });
+    }
     const { plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, aviso } = montado;
 
     // NUEVO: cada parada lleva su identificador de lugar (para estadísticas y valoraciones)
@@ -64,6 +78,7 @@ export async function POST(request) {
     return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia, ...(aviso ? { aviso } : {}) });
   } catch (error) {
     console.error('[plan]', error?.message || error);
+    await devolver();
     const mensaje = mensajeParaUsuario(error);
     return NextResponse.json({ exito: false, mensaje, ...(process.env.NODE_ENV === 'development' ? { detalle: error?.fallos || String(error?.stack || error).slice(0, 400) } : {}) }, { status: 200 });
   }

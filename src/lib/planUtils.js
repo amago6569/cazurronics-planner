@@ -1,6 +1,7 @@
 // ============ UTILIDADES COMPARTIDAS ============
 // Usado por app/api/plan/route.js (generar plan) y app/api/retocar/route.js (cambiar una parada).
-import { comando, enSegundoPlano, sinRomper } from './almacen';
+import { createHash } from 'node:crypto';
+import { comando, enSegundoPlano, guardarJSON, leerJSON, sinRomper } from './almacen';
 import { direccionEnLeon, enProvinciaLeon } from './provincia';
 import { bonito, mismoSitioNatural, seParecen, slug } from './nombres';
 import { rutaConocida } from './rutas';
@@ -258,17 +259,29 @@ export async function obtenerStreetView(lat, lon, limite) {
   try {
     const svKey = process.env.STREET_VIEW_API_KEY;
     if (!svKey) return null;
-    const metaUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lon}&key=${svKey}`;
+    // Solo panoramas de calle (no fotos 360º de interiores que sube la gente) y a 60 m como mucho del local
+    const metaUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lon}&radius=60&source=outdoor&key=${svKey}`;
     const metaRes = await fetch(metaUrl, conLimite(MS.streetView, limite));
     const metaData = await metaRes.json();
 
-    if (metaData.status === 'OK') {
-      return `https://www.google.com/maps/embed/v1/streetview?key=${svKey}&location=${lat},${lon}`;
+    if (metaData.status === 'OK' && metaData.pano_id) {
+      // El panorama exacto que ha encontrado Google, con la cámara mirando al local (antes salía otra calle o una pared)
+      const desde = metaData.location;
+      const rumbo = desde ? Math.round(rumboHacia(desde.lat, desde.lng, Number(lat), Number(lon))) : null;
+      return `https://www.google.com/maps/embed/v1/streetview?key=${svKey}&pano=${encodeURIComponent(metaData.pano_id)}${rumbo != null ? `&heading=${rumbo}` : ''}&pitch=5&fov=80`;
     }
   } catch (e) {
     console.error("Error consultando Street View:", e);
   }
   return null;
+}
+
+// Hacia dónde hay que mirar (grados desde el norte) para ver el punto B estando en A
+export function rumboHacia(lat1, lon1, lat2, lon2) {
+  const rad = Math.PI / 180;
+  const y = Math.sin((lon2 - lon1) * rad) * Math.cos(lat2 * rad);
+  const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) - Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
+  return ((Math.atan2(y, x) / rad) + 360) % 360;
 }
 
 export const BUSQUEDA_GENERICA_POR_TIPO = {
@@ -318,12 +331,122 @@ export function descripcionReal(objetivo, tipo, nombreZona) {
   return frases.join(' ');
 }
 
+// ---------- Abierto o cerrado ese día ----------
+// Google da el horario de cada semana (opening_hours) y el de los próximos 7 días con festivos y cierres
+// (current_opening_hours). Con eso se mira si el sitio abre el día del plan y a la hora de la parada.
+// true = abierto · false = cerrado seguro · null = no se sabe (sin horario): entonces el sitio se queda.
+const aMin = (t) => (/^\d{4}$/.test(String(t || '')) ? Number(String(t).slice(0, 2)) * 60 + Number(String(t).slice(2)) : null);
+// "13:30", "13.30 h", "21h" → minutos desde las 00:00 (null si no hay hora)
+export function minutoDeHora(hora) {
+  const m = String(hora || '').match(/(\d{1,2})(?:[:.h](\d{2}))?/);
+  if (!m) return null;
+  const min = Number(m[1]) * 60 + Number(m[2] || 0);
+  return min <= 24 * 60 ? min : null;
+}
+const diaSemana = (fecha) => new Date(`${fecha}T12:00:00Z`).getUTCDay();
+export function abiertoEse({ fecha, minuto = null, detalle, hoy = null }) {
+  if (!detalle || typeof detalle !== 'object') return null;
+  if (detalle.business_status && detalle.business_status !== 'OPERATIONAL') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) return null;
+  // Los próximos 7 días traen la fecha exacta de cada tramo: ahí se ven los cierres por vacaciones y festivos
+  const hoyIso = hoy || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+  const dias = Math.round((Date.parse(`${fecha}T12:00:00Z`) - Date.parse(`${hoyIso}T12:00:00Z`)) / 86400000);
+  const actuales = detalle.current_opening_hours?.periods;
+  const usarActual = Array.isArray(actuales) && actuales.length && dias >= 0 && dias < 7 && actuales.some((p) => p?.open?.date);
+  const periodos = usarActual ? actuales : detalle.opening_hours?.periods;
+  if (!Array.isArray(periodos) || !periodos.length) return null;
+  // Abierto siempre (24 h): un solo tramo el domingo a las 00:00 sin cierre
+  if (periodos.some((p) => p?.open && !p.close && aMin(p.open.time) === 0)) return true;
+  const d = diaSemana(fecha);
+  const delDia = periodos.filter((p) => (usarActual && p?.open?.date ? p.open.date === fecha : p?.open?.day === d));
+  // Lo que abrió el día antes y cierra de madrugada (un pub hasta las 3:00) también cuenta para la noche
+  const ayer = (d + 6) % 7;
+  const deMadrugada = periodos.filter((p) => p?.open?.day === ayer && p?.close && p.close.day === d && (!usarActual || !p.open.date || p.open.date < fecha));
+  if (!delDia.length && !deMadrugada.length) return false; // ese día no abre
+  if (minuto == null) return delDia.length > 0 || null;
+  // Una parada a la 1:00 es de la noche de ese día: cuenta como las 25:00
+  const m = minuto < 6 * 60 ? minuto + 24 * 60 : minuto;
+  const dentro = (ini, fin) => m >= ini - 15 && m <= fin - 30; // un margen: llegar un poco antes, no a la hora de cerrar
+  for (const p of delDia) {
+    const ini = aMin(p.open.time), fin0 = aMin(p.close?.time);
+    if (ini == null) return null;
+    if (fin0 == null) return true;
+    const fin = p.close.day !== p.open.day || fin0 <= ini ? fin0 + 24 * 60 : fin0;
+    if (dentro(ini, fin)) return true;
+  }
+  // Por la mañana temprano vale lo que abrió la noche antes (un pub hasta las 6:00)
+  for (const p of deMadrugada) {
+    const fin = aMin(p.close.time);
+    if (fin != null && minuto < 6 * 60 && minuto <= fin - 30) return true;
+  }
+  return false;
+}
+
+// Sitios de temporada (chiringuitos, piscinas, merenderos...): en León abren de mayo a septiembre.
+// Fuera de esos meses Google suele seguir enseñando el horario del verano, así que no se proponen.
+const DE_TEMPORADA = /\b(chiringuito|merendero|piscinas?|playa fluvial|quiosco|kiosko|kiosco|terraza de verano|camping)\b/;
+const quitarTildes = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+export function cerradoPorTemporada(nombre, fecha) {
+  const mes = Number(String(fecha || '').slice(5, 7));
+  if (!mes || (mes >= 5 && mes <= 9)) return false;
+  return DE_TEMPORADA.test(quitarTildes(nombre));
+}
+
+// ---------- Lo que ya se ha preguntado a Google, guardado un tiempo ----------
+// La misma búsqueda (mismo sitio, misma zona) no vuelve a pagar a Google en 3 días; la ficha de un local
+// (teléfono, web, horario) se guarda 1 día para que un cierre o un cambio de horario se note pronto.
+const HORAS_BUSQUEDA = 72;
+const HORAS_FICHA = 24;
+const huella = (t) => createHash('sha1').update(String(t)).digest('base64url').slice(0, 22);
+const CAMPOS_RESULTADO = ['place_id', 'name', 'geometry', 'business_status', 'types', 'formatted_address', 'rating', 'user_ratings_total', 'price_level'];
+const recortarResultado = (r) => ({ ...Object.fromEntries(CAMPOS_RESULTADO.filter((k) => r?.[k] !== undefined).map((k) => [k, r[k]])), ...(r?.photos?.length ? { photos: [{ photo_reference: r.photos[0].photo_reference }] } : {}) });
+
+async function buscarEnPlaces({ consulta, lat, lon, radioMetros, mapsKey, limite }) {
+  const clave = `places:busca:${huella(`${consulta}|${Number(lat).toFixed(3)}|${Number(lon).toFixed(3)}|${radioMetros}`)}`;
+  const guardada = await sinRomper(leerJSON(clave), 'places caché');
+  if (guardada?.results) return { ...guardada, deCache: true };
+  const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(consulta)}&location=${lat},${lon}&radius=${radioMetros}&language=es&region=es&key=${mapsKey}`;
+  const res = await fetch(searchUrl, conLimite(MS.places, limite));
+  const datos = await res.json();
+  // Solo se guarda lo que salió bien (no un fallo de cupo o de clave), y solo los 8 primeros: es lo que se usa
+  if (datos?.status === 'OK' || datos?.status === 'ZERO_RESULTS') {
+    const corto = { status: datos.status, results: (datos.results || []).slice(0, 8).map(recortarResultado) };
+    enSegundoPlano(() => guardarJSON(clave, corto, HORAS_BUSQUEDA * 3600), 'places caché');
+    return corto;
+  }
+  return datos;
+}
+
+export async function fichaDePlaces(placeId, mapsKey, limite) {
+  const clave = `places:ficha:${String(placeId).replace(/[^\w-]/g, '').slice(0, 200)}`;
+  const guardada = await sinRomper(leerJSON(clave), 'places caché');
+  if (guardada) return guardada;
+  const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=photos,formatted_phone_number,website,opening_hours,current_opening_hours,business_status&language=es&key=${mapsKey}`;
+  const res = await fetch(detailsUrl, conLimite(MS.detalles, limite));
+  const datos = await res.json();
+  const d = datos?.result;
+  if (!d) return null;
+  const ficha = {
+    formatted_phone_number: d.formatted_phone_number || null,
+    website: d.website || null,
+    business_status: d.business_status || null,
+    opening_hours: d.opening_hours ? { weekday_text: d.opening_hours.weekday_text || [], periods: d.opening_hours.periods || [] } : null,
+    current_opening_hours: d.current_opening_hours?.periods ? { periods: d.current_opening_hours.periods } : null,
+    photos: d.photos?.length ? [{ photo_reference: d.photos[0].photo_reference }] : [],
+  };
+  enSegundoPlano(() => guardarJSON(clave, ficha, HORAS_FICHA * 3600), 'places caché');
+  return ficha;
+}
+
+// Tipos en los que se mira si abren ese día (los eventos van con su propia hora; plazas, rutas y parques no cierran)
+const MIRAR_HORARIO = ['bar', 'restaurante', 'discoteca', 'cafeteria', 'cafetería', 'pub', 'taberna', 'sidreria', 'sidrería', 'museo'];
+
 // Dado UNA parada (tal cual la devuelve Gemini) y el contexto de la búsqueda, la enriquece con datos
 // reales: coordenadas verificadas, teléfono, web, horario, reseñas, foto real y Street View.
 // Devuelve la parada enriquecida, o null si debe descartarse (bar/restaurante/discoteca sin ficha real).
 const TIPOS_DE_COMER = ['restaurant', 'bar', 'cafe', 'food', 'meal_takeaway', 'meal_delivery', 'bakery', 'night_club'];
 export async function enriquecerParada(paradaOriginal, contexto) {
-  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite, fuentes } = contexto;
+  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite, fuentes, fecha = null } = contexto;
   let parada = { ...paradaOriginal };
   parada.precio = limpiarPrecio(parada.precio);
 
@@ -347,13 +470,15 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   const esEvento = ['evento', 'gastronomia'].includes(String(parada.tipo || '').toLowerCase());
   const paraComer = necesitaFicha(parada.tipo);
   let googleRespondio = false; // si Google falla o tarda, no se puede decir que el sitio no exista
+  let cerradoEseDia = false; // algún candidato estaba cerrado ese día (o es de temporada): si no queda otro, la parada sale
+  let detalleGuardado = null; // la ficha ya leída al mirar el horario: no se vuelve a pedir
+  // Un chiringuito o una piscina en noviembre no se propone, lo encuentre Google o no
+  if (fecha && cerradoPorTemporada(parada.titulo, fecha)) return { parada: null, problemaConfigPlaces: null, cerrado: true };
 
   try {
     const radioMetros = Number(radio) * 1000;
 
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(queryBusquedaReal)}&location=${lat},${lon}&radius=${radioMetros}&language=es&region=es&key=${mapsKey}`;
-    const resSearch = await fetch(searchUrl, conLimite(MS.places, limite));
-    const dataSearch = await resSearch.json();
+    const dataSearch = await buscarEnPlaces({ consulta: queryBusquedaReal, lat, lon, radioMetros, mapsKey, limite });
 
     if (dataSearch.status && dataSearch.status !== 'OK' && dataSearch.status !== 'ZERO_RESULTS') {
       console.error(`[Google Places] status="${dataSearch.status}" para "${queryBusquedaReal}": ${dataSearch.error_message || '(sin mensaje adicional)'}`);
@@ -364,7 +489,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
 
     if (dataSearch.results && dataSearch.results.length > 0) {
       const candidatosEnZona = dataSearch.results.filter(r => {
-        if (!r.geometry || r.business_status === 'CLOSED_PERMANENTLY') return false;
+        // Cerrado para siempre o «cerrado temporalmente» (vacaciones, obras, temporada) en Google: fuera
+        if (!r.geometry || r.business_status === 'CLOSED_PERMANENTLY' || r.business_status === 'CLOSED_TEMPORARILY') return false;
         // "Restaurante en Vegacervera" no puede acabar en las Hoces de Vegacervera: donde se come, tiene que ser de comer
         if (paraComer && r.types?.length && !r.types.some((t) => TIPOS_DE_COMER.includes(t))) return false;
         // Y al revés: "Ruta por Boñar" no se queda con los datos del Bar Boñar ni de un hostal
@@ -375,20 +501,33 @@ export async function enriquecerParada(paradaOriginal, contexto) {
         return distanciaKm <= Number(radio) * 1.1;
       });
 
+      // Los candidatos en el orden en que se probarían: el que nombró la IA (si Google lo tiene) y, para comer, si ese
+      // está cerrado ese día, los mejores de la zona. Así un cierre no deja el plan sin comida.
+      let orden = [];
       if (candidatosEnZona.length > 0) {
         if (parada.tipo === 'concierto' || parada.tipo === 'fiesta' || parada.tipo === 'mercadillo') {
-          objetivo = candidatosEnZona[0];
+          orden = [candidatosEnZona[0]];
         } else {
           // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota
           const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (esEvento ? mismoSitioNatural(`${parada.titulo} ${parada.lugar || ''}`, r.name) : alAireLibre ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
           // Una ruta o un parque que Google no conoce no se cambia por otro sitio: se queda sin ubicar y se descarta abajo
-          const listaCandidatos = mismoNombre ? [mismoNombre] : alAireLibre || esEvento ? [] : candidatosEnZona.slice(0, 5);
-          objetivo = listaCandidatos.reduce((mejor, actual) => {
-            const puntuacionActual = puntuarCandidato(actual, parada.tipo, lat, lon, priceLevelObjetivo, radio);
-            const puntuacionMejor = mejor ? puntuarCandidato(mejor, parada.tipo, lat, lon, priceLevelObjetivo, radio) : -Infinity;
-            return puntuacionActual > puntuacionMejor ? actual : mejor;
-          }, null);
+          const porNota = alAireLibre || esEvento ? [] : [...candidatosEnZona.slice(0, 5)]
+            .sort((a, b) => puntuarCandidato(b, parada.tipo, lat, lon, priceLevelObjetivo, radio) - puntuarCandidato(a, parada.tipo, lat, lon, priceLevelObjetivo, radio));
+          orden = mismoNombre ? [mismoNombre, ...(paraComer ? porNota.filter((r) => r !== mismoNombre) : [])] : porNota;
         }
+      }
+      // Se mira si abre ese día y a esa hora. Como mucho 3 candidatos (cada ficha nueva es una consulta a Google)
+      const mirar = Boolean(fecha) && MIRAR_HORARIO.includes(String(parada.tipo || '').toLowerCase());
+      const minuto = minutoDeHora(parada.hora);
+      for (const c of orden.slice(0, mirar ? 3 : 1)) {
+        if (fecha && cerradoPorTemporada(c.name, fecha)) { cerradoEseDia = true; continue; }
+        if (mirar && c.place_id) {
+          const ficha = await fichaDePlaces(c.place_id, mapsKey, limite).catch(() => null);
+          if (abiertoEse({ fecha, minuto, detalle: ficha }) === false) { cerradoEseDia = true; continue; }
+          detalleGuardado = ficha;
+        }
+        objetivo = c;
+        break;
       }
     }
 
@@ -419,11 +558,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
 
       if (objetivo.place_id) {
         try {
-          const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${objetivo.place_id}&fields=photos,formatted_phone_number,website,opening_hours&language=es&key=${mapsKey}`;
-          const resDetails = await fetch(detailsUrl, conLimite(MS.detalles, limite));
-          const dataDetails = await resDetails.json();
-          const detalle = dataDetails.result;
-
+          const detalle = detalleGuardado || await fichaDePlaces(objetivo.place_id, mapsKey, limite);
           if (detalle) {
             if (detalle.formatted_phone_number) parada.telefono = detalle.formatted_phone_number;
             if (detalle.website) parada.web = detalle.website;
@@ -449,6 +584,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   } catch (e) {
     console.error("Error buscando lugar real en Google Places:", e);
   }
+
+  // Todo lo que había estaba cerrado ese día (o era de temporada): mejor sin esa parada que mandar a alguien a una puerta cerrada
+  if (!objetivo && cerradoEseDia) return { parada: null, problemaConfigPlaces, cerrado: true };
 
   // Una ruta señalizada de nuestra lista es real aunque Google no la tenga como sitio: va con sus coordenadas
   const deLaLista = !ubicacionResuelta && sitioNatural ? rutaConocida(parada.titulo) : null;
@@ -480,9 +618,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
     const terminoGenerico = BUSQUEDA_GENERICA_POR_TIPO[parada.tipo] || 'Castilla y León turismo';
     return buscarFotoCommons(terminoGenerico, limite);
   };
-  // Street View: funciona igual para negocios verificados que para fiestas/monumentos con ubicación aproximada,
-  // porque depende solo de las coordenadas, no de tener ficha de negocio en Places.
-  const [foto, streetView] = await Promise.all([buscarFoto(), obtenerStreetView(parada.lat, parada.lon, limite)]);
+  // Solo con la posición exacta de Google Places: con un punto aproximado (eventos, rutas, el centro de la zona) la vista
+  // enseñaba cualquier otra cosa. Consejo de asesores del 17-11-2026: arreglarla y, donde no hay garantía, no enseñarla.
+  const [foto, streetView] = await Promise.all([buscarFoto(), objetivo && !alAireLibre ? obtenerStreetView(parada.lat, parada.lon, limite) : null]);
 
   parada.fotoOficial = foto || "https://images.unsplash.com/photo-1543785734-4b6e564642f8?auto=format&fit=crop&w=800&q=80";
   parada.streetView = streetView;

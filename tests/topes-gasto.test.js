@@ -30,7 +30,7 @@ describe("clave de Street View", () => {
   it("consulta y vista usan solo la clave propia, nunca la de Maps", async () => {
     vi.stubEnv("STREET_VIEW_API_KEY", "clave-navegador");
     vi.stubEnv("GOOGLE_MAPS_API_KEY", "clave-maps");
-    const espia = vi.fn(async () => ({ json: async () => ({ status: "OK" }) }));
+    const espia = vi.fn(async () => ({ json: async () => ({ status: "OK", pano_id: "P1" }) }));
     vi.stubGlobal("fetch", espia);
     const { obtenerStreetView } = await import("../src/lib/planUtils");
     const url = await obtenerStreetView(42.6, -5.57, Date.now() + 5000);
