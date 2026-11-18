@@ -60,6 +60,9 @@ export async function POST(request) {
       return NextResponse.json({ exito: false, mensaje: montado.mensaje }, { status: 200 });
     }
     const { plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, aviso } = montado;
+    // Si el texto nombraba un pueblo fuera del radio, el plan se hizo allí (lib/pueblos.js): el plan guardado lleva ese centro
+    const centro = montado.centro || [lat, lon];
+    const radioPlan = montado.radio || radio;
 
     // NUEVO: cada parada lleva su identificador de lugar (para estadísticas y valoraciones)
     for (const parada of rutaFinal) parada.lugarId = esNegocio(parada) ? claveLugar(parada) : null; // un evento no cuenta como local
@@ -68,7 +71,7 @@ export async function POST(request) {
     const planId = nuevoId();
     const guardado = await sinRomper(guardarJSON(`plan:${planId}`, {
       id: planId, creado: Date.now(), fecha, apetece, zona: nombreZona,
-      centro: [lat, lon], radio, presupuesto: { min: presupuestoMin, max: presupuestoMax },
+      centro, radio: radioPlan, presupuesto: { min: presupuestoMin, max: presupuestoMax },
       prevision: previsionTiempo, itinerario: rutaFinal, masEseDia, ...(aviso ? { aviso } : {}),
     }, 120 * 24 * 3600), 'guardar plan');
     // Rankings y estadísticas en segundo plano: la respuesta no los espera

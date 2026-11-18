@@ -19,7 +19,8 @@ import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } f
 import { filtrarMasEseDia, quitarNoPedidas } from './intencion';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 import { dentroDelTopeDiario } from './freno';
-import { agendaParaRutas, rutasParaPrompt } from './rutas';
+import { agendaParaRutas, parajesParaPrompt, rutasParaPrompt } from './rutas';
+import { centrarEnPueblo } from './pueblos';
 
 // Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
 export function fueraDeLeon({ lat, lon, texto }) {
@@ -78,8 +79,18 @@ export const MENSAJE_GOOGLE_NO_RESPONDE = 'Ahora mismo no podemos comprobar los 
 export const mensajeSinNadaEnProvincia = (apetece) => `No hemos encontrado «${String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas'}» en toda la provincia ese día 🦁 Prueba con otra fecha o pídelo con menos detalle.`;
 
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso, aviso? } o { exito: false, mensaje, vacio? }
-export async function montarPlan(peticion, opciones = {}) {
+export async function montarPlan(peticionOriginal, opciones = {}) {
   const { inicio = Date.now(), msIA = 55000 } = opciones;
+  // «Cuevas en Sahelices de Sabero» con el mapa en León (el punto de serie): el plan va a Sahelices, no a León
+  const { peticion, pueblo } = centrarEnPueblo(peticionOriginal);
+  const centro = pueblo ? { centro: [peticion.lat, peticion.lon], radio: peticion.radio } : {};
+  const avisoPueblo = pueblo ? `Plan en ${pueblo.nombre}, como has escrito (el punto del mapa estaba en otro sitio).` : null;
+  const resultado = await montarEnZona(peticion, opciones, inicio, msIA);
+  if (!pueblo || !resultado.exito) return resultado;
+  return { ...resultado, ...centro, aviso: resultado.aviso || avisoPueblo };
+}
+
+async function montarEnZona(peticion, opciones, inicio, msIA) {
   const primero = await intentoPlan(peticion, { ...opciones, inicio });
   if (primero.exito || !primero.vacio || inicio + msIA - Date.now() < MS_MINIMO_AMPLIAR) return primero;
   if (!(await dentroDelTopeDiario('plan-ampliado', Number(process.env.PLANES_AMPLIADOS_MAX_DIA ?? 5)))) return primero;
@@ -145,12 +156,14 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
       ${bloqueAgenda}
       ${conGoogle ? '' : sitiosParaPrompt(sitios)}
       ${rutasParaPrompt(apetece, lat, lon, radio)}
+      ${soloComerYBeber(apetece) ? '' : parajesParaPrompt(lat, lon, radio)}
       ${bloqueComunidad}
       ALCANCE (lo más importante): dale a la persona EXACTAMENTE lo que pide, ni más ni menos.
       - Si pide algo CONCRETO (por ejemplo "una charla", "un concierto", "dónde ver el partido", "un sitio para comer cocido"), devuelve SOLO eso: normalmente 1 parada, y como mucho 2 o 3 si son opciones del mismo tipo a distintas horas. NO añadas comidas, copas, paseos ni visitas que no ha pedido.
       - Si pide varias cosas (por ejemplo "comer y luego salir de fiesta"), una parada por cada cosa pedida, en ese orden.
       - Solo si pide un plan abierto SIN tema concreto ("un plan", "qué hacer", "sorpréndeme", "pasar el día") monta un plan completo de varias paradas. Si menciona un tema concreto, manda el tema aunque diga "plan" (por ejemplo "un plan con charla" = solo la charla).
       - Cada parada a su hora natural: comer entre 13:30 y 15:30, cenar entre 20:30 y 22:30, copas y fiesta desde las 23:00, salvo que pida otra hora. "Comer" o "cenar" es un sitio donde se come (restaurante, mesón o bar de comidas): un evento de la agenda no lo sustituye. Deja tiempo real entre paradas (lo que dura cada una más el camino) y un orden que no obligue a ir y volver. En "transporte" pon cómo se llega desde la parada anterior.
+      - LOS PUEBLOS: si la zona es un pueblo o pide algo de un pueblo, propón lo de ese pueblo y su entorno (cuevas, cascadas, miradores, lagos, hoces, museos, castros, ermitas, rutas) con su nombre oficial, antes que irte a la capital o a otro sitio más famoso. Una cueva, cascada, mirador, lago u hoces es tipo "parque". Si no conoces con seguridad ninguno real en ese pueblo, no lo inventes.
       - La alternativa por si cambia el tiempo va dentro de la descripción, nunca como parada extra.
       ${ampliado
     ? '- En la zona que eligió no había nada, así que ahora vale toda la provincia: dale lo pedido, lo más cerca posible de ese punto. Si lo que pide no existe en ninguna parte, propón la cosa real más parecida (la misma clase de actividad) y pon "parecido": true en esa parada. Nunca inventes un sitio ni un evento; si no hay nada ni parecido, devuelve [].'
