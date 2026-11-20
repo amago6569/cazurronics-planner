@@ -20,12 +20,30 @@ globalThis.fetch = vi.fn((url, op) => {
 const json = (j, status = 200) => Promise.resolve(new Response(JSON.stringify(j), { status }));
 const HOY = { conectado: true, abierta: true, perfil: { apodo: "Ana" }, juegos: [{ id: "trucha", quedan: 3, usados: 0, mejor: null }] };
 
-const { crearLiga, resultadoLiga } = await import("../../public/liga/cuenta.js");
+const { crearLiga, resultadoLiga, FIN_LIGA } = await import("../../public/liga/cuenta.js");
+const ANTES_DEL_FIN = new Date("2026-11-20T10:00:00Z"); // estas pruebas son de cuando la liga puntuaba
 
 beforeEach(() => {
+  vi.useRealTimers();
+  vi.useFakeTimers({ toFake: ["Date"], now: ANTES_DEL_FIN });
   almacen.clear();
   almacen.set("liga-sesion", JSON.stringify({ access: "acceso-de-prueba", refresh: "refresco-de-prueba", expira: Date.now() / 1000 + 3600 }));
   llamadas = [];
+});
+
+describe("liga terminada (sáb 21-11-2026, 12:00)", () => {
+  it("los juegos pasan a libres sin preguntar al servidor ni gastar intentos", async () => {
+    vi.setSystemTime(FIN_LIGA);
+    responder = () => json(HOY);
+    const liga = crearLiga("trucha");
+    expect(await liga.preparar()).toEqual({ oficial: false, motivo: "libre" });
+    expect(await liga.empezar()).toEqual({ oficial: false, semilla: null });
+    expect(llamadas.filter((l) => l.ruta === "empezar")).toHaveLength(0);
+  });
+  it("si el servidor dice que ha terminado (reloj del móvil atrasado), también", async () => {
+    responder = () => json({ ...HOY, abierta: false, libre: true, juegos: [] });
+    expect((await crearLiga("trucha").preparar()).motivo).toBe("libre");
+  });
 });
 
 describe("guardar partidas de liga", () => {
@@ -53,7 +71,7 @@ describe("guardar partidas de liga", () => {
   });
 
   it("sin cobertura la partida se queda apuntada y se manda antes del siguiente intento", async () => {
-    vi.useFakeTimers();
+    vi.useRealTimers(); vi.useFakeTimers({ now: ANTES_DEL_FIN });
     let sinRed = true;
     responder = (ruta) => {
       if (ruta === "hoy") return json(HOY);
@@ -83,7 +101,7 @@ describe("guardar partidas de liga", () => {
       if (ruta === "empezar") return json({ partida: "p1", semilla: 5, intento: 1, quedan: 2 });
       if (ruta === "terminar") return ++veces === 1 ? json({ error: "Algo ha fallado." }, 502) : json({ error: "Ya guardada", codigo: "ya_guardada" }, 409);
     };
-    vi.useFakeTimers();
+    vi.useRealTimers(); vi.useFakeTimers({ now: ANTES_DEL_FIN });
     const liga = crearLiga("trucha");
     await liga.preparar();
     await liga.empezar();

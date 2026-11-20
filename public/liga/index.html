@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#07060a">
 <meta name="robots" content="noindex">
 <title>Liga Cazurra | Cazurronics</title>
-<meta name="description" content="Minijuegos de León con ranking semanal y premios de negocios de León. Cada día a las 12:00, dos juegos nuevos con tres intentos.">
+<meta name="description" content="Minijuegos de León en 3D: la Catedral, el Húmedo, el Pendón, San Isidro… Gratis y sin límite de partidas.">
 <link rel="icon" href="/favicon.ico">
 <link rel="preload" href="/inicio/vendor/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/inicio/vendor/archivo.css">
@@ -164,12 +164,12 @@ h2 { margin: 34px 0 12px; font-weight: 900; font-stretch: 62%; text-transform: u
     <ol class="tabla" id="tabla" role="tabpanel" aria-live="polite"></ol>
   </section>
 
-  <p class="pie">Cada día a las 12:00 salen dos juegos nuevos. La semana va de sábado a las 12:00 al sábado siguiente a las 12:00 y suma tu mejor marca de cada juego: quien juega todos los días tiene ventaja. Al cerrar, los 5 primeros reciben por correo su premio y un código para canjearlo.<br>
+  <p class="pie" id="pie">Cada día a las 12:00 salen dos juegos nuevos. La semana va de sábado a las 12:00 al sábado siguiente a las 12:00 y suma tu mejor marca de cada juego: quien juega todos los días tiene ventaja. Al cerrar, los 5 primeros reciben por correo su premio y un código para canjearlo.<br>
     <a href="/liga/bases.html">Bases de la liga</a> · <a href="/privacidad">Privacidad</a></p>
 </main>
 
 <script type="module">
-import { hoy, ranking, conectado, correo, salir, abrirEntrada, alCambiar, borrarCuenta } from "/liga/cuenta.js";
+import { hoy, ranking, conectado, correo, salir, abrirEntrada, alCambiar, borrarCuenta, ligaTerminada } from "/liga/cuenta.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -177,6 +177,22 @@ const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "
 const fecha = (d) => { const [, m, dd] = d.split("-").map(Number); return `${dd} de ${MESES[m - 1]}`; };
 
 let datos = null, de = "dia";
+const libre = () => ligaTerminada() || Boolean(datos?.libre);
+
+// Liga terminada (sáb 21-11-2026, 12:00): solo «Todos los juegos», para jugar sin intentos, ranking ni premios
+function pintarLibre() {
+  $("semana").textContent = "La Liga Cazurra ha terminado. Ahora todos los juegos son libres: juega cuando quieras y las veces que quieras.";
+  $("cambio").hidden = true;
+  document.querySelector(".cabecera h1").innerHTML = "Juegos<br>Cazurros";
+  document.title = "Juegos Cazurros | Cazurronics";
+  for (const id of ["t-hoy", "t-premios", "t-ranking"]) $(id).closest("section").hidden = true;
+  $("t-todos").textContent = "Todos los juegos";
+  document.querySelector(".nota-todos").textContent = "Sin intentos ni ranking. Elige uno y a jugar.";
+  $("pie").innerHTML = `<a href="/">Cazurronics</a> · <a href="/privacidad">Privacidad</a>`;
+  // la cuenta solo se enseña a quien ya tiene (para poder salir o borrarla)
+  $("cuenta").hidden = !datos?.perfil;
+  if (datos?.perfil) { $("cuenta").textContent = datos.perfil.apodo; $("cuenta").classList.remove("entrar"); }
+}
 
 function pintarCuenta() {
   const b = $("cuenta");
@@ -265,7 +281,9 @@ function pintarPremios() {
 }
 
 async function cargar() {
+  if (ligaTerminada()) pintarLibre(); // sin esperar a la red
   try { datos = await hoy(); } catch { datos = null; }
+  if (libre()) { clearInterval(reloj); return pintarLibre(); }
   pintarCuenta(); pintarJuegos();
   cargarRanking();
 }

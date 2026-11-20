@@ -5,7 +5,7 @@ import {
   crearPartida, lanzar, resumen, xAro, proyectar, motivoInvalido, nivelDe,
   DURACION_MS, LIMITES, SALIDA, R_BALON, R_ARO, ALTURA_ARO, ARO_TABLERO, TABLERO, PASO,
 } from "./motor-canasta.js";
-import { crearLiga, abrirEntrada, alCambiar, resultadoLiga, conectado, cartelPractica } from "./cuenta.js";
+import { crearLiga, abrirEntrada, alCambiar, resultadoLiga, conectado, cartelPractica, ligaTerminada, pantallaLibre } from "./cuenta.js";
 
 const $ = (id) => document.getElementById(id);
 const lienzo = $("lienzo");
@@ -612,6 +612,7 @@ const TEXTO_LIGA = {
   sin_cuenta: "De práctica: no cuenta para la liga.",
   sin_perfil: "Elige tu apodo para que cuente en la liga.",
   cerrada: "La semana está cerrada: hasta el lunes, de práctica.",
+  libre: "", // liga terminada: se juega sin más
   no_toca: "Hoy este juego no puntúa en la liga: es de práctica.",
   sin_intentos: "Ya has hecho tus 3 intentos de hoy. Sigue de práctica.",
   error: "La liga tarda en responder. Al pulsar «Jugar» lo volvemos a intentar y tu partida contará.",
@@ -633,11 +634,13 @@ function pintarLiga() {
     b.textContent = i.motivo === "sin_perfil" ? "Elegir mi apodo" : "Entrar para puntuar";
     // con cuenta pero sin conexión con la liga no se juega «de práctica» sin querer: primero se reintenta
     const reintentar = i.motivo === "error" && conectado();
-    if (!empezando && !empezarAlCargar) $("jugar").textContent = reintentar ? "Jugar" : "Jugar de práctica";
-    $("otra").textContent = reintentar ? "Otro intento" : "Otra de práctica";
+    const libre = i.motivo === "libre";
+    if (!empezando && !empezarAlCargar) $("jugar").textContent = reintentar || libre ? "Jugar" : "Jugar de práctica";
+    $("otra").textContent = reintentar ? "Otro intento" : libre ? "Otra partida" : "Otra de práctica";
   }
 }
-async function prepararLiga() { await liga.preparar(); pintarLiga(); }
+async function prepararLiga() { await liga.preparar(); pintarLiga(); if (liga.info?.motivo === "libre") pantallaLibre(); }
+if (ligaTerminada()) pantallaLibre();
 $("liga-entrar").addEventListener("click", async () => {
   if (await abrirEntrada({ motivo: "Para que tus partidas cuenten en el ranking." })) prepararLiga();
 });
@@ -677,7 +680,7 @@ async function empezar() {
   }
   $("jugar").textContent = "Jugar";
   partida = crearPartida(oficial ? semilla : semillaNueva());
-  cartelPractica(!oficial && conectado(), liga.info?.motivo === "sin_intentos" ? "De práctica · ya hiciste tus 3 intentos" : undefined);
+  cartelPractica(!oficial && conectado() && liga.info?.motivo !== "libre", liga.info?.motivo === "sin_intentos" ? "De práctica · ya hiciste tus 3 intentos" : undefined);
   vuelos = []; tiros = []; aroAnterior = null; fallosSeguidos = 0; redSacudida = -1e9; avisoDiez = false;
   if (tiroPendiente) { clearTimeout(tiroPendiente); tiroPendiente = null; }
   $("inicio").hidden = true; $("fin").hidden = true; $("volver").hidden = true;
