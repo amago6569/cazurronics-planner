@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dentroDelLimite } from "../../../../lib/freno";
-import { cierreSemana, finSemana, inicioSemana, jornadaDe, juegosDelDia, ligaAbierta, momentoJornada, sumarDias } from "../../../../lib/liga/calendario";
+import { cierreSemana, finSemana, inicioSemana, jornadaDe, juegosDelDia, ligaAbierta, momentoJornada, sumarDias, ULTIMA_SEMANA } from "../../../../lib/liga/calendario";
 import { comprobarCodigo } from "../../../../lib/liga/ganadores";
 import { cierreAlVisitar } from "../../../../lib/liga/cierre";
 import { limpiarCodigoPremio, premiosDeSemana } from "../../../../lib/liga/premios";
@@ -90,6 +90,10 @@ const ACCIONES = {
   async hoy(request, s) {
     cierreAlVisitar(s); // si la semana acaba de cerrar, los correos de los ganadores salen ya (en segundo plano)
     const u = await quien(request, s, false);
+    // Liga terminada: juegos libres, sin intentos ni premios (la web enseña todos los juegos para jugar sin más)
+    if (!ligaAbierta()) {
+      return responder({ abierta: false, libre: true, juegos: [], premios: null, conectado: Boolean(u), email: u?.email || null, perfil: u ? await s.perfil(u.id) : null });
+    }
     const dia = jornadaDe();
     const juegos = juegosDeHoy(dia);
     const inicio = inicioSemana(dia);
@@ -131,7 +135,7 @@ const ACCIONES = {
     const { juego } = await cuerpo(request);
     const j = JUEGOS[juego];
     if (!j) throw new ErrorLiga(400, "Ese juego no existe.");
-    if (!ligaAbierta()) throw new ErrorLiga(409, "La liga está cerrada ahora mismo.", "cerrada");
+    if (!ligaAbierta()) throw new ErrorLiga(409, "La liga ha terminado. Los juegos ya son libres: juega cuando quieras.", "cerrada");
     const dia = jornadaDe();
     if (!juegosDeHoy(dia).some((x) => x.id === j.id)) throw new ErrorLiga(409, "Este juego ya no puntúa: a las 12:00 cambiaron los juegos. Mira los de ahora en la liga.", "no_toca");
     frenar(await dentroDelLimite(request, "liga-empezar", 30, 600, u.id)); // por cuenta, no por IP (wifis y datos móviles la comparten)
@@ -178,7 +182,8 @@ const ACCIONES = {
   async ranking(request, s) {
     const de = new URL(request.url).searchParams.get("de") === "semana" ? "semana" : "dia";
     const u = await quien(request, s, false);
-    const dia = jornadaDe();
+    // con la liga terminada se queda el ranking final (el de la última semana), no uno vacío
+    const dia = ligaAbierta() ? jornadaDe() : finSemana(ULTIMA_SEMANA);
     const desde = de === "semana" ? inicioSemana(dia) : dia, hasta = de === "semana" ? finSemana(dia) : dia;
     const filas = await s.ranking(desde, hasta, LIMITE_RANKING, u?.id);
     return responder(

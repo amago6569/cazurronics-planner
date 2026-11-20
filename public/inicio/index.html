@@ -144,11 +144,15 @@ body { margin: 0; background: var(--noche); color: var(--crema); font-family: va
 <script>
 // La Liga Cazurra se abre sola a esta hora (la misma que APERTURA_LIGA en src/lib/liga/pase.js). Antes, cuenta atrás.
 const APERTURA_LIGA = Date.parse("2026-11-14T12:00:00+01:00");
+const FIN_LIGA = Date.parse("2026-11-21T12:00:00+01:00");
 const cerrada = (s) => s.abre && Date.now() < s.abre;
 const SECCIONES = [
   { nombre: "Planner",  completo: "Cazurronics Planner",        frase: "Dinos qué te apetece y te montamos el plan en León.", url: "/planner" },
   { nombre: "Despensa", completo: "La despensa de Cazurronics", frase: "Lo mejor de la tierra leonesa, del productor a tu mesa.", url: "/despensa" },
-  { nombre: "Juegos",   completo: "La Liga Cazurra",            frase: "La Liga Cazurra abre el sábado a las 12:00. ¿Te apuntas?", url: "/liga", abre: APERTURA_LIGA },
+  // La liga termina el sáb 21-11-2026 a las 12:00 (FIN_LIGA en src/lib/liga/calendario.js): luego, juegos libres
+  Date.now() < FIN_LIGA
+    ? { nombre: "Juegos", completo: "La Liga Cazurra", frase: "Última jornada: la Liga Cazurra cierra el sábado a las 12:00.", url: "/liga", abre: APERTURA_LIGA }
+    : { nombre: "Juegos", completo: "Juegos Cazurros", frase: "Minijuegos de León en 3D. Juega cuando quieras, sin límites.", url: "/liga" },
 ];
 const N = SECCIONES.length, PASO = 360 / N;
 const $ = (id) => document.getElementById(id);

@@ -211,19 +211,29 @@ describe("partidas", () => {
     expect(mia.json.filas.find((f) => f.yo).apodo).toBe("Manu");
   });
 
-  it("el sábado a las 12:00 cierra la semana y empieza otra sin hueco", async () => {
+  it("el sábado 21 a las 12:00 la liga termina: juegos libres y se queda el ranking final", async () => {
     vi.setSystemTime(new Date("2026-11-21T10:50:00Z")); // sábado 11:50 en Madrid: aún es la semana del 14
     const t = await jugadorConPerfil("n@x.es", "Nico");
     await jugar(t);
     let semana = await pedir("GET", "ranking", { query: "?de=semana" });
     expect(semana.json.desde).toBe("2026-11-14");
     expect(semana.json.filas).toHaveLength(1);
-    const t2 = await despuesDe(new Date("2026-11-21T11:00:00Z"), "n@x.es"); // 12:00: semana nueva
+    // una partida empezada a las 11:59 aún se guarda después de las 12:00
+    const tarde = await pedir("POST", "empezar", { token: t, cuerpo: { juego: "canasta" } });
+    expect(tarde.status).toBe(200);
+    const t2 = await despuesDe(new Date("2026-11-21T11:00:30Z"), "n@x.es"); // 12:00:30: liga terminada
+    const fin = await pedir("POST", "terminar", { token: t2, cuerpo: { partida: tarde.json.partida, datos: { tiros: jugarPartida(tarde.json.semilla, "bueno", 9).lista } } });
+    expect(fin.status).toBe(200);
     const hoy = await pedir("GET", "hoy", { token: t2 });
-    expect(hoy.json.semana).toMatchObject({ desde: "2026-11-21", hasta: "2026-11-27", cierre: "2026-11-28" });
-    expect(hoy.json.juegos.find((j) => j.id === "canasta").quedan).toBe(3);
+    expect(hoy.json).toMatchObject({ abierta: false, libre: true, juegos: [], premios: null, conectado: true });
+    expect(hoy.json.perfil.apodo).toBe("Nico");
+    expect((await pedir("POST", "empezar", { token: t2, cuerpo: { juego: "canasta" } })).status).toBe(409);
     semana = await pedir("GET", "ranking", { query: "?de=semana" });
-    expect(semana.json.filas).toHaveLength(0);
+    expect(semana.json).toMatchObject({ desde: "2026-11-14", hasta: "2026-11-20" });
+    expect(semana.json.filas).toHaveLength(1);
+    vi.setSystemTime(new Date("2026-12-05T12:00:00Z")); // semanas después: sigue igual
+    expect((await pedir("GET", "hoy")).json.libre).toBe(true);
+    expect((await pedir("GET", "ranking", { query: "?de=semana" })).json.desde).toBe("2026-11-14");
   });
 
   it("enseña los premios de la semana del 14 ya antes de empezar", async () => {
@@ -233,7 +243,7 @@ describe("partidas", () => {
     expect(hoy.json.premiosCierre).toBe("2026-11-21");
     expect(hoy.json.premios.map((p) => p.puesto)).toEqual([1, 2, 3, 4, 5]);
     expect(JSON.stringify(hoy.json.premios)).not.toMatch(/€|euro/i);
-    vi.setSystemTime(new Date("2026-12-05T12:00:00Z")); // una semana sin premios: no sale nada
+    vi.setSystemTime(new Date("2026-11-21T11:00:00Z")); // la liga ha terminado: ya no salen premios
     expect((await pedir("GET", "hoy")).json.premios).toBeNull();
   });
 

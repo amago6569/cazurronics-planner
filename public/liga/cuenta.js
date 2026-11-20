@@ -309,19 +309,39 @@ function mandarPendientes() {
 addEventListener("online", () => { if (pendientes().length) mandarPendientes(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && pendientes().length) mandarPendientes(); });
 
+// Fin de la liga (la misma hora que FIN_LIGA en src/lib/liga/calendario.js): desde aquí los juegos son libres.
+export const FIN_LIGA = Date.parse("2026-11-21T12:00:00+01:00");
+export function ligaTerminada(ahora = Date.now()) { return ahora >= FIN_LIGA; }
+
+// Pantalla de un juego con la liga terminada: fuera el ranking y la palabra «Liga» (igual en todos los juegos)
+export function pantallaLibre() {
+  const $ = (id) => document.getElementById(id);
+  const r = $("ver-ranking"); if (r) r.textContent = "Ver todos los juegos";
+  for (const e of document.querySelectorAll(".etiqueta")) e.textContent = e.textContent.replace(/^Liga Cazurra · /, "Juegos de León · ");
+  const v = $("volver");
+  if (v) {
+    v.setAttribute("aria-label", "Volver a los juegos");
+    const t = [...v.childNodes].find((n) => n.nodeType === 3 && n.nodeValue.trim() === "Liga");
+    if (t) t.nodeValue = "Juegos";
+  }
+  if (!document.title.includes("Juegos de León")) document.title = document.title.replace("Liga Cazurra", "Juegos de León");
+}
+
 export function crearLiga(juego) {
   let info = null, partida = null, guardando = null;
   return {
     get info() { return info; },
     async preparar() {
+      if (ligaTerminada()) { info = { oficial: false, motivo: "libre" }; return info; }
       if (!conectado()) { info = { oficial: false, motivo: "sin_cuenta" }; return info; }
       try {
         if (pendientes().length) await mandarPendientes();
         const h = await hoy();
         const j = h.juegos.find((x) => x.id === juego);
-        if (!h.conectado) info = { oficial: false, motivo: "sin_cuenta" };
+        if (h.libre) info = { oficial: false, motivo: "libre" };
+        else if (!h.conectado) info = { oficial: false, motivo: "sin_cuenta" };
         else if (!h.perfil) info = { oficial: false, motivo: "sin_perfil" };
-        else if (!h.abierta) info = { oficial: false, motivo: "cerrada" };
+        else if (h.libre || !h.abierta) info = { oficial: false, motivo: "libre" };
         else if (!j) info = { oficial: false, motivo: "no_toca" };
         else if (j.quedan <= 0) info = { oficial: false, motivo: "sin_intentos", mejor: j.mejor };
         else info = { oficial: true, quedan: j.quedan, usados: j.usados, mejor: j.mejor, apodo: h.perfil.apodo };

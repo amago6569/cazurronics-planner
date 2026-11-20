@@ -54,8 +54,14 @@ export function momentoJornada(dia) {
   return new Date(`${dia}T11:00:00Z`).toISOString();
 }
 
-// Ya no hay hueco entre semanas: al cerrar una a las 12:00 del sábado empieza la siguiente.
-export function ligaAbierta() { return true; }
+// Fin de la liga (regla de Alejandro, 20-11-2026): la primera semana cierra el sábado 21-11-2026 a las 12:00 y no
+// empieza otra «hasta nuevo aviso». Desde ese momento los juegos son libres: sin intentos, sin ranking y sin premios.
+// La misma hora va en public/liga/cuenta.js (FIN_LIGA) y en public/inicio/index.html. Para volver a abrirla: pon
+// aquí la fecha de la nueva liga (o null para que no acabe nunca) y añade sus premios en premios.js.
+export const FIN_LIGA = Date.parse("2026-11-21T12:00:00+01:00");
+export const ULTIMA_SEMANA = "2026-11-14"; // la semana que cierra en FIN_LIGA: su ranking es el final
+
+export function ligaAbierta(ahora = Date.now()) { return FIN_LIGA == null || ahora < FIN_LIGA; }
 
 // Días desde el sábado de la primera liga: sirve para rotar los juegos sin guardar nada.
 function numeroDeDia(dia) { return Math.round((Date.parse(`${dia}T12:00:00Z`) - Date.parse(`${PRIMERA_SEMANA}T12:00:00Z`)) / 86400000); }
