@@ -79,3 +79,56 @@ export function quitarNoPedidas(paradas, apetece) {
   let puedenIrse = Math.floor(paradas.length / 2);
   return paradas.filter((p) => !(ajena(p) && puedenIrse-- > 0));
 }
+
+// ============ CUÁNTOS SITIOS PIDE ============
+// «4 bares para salir a tomar algo» son 4 bares, no 1. La IA tendía a quedarse corta (el prompt decía "normalmente
+// 1 parada" para lo concreto) y, si nombraba dos bares que Google no conoce, los dos acababan en el mismo local y se
+// fusionaban. Aquí se lee el número y el tipo sin IA (0 €) para pedirlo claro y completar el plan si llega corto.
+const NUMEROS = { un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8 };
+export const MAX_PARADAS_PEDIDAS = 8;
+// [tipo de parada, cómo se dice en plural, regex del sustantivo]
+const CONTABLES = [
+  ["bar", "bares", /(?:bar(?:es)?|pubs?|tabernas?|garitos?|chigres?|sidrerias?|vinotecas?|cervecerias?|sitios? (?:para|de|donde) (?:tomar|beber|tapear|tapas|vinos?|canas?|copas?|cervezas?|picar)|sitios? de (?:tapas|vinos|canas|copas|tapeo))/],
+  ["restaurante", "restaurantes", /(?:restaurantes?|mesones?|asadores?|sitios? (?:para|de|donde) (?:comer|cenar))/],
+  ["cafeteria", "cafeterías", /(?:cafeterias?|sitios? (?:para|de) (?:tomar (?:un )?cafe|merendar|desayunar))/],
+  ["discoteca", "discotecas", /(?:discotecas?|sitios? (?:para|de) (?:bailar|fiesta))/],
+  ["museo", "museos", /museos?/],
+  ["monumento", "monumentos", /(?:monumentos?|iglesias?)/],
+];
+const CUANTOS = `(\\d{1,2}|un par de|par de|${Object.keys(NUMEROS).join("|")}|unos|unas|varios|varias|algunos|algunas)`;
+// Entre el número y el sitio solo caben adjetivos: «4 buenos bares» sí, «4 personas un bar» no
+const ADJETIVOS = "(?:(?:buen[oa]s|mejores|bonit[oa]s|barat[oa]s|tipic[oa]s|autentic[oa]s|chul[oa]s|guays?|distint[oa]s|diferentes|otr[oa]s|tranquil[oa]s|animad[oa]s)\\s+){0,2}";
+// Sin número pero en plural de ruta: «ruta de bares», «ir de tapas», «salir de vinos» = unos 3
+// y «salir a tomar algo» / «salir de cañas», que en León es ir de bar en bar
+const DE_RUTA = /\b(?:(?:ruta|ir|salir|irnos|vamos|noche|tarde) de (?:bares|tapas|vinos|canas|pinchos|tapeo|copas|potes)|(?:salir|irnos|ir) a (?:tomar algo|tomar unas? \w+|tapear|potear|picar algo))\b/;
+
+// { n, tipo, plural } o null si no pide un número de sitios del mismo tipo
+export function paradasPedidas(apetece) {
+  const t = ` ${quitarTildes(apetece).replace(/\s+/g, " ")} `;
+  for (const [tipo, plural, sustantivo] of CONTABLES) {
+    const m = t.match(new RegExp(`\\b${CUANTOS}\\s+${ADJETIVOS}${sustantivo.source}`));
+    if (!m) continue;
+    const palabra = m[1];
+    let n = /^\d+$/.test(palabra) ? Number(palabra) : /par de/.test(palabra) ? 2 : NUMEROS[palabra] ?? 3;
+    // «un bar» o «una cafetería» es lo de siempre: una parada; no hace falta forzar nada
+    if (n < 2) continue;
+    n = Math.min(MAX_PARADAS_PEDIDAS, n);
+    return { n, tipo, plural };
+  }
+  if (DE_RUTA.test(t)) return { n: 3, tipo: "bar", plural: "bares" };
+  return null;
+}
+
+// Tipos que cuentan como «bar» al contar las paradas (la IA a veces pone pub o taberna)
+const IGUALES = { bar: ["bar", "pub", "taberna", "sidreria", "sidrería"], cafeteria: ["cafeteria", "cafetería"] };
+export const tiposIguales = (tipo) => IGUALES[tipo] || [tipo];
+export const esDelTipo = (parada, tipo) => tiposIguales(tipo).map(quitarTildes).includes(quitarTildes(parada?.tipo));
+
+// «Qué hay hoy en León», «qué se hace este sábado», «eventos para hoy»: quiere la agenda del día, no un bar
+const PIDE_AGENDA = /\b(?:que hay|que se hace|que se cuece|que pasa|que hacer|que puedo hacer|que podemos hacer|que se celebra|eventos?|agenda|actividades|que planes)\b/;
+export function pideAgenda(apetece) {
+  const t = ` ${quitarTildes(apetece)} `;
+  if (!PIDE_AGENDA.test(t) || paradasPedidas(apetece)) return false;
+  // «qué conciertos hay» o «qué hay para comer» ya tienen tema: se tratan como siempre
+  return !TEMAS.some(([, re]) => re.test(t));
+}
