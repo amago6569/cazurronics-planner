@@ -19,6 +19,7 @@ import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
 import { esOficial } from "./fiables";
+import { fuenteAytoLeon } from "./fuenteAyto";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
 
@@ -301,7 +302,7 @@ export function definirTramos(desde = hoyEnLeon()) {
   ];
   const corto = sumarDias(desde, 3);
   const repaso = [{
-    id: "r", nombre: "Repaso de novedades (hoy y 3 días)",
+    id: "r", nombre: "Repaso de novedades (hoy y 3 días)", ayto: true,
     busquedas: ZONAS.map((z) => ({
       nombre: `Novedades · ${z.nombre}`, empleado: "ultima", zona: z.id,
       tema: `todo lo que se ha anunciado para hoy y los próximos 3 días (también lo publicado a última hora: conciertos, fiestas, mercadillos, ferias, actividades, deporte, rutas)`,
@@ -515,9 +516,9 @@ export async function barrerEventos({ tramo, respetarPausas = false } = {}) {
 // lo bueno y deja en la bandeja lo dudoso (el Verificador lo vuelve a mirar y lo sube). Lo que falla va a la cola
 // de la Repesca con el motivo en cristiano. Devuelve el parte con el mismo formato que un tramo.
 // firma: quién sale trabajando en la oficina (la Repesca hace búsquedas de otros)
-export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, encargos = {}, firma = null }) {
+export async function trabajarEn({ busquedas, jcyl, ayto = jcyl }, { desde, hasta, inicio, encargos = {}, firma = null }) {
   // Quién está trabajando ahora mismo (la oficina lo enseña en directo)
-  const enMarcha = firma ? [firma] : [...new Set([...busquedas.map((b) => b.empleado), ...(jcyl ? ["junta"] : [])].filter(Boolean))];
+  const enMarcha = firma ? [firma] : [...new Set([...busquedas.map((b) => b.empleado), ...(jcyl || ayto ? ["junta"] : [])].filter(Boolean))];
   if (enMarcha.length) await sinRomper(varios([["HSET", EN_CURSO, ...enMarcha.flatMap((e) => [e, new Date(inicio).toISOString()])], ["EXPIRE", EN_CURSO, 180]]), "en curso");
   const agenda = await eventosProximos().catch(() => []);
   const conEncargo = (b) => (encargos[b.empleado]?.length
@@ -525,6 +526,8 @@ export async function trabajarEn({ busquedas, jcyl }, { desde, hasta, inicio, en
     : b.extra);
   const tareas = [
     ...(jcyl ? [["Junta de Castilla y León (datos abiertos)", async () => ({ eventos: await fuenteJCyL(desde, hasta), dominios: new Set() })]] : []),
+    // La agenda del Ayuntamiento de León, leída directamente de su web (sin IA): Expojoven, fiestas, encendido navideño...
+    ...(ayto ? [["Ayuntamiento de León (agenda y eventos)", async () => ({ eventos: await fuenteAytoLeon(desde, hasta), dominios: new Set(["aytoleon.es"]) })]] : []),
     ...busquedas.map((b) => [b.nombre, () => fuenteBusqueda({ ...b, extra: conEncargo(b), conocidos: yaConocidos(agenda, b) }, b.msMax || 44000), b.empleado]),
   ];
   const resultados = await enTandas(tareas.map(([, f]) => f), TANDA);

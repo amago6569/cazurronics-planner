@@ -253,12 +253,15 @@ async function leerCatalogo() {
 }
 
 // Los mejores sitios reales dentro del radio: primero lo que gusta a la comunidad, luego lo que más sale en planes
-export async function sitiosComprobados(lat, lon, radio, max = 40) {
+// tipos: si pide «4 bares», primero los bares del radio (hasta 25) y luego el resto: así la IA tiene donde elegir
+export async function sitiosComprobados(lat, lon, radio, max = 40, tipos = null) {
   const lista = await leerCatalogo();
-  return lista
+  const dentro = lista
     .filter((s) => s.g > -2 && haversineKm(lat, lon, s.la, s.lo) <= Number(radio) * 1.1)
-    .sort((a, b) => b.g - a.g || b.v - a.v)
-    .slice(0, max);
+    .sort((a, b) => b.g - a.g || b.v - a.v);
+  if (!tipos?.length) return dentro.slice(0, max);
+  const delTipo = dentro.filter((s) => tipos.includes(String(s.t || "").toLowerCase())).slice(0, 25);
+  return [...delTipo, ...dentro.filter((s) => !delTipo.includes(s))].slice(0, max);
 }
 
 // Bloque de texto para el prompt (una línea corta por sitio, para gastar pocos tokens)
