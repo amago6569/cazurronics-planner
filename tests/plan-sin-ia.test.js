@@ -124,7 +124,8 @@ describe("tope de gasto del día", () => {
     vi.doUnmock("../src/lib/topeGasto");
   });
   it("el fondo para antes que los planes, y con el almacén caído no se gasta", async () => {
-    vi.doMock("../src/lib/almacen", () => ({ comando: vi.fn(async () => String(0.3 / 0.9 * 1e6)), recordar: (_k, _ms, leer) => leer() }));
+    // 0,20 € en el contador x1,5 = 0,30 € de verdad
+    vi.doMock("../src/lib/almacen", () => ({ comando: vi.fn(async () => String(0.2 / 0.9 * 1e6)), recordar: (_k, _ms, leer) => leer() }));
     const { dentroDelGastoDelDia } = await import("../src/lib/topeGasto");
     expect(await dentroDelGastoDelDia("barrido")).toBe(false); // 0,30 € ≥ 0,25 €
     expect(await dentroDelGastoDelDia("usuario")).toBe(true); // 0,30 € < 0,40 €

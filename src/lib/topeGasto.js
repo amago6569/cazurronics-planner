@@ -13,13 +13,16 @@ const numero = (v, porDefecto) => {
   const n = Number(String(v ?? "").replace(",", "."));
   return String(v ?? "").trim() !== "" && Number.isFinite(n) && n >= 0 ? n : porDefecto;
 };
+// El contador se queda corto: del 1 al 17-11-2026 marcó 8,29 € y Google facturó 12,61 € (x1,52). Hasta que el panel de gasto
+// cuadre con AI Studio, el tope compara con el contador x1,5 (GASTO_IA_AJUSTE en Vercel para cambiarlo)
+export const ajusteContador = () => numero(process.env.GASTO_IA_AJUSTE, 1.5) || 1;
 export const topeDiaEuros = () => numero(process.env.GASTO_IA_MAX_DIA, 0.4);
 export const topeFondoEuros = () => Math.min(topeDiaEuros(), numero(process.env.GASTO_FONDO_MAX_DIA, 0.25));
 
 // Lo que va de hoy, en euros. Se recuerda 20 s por instancia: un barrido de 10 búsquedas no lee 10 veces
 export function gastoDeHoyEuros() {
   const dia = hoyEnLeon();
-  return recordar(`tope-gasto:${dia}`, 20000, async () => ((Number(await comando(["GET", `ia:dia:${dia}`])) || 0) / 1e6) * EUROS_POR_DOLAR);
+  return recordar(`tope-gasto:${dia}`, 20000, async () => ((Number(await comando(["GET", `ia:dia:${dia}`])) || 0) / 1e6) * EUROS_POR_DOLAR * ajusteContador());
 }
 
 // Lo que corre solo, sin nadie esperando
