@@ -8,6 +8,7 @@
 import { aObjeto, comando, varios } from "./almacen";
 import { CLAVE_LLAMADAS_IA, EUROS_POR_DOLAR, claveDetalleIA, claveErroresIA, funcionDeTarea, hoyEnLeon } from "./estadisticas";
 import { ajusteContador, factorDelCuadre, topeDiaEuros } from "./topeGasto";
+import { claveGastoPruebas } from "./modoPruebas";
 
 export const CLAVE_RECARGAS = "ia:recargas";
 export const CLAVE_CUADRE = "ia:cuadre";
@@ -71,15 +72,18 @@ async function leerBase() {
   const fechas = fechasAtras(DIAS_SALDO);
   const res = await varios([
     ...fechas.map((f) => ["GET", `ia:dia:${f}`]),
+    ...fechas.map((f) => ["GET", claveGastoPruebas(f)]),
     ["LRANGE", CLAVE_LLAMADAS_IA, 0, 999],
     ["LRANGE", CLAVE_RECARGAS, 0, -1],
     ["GET", CLAVE_CUADRE],
     ["GET", CLAVE_FACTOR],
   ]);
-  const porDia = Object.fromEntries(fechas.map((f, i) => [f, Number(res[i]) || 0]));
-  const [llamadas, recargas, cuadre, factorGuardado] = res.slice(fechas.length);
+  // Lo que se paga cada día: la web más las pruebas de planes (que tienen su propio tope, pero salen del mismo saldo)
+  const pruebasPorDia = Object.fromEntries(fechas.map((f, i) => [f, Number(res[fechas.length + i]) || 0]));
+  const porDia = Object.fromEntries(fechas.map((f, i) => [f, (Number(res[i]) || 0) + pruebasPorDia[f]]));
+  const [llamadas, recargas, cuadre, factorGuardado] = res.slice(fechas.length * 2);
   return {
-    fechas, porDia,
+    fechas, porDia, pruebasPorDia,
     llamadas: (llamadas || []).map(json).filter((l) => l?.t),
     recargas: (recargas || []).map(json).filter((r) => r?.t && Number(r.euros) > 0),
     cuadre: json(cuadre),
@@ -93,7 +97,7 @@ const media = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0
 
 export async function leerPanelGasto() {
   const base = await leerBase();
-  const { porDia, llamadas, recargas, cuadre, factor } = base;
+  const { porDia, pruebasPorDia, llamadas, recargas, cuadre, factor } = base;
   const fechas = base.fechas.slice(-DIAS);
   const dias = fechas.map((f) => ({ fecha: f, euros: redondo(realDe(porDia[f], factor), 3) }));
   const hoy = dias.at(-1)?.euros || 0;
@@ -148,7 +152,7 @@ export async function leerPanelGasto() {
     exito: true,
     factor: { valor: redondo(factor, 2), origen: base.origen },
     saldo: saldo ? { ...saldo, diasQueQuedan: media7 > 0 ? Math.floor(saldo.euros / media7) : null } : null,
-    gasto: { hoy: redondo(hoy), ayer: redondo(completos.at(-1)?.euros), d7: redondo(suma(dias.slice(-7), "euros")), d30: redondo(suma(dias, "euros")), media7: redondo(media7, 3), tope: topeDiaEuros() },
+    gasto: { hoy: redondo(hoy), ayer: redondo(completos.at(-1)?.euros), d7: redondo(suma(dias.slice(-7), "euros")), d30: redondo(suma(dias, "euros")), media7: redondo(media7, 3), tope: topeDiaEuros(), pruebasHoy: redondo(realDe(pruebasPorDia[hoyEnLeon()] || 0, factor), 3) },
     dias,
     porFuncion: ordenar(porFuncion),
     periodoFuncion,

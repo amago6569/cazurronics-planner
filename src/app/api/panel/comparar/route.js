@@ -5,6 +5,7 @@ import { leerPeticionPlan } from "../../../../lib/planUtils";
 import { montarPlan } from "../../../../lib/montarPlan";
 import { mensajeParaUsuario } from "../../../../lib/gemini";
 import { medirGoogle } from "../../../../lib/contadorGoogle";
+import { conPresupuestoDePruebas } from "../../../../lib/modoPruebas";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -25,7 +26,8 @@ export async function POST(request) {
   const modo = MODOS[body?.modo] ? body.modo : "google";
   const segundos = () => Math.round((Date.now() - inicio) / 100) / 10;
   try {
-    const { resultado, google } = await medirGoogle(() => montarPlan(peticion, { ...MODOS[modo], inicio }));
+    // Con su propio presupuesto de IA (lib/modoPruebas.js): medir no se come los 0,40 € del día de la web
+    const { resultado, google } = await medirGoogle(() => conPresupuestoDePruebas(() => montarPlan(peticion, { ...MODOS[modo], inicio })));
     return NextResponse.json({ ...resultado, modo, segundos: segundos(), google }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[comparar]", e?.message || e);
