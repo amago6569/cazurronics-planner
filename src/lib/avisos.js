@@ -1,6 +1,7 @@
 // ============ AVISOS QUE NO ESPERAN AL PARTE DE LA MAÑANA ============
-// La mayoría de fallos los arregla la Repesca y van en el parte diario (y solo si se repiten dos días). Estos tres no:
+// La mayoría de fallos los arregla la Repesca y van en el parte diario (y solo si se repiten dos días). Estos no:
 //  · Google rechaza la clave de la IA (el barrido entero se para).
+//  · Se acabó el saldo prepago de Gemini (402): los planes salen sin IA hasta que se recargue.
 //  · Google ha retirado un modelo del barrido.
 //  · La IA pasa de 1 € en un día.
 // Cada uno te llega por Telegram como mucho una vez al día. Se mira al acabar cada turno del barrido y en las rondas
@@ -15,6 +16,7 @@ export function avisosPendientes({ barrido, gasto }) {
   const tipos = new Set(Object.values(barrido?.fuentes || {}).filter((f) => !f.ok).map((f) => f.tipo));
   const avisos = [];
   if (tipos.has("clave")) avisos.push({ tipo: "clave", texto: "🔑 Google rechaza la clave de la IA y el barrido no puede buscar. Hay que cambiar GEMINI_API_KEY en Vercel (Settings → Environment Variables). La clave nueva se saca en aistudio.google.com/apikey." });
+  if (tipos.has("saldo")) avisos.push({ tipo: "saldo", texto: "💳 Se acabó el saldo de la IA en Google. Los planes siguen saliendo, pero sin IA, y el barrido está parado. Recarga en aistudio.google.com → Billing." });
   if (tipos.has("modelo")) avisos.push({ tipo: "modelo", texto: "🧩 Google ha retirado uno de los modelos de IA del barrido. Si el otro también cae, el barrido se para: dímelo y lo cambio (ya no quedan más 2.x con búsqueda gratis)." });
   if (gasto?.hoy > LIMITE_DIA_EUROS) avisos.push({ tipo: "gasto", texto: `💸 La IA lleva ${euros(gasto.hoy)} hoy (el aviso salta a partir de ${euros(LIMITE_DIA_EUROS)}). Mira la tarjeta de gasto en /panel/oficina.` });
   return avisos;

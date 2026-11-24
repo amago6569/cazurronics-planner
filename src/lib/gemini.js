@@ -5,6 +5,7 @@
 
 import { enSegundoPlano } from "./almacen";
 import { registrarGastoIA } from "./estadisticas";
+import { dentroDelGastoDelDia } from "./topeGasto";
 
 // Los 2.0 (gemini-2.0-flash y -lite) los apagó Google el 1-6-2026: devolvían 404 y solo hacían perder tiempo.
 // De los 2.x solo quedan los 2.5 (sin fecha de cierre, pero Google ya no los da a cuentas nuevas).
@@ -16,9 +17,9 @@ export const MODELOS = {
   // Solo modelos 2.x: en ellos las búsquedas en Google entran en las 1.500 peticiones gratis al día (cupo compartido
   // entre 2.5 Flash y 2.5 Flash-Lite). Los 3.x (como gemini-flash-lite-latest) cobran CADA búsqueda; cuando el 2.5 se
   // saturaba (429) el barrido saltaba a uno 3.x y eso fue la mayor parte de la factura. De reserva, 2.5 Flash sin pensar:
-  // la búsqueda sigue gratis y solo cuesta más el texto (≤0,02 $ por búsqueda frente a ≤0,004 $). Si los dos fallan,
-  // ese tramo se salta y se repite en la siguiente pasada.
-  barrido: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
+  // la búsqueda sigue gratis, pero el texto cuesta ~6 veces más: en noviembre de 2026 ese salto fue 4,28 € de 12,61 €.
+  // Desde el 24-11-2026 no hay reserva: si el Flash-Lite falla, ese tramo se salta y lo repite la Repesca.
+  barrido: ["gemini-2.5-flash-lite"],
   // El buscador de la Despensa: sin Google, solo elige entre tiendas ya comprobadas. Basta un modelo barato (~0,0007 $ por búsqueda).
   despensa: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
   // El asesor de Telegram: sin Google, solo lee las cifras que le pasamos (~0,0005 $ por pregunta).
@@ -74,6 +75,13 @@ export function medirUso(modelo, datos) {
 // primero se comía todo el minuto y el plan B nunca llegaba a probarse)
 // sistema: instrucción de sistema (la que la IA no debe saltarse por nada que diga el usuario). Opcional.
 export async function llamarGemini(prompt, { para = "usuario", tarea = para, temperatura = 0.2, google = true, json = false, msMax = 50000, msPorModelo = 0, maxSalida, sistema } = {}) {
+  // Tope de gasto del día (lib/topeGasto.js): pasado el tope no se llama a Google. El plan sale sin IA y el barrido se repite otro día
+  if (!(await dentroDelGastoDelDia(para))) {
+    const err = new ErrorIA("Tope de gasto del día", 402);
+    err.tope = true;
+    err.fallos = [`${para}: tope de gasto del día`];
+    throw err;
+  }
   const fallos = [];
   const fin = Date.now() + msMax;
   for (const modelo of modelosPara(para)) {
@@ -135,6 +143,8 @@ export function motivoClaro(err) {
   const t = detalle.toLowerCase();
   const codigo = (n) => new RegExp(`: ${n}\\b`).test(detalle);
   const salida = (tipo, texto) => ({ tipo, texto, detalle });
+  if (/tope de gasto del dia|tope de gasto del día/.test(t)) return salida("tope", "Hoy se llegó al tope de gasto de la IA. La Repesca lo repite otro día.");
+  if (codigo(402) || /prepayment|credits are depleted/.test(t)) return salida("saldo", "Se acabó el saldo de la IA en Google (AI Studio → Billing). Hasta que se recargue, los planes salen sin IA.");
   if (codigo(429) && /per[ _-]?day|daily/.test(t)) return salida("cupo", "Se acabó el cupo diario de Google. La Repesca lo repite cuando se renueve.");
   if (codigo(429)) return salida("saturado", "Google tenía demasiadas búsquedas a la vez. La Repesca lo vuelve a intentar en unas horas.");
   if (/tardó demasiado|timeout|aborted/.test(t)) return salida("lento", "Google tardó demasiado en contestar. La Repesca lo vuelve a intentar con más calma.");
@@ -149,7 +159,8 @@ export function motivoClaro(err) {
 
 // Lo que ve la persona cuando algo falla al montar o retocar un plan (nunca el error técnico)
 export function mensajeParaUsuario(error) {
-  if (error instanceof ErrorIA && (error.estado === 402 || error.estado === 403)) return "Estamos recargando la IA 🦁 Vuelve en un ratito y tendrás tu plan.";
+  // Sin saldo, clave rechazada o tope del día: los planes ya salen sin IA (lib/planSinIA.js); esto solo lo ve quien retoca
+  if (error instanceof ErrorIA && (error.estado === 402 || error.estado === 403)) return "Ahora mismo no podemos retocar el plan 🦁 Tu plan sigue aquí; prueba a retocarlo más tarde.";
   if (error instanceof ErrorIA && error.estado === 429) return "Hay muchísima gente montando planes ahora mismo 🦁 Prueba otra vez en un minuto.";
   if (error instanceof SyntaxError) return "La IA ha devuelto un plan a medias. Dale otra vez, que ahora sale.";
   return "La IA no ha respondido a tiempo. Prueba otra vez en unos segundos.";
