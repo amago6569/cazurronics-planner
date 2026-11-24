@@ -61,10 +61,12 @@ function mismoLugar(a, b) {
 // ¿Son el mismo evento? (se compara dentro del mismo día)
 export function mismoEvento(a, b) {
   if (!a || !b) return false;
-  // El "mercado semanal" de Astorga no es el de La Bañeza: si los dos dicen dónde son y es en zonas distintas, son distintos
-  const conSitio = (e) => Boolean(e.localidad) || e.lat != null;
-  if (conSitio(a) && conSitio(b) && zonaDe(a) !== zonaDe(b)) return false;
+  // El "mercado semanal" de Astorga no es el de La Bañeza: si los dos dicen dónde son y es en zonas distintas, son distintos.
+  // Con el mismo pueblo escrito no se mira la zona: un pueblo que no está en la lista toma la zona de la búsqueda que lo
+  // trajo, y las «Fiestas de Santa Bárbara» de Matarrosa del Sil salían dos veces (una del Bierzo y otra de Laciana)
   const la = normalizar(a.localidad).trim(), lb = normalizar(b.localidad).trim();
+  const conSitio = (e) => Boolean(e.localidad) || e.lat != null;
+  if (!(la && la === lb) && conSitio(a) && conSitio(b) && zonaDe(a) !== zonaDe(b)) return false;
   if (la && lb && !la.includes(lb) && !lb.includes(la)) return false; // pueblos distintos
 
   const pa = new Set(palabras(a.titulo)), pb = new Set(palabras(b.titulo));

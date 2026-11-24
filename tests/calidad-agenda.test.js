@@ -111,6 +111,13 @@ describe("repetidos en la agenda", () => {
     expect(deduplicar([a, b, { ...a, categoria: "otro" }])).toHaveLength(1);
   });
 
+  it("mismo pueblo, aunque cada copia venga de la búsqueda de una zona distinta", () => {
+    const a = { titulo: "Fiestas de Santa Bárbara", localidad: "Matarrosa del Sil", zonaBusqueda: "bierzo", fecha: "2030-12-04" };
+    const b = { ...a, zonaBusqueda: "laciana", fechaFin: "2030-12-06" };
+    expect(mismoEvento(a, b)).toBe(true);
+    expect(mismoEvento({ titulo: "Mercado semanal", localidad: "Astorga" }, { titulo: "Mercado semanal", localidad: "La Bañeza" })).toBe(false);
+  });
+
   it("pero un concierto y un mercado en la misma plaza siguen siendo distintos", () => {
     expect(mismoEvento({ titulo: "Concierto en la Plaza Mayor", localidad: "León" }, { titulo: "Mercado de la Plaza Mayor", localidad: "León" })).toBe(false);
     expect(mismoEvento({ titulo: "Pabellón Retro", localidad: "León" }, { titulo: "Pabellón Retro", localidad: "Ponferrada" })).toBe(false);
