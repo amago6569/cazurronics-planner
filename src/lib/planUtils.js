@@ -111,12 +111,15 @@ export function puntuarCandidato(candidato, tipo, lat, lon, priceLevelObjetivo, 
   return (rating / 5) * 0.4 + popularidad * 0.15 + encajePresupuesto * 0.25 + distanciaNormalizada * 0.2;
 }
 
-// Recorta el itinerario quitando las paradas más caras hasta caber en el presupuesto TOTAL
-export function ajustarAlPresupuesto(paradas, presupuestoMax) {
+// Recorta el itinerario quitando las paradas más caras hasta caber en el presupuesto TOTAL.
+// minimo: si ha pedido un número de sitios («4 bares»), no se baja de ahí aunque el total se pase un poco:
+// es lo que ha pedido, y la IA ya conoce el presupuesto.
+export function ajustarAlPresupuesto(paradas, presupuestoMax, minimo = 1) {
   let lista = [...paradas];
   let total = lista.reduce((suma, p) => suma + parsePrecio(p.precio), 0);
+  const suelo = Math.max(1, Number(minimo) || 1);
 
-  while (total > Number(presupuestoMax) && lista.length > 1) {
+  while (total > Number(presupuestoMax) && lista.length > suelo) {
     let indiceMasCaro = 0;
     let precioMasCaro = -1;
     lista.forEach((p, i) => {
@@ -130,7 +133,7 @@ export function ajustarAlPresupuesto(paradas, presupuestoMax) {
     lista.splice(indiceMasCaro, 1);
   }
 
-  if (total > Number(presupuestoMax)) return [];
+  if (total > Number(presupuestoMax) && suelo === 1) return [];
   return lista;
 }
 
@@ -446,7 +449,7 @@ const MIRAR_HORARIO = ['bar', 'restaurante', 'discoteca', 'cafeteria', 'cafeter�
 // Devuelve la parada enriquecida, o null si debe descartarse (bar/restaurante/discoteca sin ficha real).
 const TIPOS_DE_COMER = ['restaurant', 'bar', 'cafe', 'food', 'meal_takeaway', 'meal_delivery', 'bakery', 'night_club'];
 export async function enriquecerParada(paradaOriginal, contexto) {
-  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite, fuentes, fecha = null } = contexto;
+  const { lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey, limite, fuentes, fecha = null, excluir = null } = contexto;
   let parada = { ...paradaOriginal };
   parada.precio = limpiarPrecio(parada.precio);
 
@@ -491,6 +494,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       const candidatosEnZona = dataSearch.results.filter(r => {
         // Cerrado para siempre o «cerrado temporalmente» (vacaciones, obras, temporada) en Google: fuera
         if (!r.geometry || r.business_status === 'CLOSED_PERMANENTLY' || r.business_status === 'CLOSED_TEMPORARILY') return false;
+        // Un local que ya está en el plan no vale para otra parada: «4 bares» son 4 bares distintos
+        if (excluir?.has(r.place_id)) return false;
         // "Restaurante en Vegacervera" no puede acabar en las Hoces de Vegacervera: donde se come, tiene que ser de comer
         if (paraComer && r.types?.length && !r.types.some((t) => TIPOS_DE_COMER.includes(t))) return false;
         // Y al revés: "Ruta por Boñar" no se queda con los datos del Bar Boñar ni de un hostal
@@ -621,6 +626,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // Solo con la posición exacta de Google Places: con un punto aproximado (eventos, rutas, el centro de la zona) la vista
   // enseñaba cualquier otra cosa. Consejo de asesores del 17-11-2026: arreglarla y, donde no hay garantía, no enseñarla.
   const [foto, streetView] = await Promise.all([buscarFoto(), objetivo && !alAireLibre ? obtenerStreetView(parada.lat, parada.lon, limite) : null]);
+
+  // Una parada que llega sin descripción (las que se añaden para completar «4 bares») lleva la ficha propia
+  if (!String(parada.descripcion || '').trim()) parada.descripcion = descripcionReal(objetivo, parada.tipo, nombreZona);
 
   parada.fotoOficial = foto || "https://images.unsplash.com/photo-1543785734-4b6e564642f8?auto=format&fit=crop&w=800&q=80";
   parada.streetView = streetView;

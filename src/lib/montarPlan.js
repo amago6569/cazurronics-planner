@@ -12,11 +12,12 @@
 import { llamarGemini, extraerJSON } from './gemini';
 import { sinRomper } from './almacen';
 import { REGLA_DATOS, textoParaPrompt } from './blindaje';
-import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm } from './planUtils';
+import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm, TIPOS_CON_FICHA_OBLIGATORIA } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
-import { deduplicar, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
-import { filtrarMasEseDia, quitarNoPedidas } from './intencion';
+import { deduplicar, esDeVariosDias, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
+import { esDelTipo, filtrarMasEseDia, paradasPedidas, pideAgenda, quitarNoPedidas, tiposIguales } from './intencion';
+import { seParecen } from './nombres';
 import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './provincia';
 import { dentroDelTopeDiario } from './freno';
 import { agendaParaRutas, parajesParaPrompt, rutasParaPrompt } from './rutas';
@@ -47,7 +48,17 @@ export function soloComerYBeber(apetece) {
   return new RegExp(COMER_BEBER.source).test(t) && !OTRA_COSA.test(t.replace(COMER_BEBER, ' '));
 }
 
-// Plan para hoy: fuera lo que empezó hace más de una hora (y no dura varios días) o ya ha terminado
+// Lo que dura horas aunque la agenda solo dé la de apertura: «Expojoven 10:00» sigue abierta a las 16:00.
+// Antes se trataba como un concierto (fuera una hora después de empezar) y desaparecía del plan a media mañana.
+const DURA_HORAS = /\b(?:expo|feria|ferias|festival|jornadas?|mercad|muestra|exposicion|exposiciones|congreso|salon|encuentro|certamen|campeonato|torneo|magosto|fiestas?|romeria|verbena|semana|dia de|dia del|mercadillo|rastro|parque infantil|belen|nacimiento|iluminacion|on ice|pista de hielo)/;
+const CATEGORIA_LARGA = /^(?:feria|festival|exposicion|mercado|mercadillo|gastronomia|fiesta)$/;
+const sinTildesMin = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function duraHoras(e) {
+  return CATEGORIA_LARGA.test(sinTildesMin(e?.categoria)) || DURA_HORAS.test(sinTildesMin(e?.titulo));
+}
+
+// Plan para hoy: fuera lo que empezó hace más de una hora (y no dura varios días) o ya ha terminado.
+// Una feria, una exposición o una fiesta sin hora de cierre se da por abierta hasta las 21:00 (o 3 h si empieza tarde).
 export function quitarPasados(agenda, fecha, ahora = new Date()) {
   const hoy = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(ahora);
   if (fecha !== hoy) return agenda;
@@ -60,6 +71,7 @@ export function quitarPasados(agenda, fecha, ahora = new Date()) {
     }
     const { min, fin } = leerHora(e?.hora);
     if (fin != null) return fin > yaSon;
+    if (min != null && duraHoras(e)) return Math.max(21 * 60, min + 180) > yaSon;
     return min == null || min + 60 > yaSon;
   });
 }
@@ -77,6 +89,116 @@ export function avisoCercano({ apetece, radio, lat, lon, plan }) {
 export const MENSAJE_GOOGLE_NO_RESPONDE = 'Ahora mismo no podemos comprobar los sitios 🦁 Prueba otra vez en un rato.';
 
 export const mensajeSinNadaEnProvincia = (apetece) => `No hemos encontrado «${String(apetece || 'lo que buscas').trim().slice(0, 60) || 'lo que buscas'}» en toda la provincia ese día 🦁 Prueba con otra fecha o pídelo con menos detalle.`;
+
+// ---------- Cuántos sitios y qué hay hoy ----------
+const DE_RUTA = new Set(['bar', 'discoteca']);
+const PRECIO_TIPICO = { bar: '2-4€', cafeteria: '2-4€', discoteca: '8-12€', restaurante: '15-25€', museo: '3-6€', monumento: 'Gratis' };
+// Lo que se le dice a la IA cuando pide un número de sitios. Manda sobre «normalmente 1 parada».
+export function bloquePedido(pedido) {
+  if (!pedido) return '';
+  const { n, tipo, plural } = pedido;
+  const comoRuta = DE_RUTA.has(tipo)
+    ? `en orden de ruta, a poca distancia andando unos de otros (5-15 min), unos 45-60 min en cada uno y la primera a su hora natural (bares desde las 19:30 si no dice otra hora)${tipo === 'bar' ? '. "precio" de cada bar: una consumición con tapa (2-4€), no una comida' : ''}`
+    : 'como opciones para elegir, a la misma hora natural (comer 14:00, cenar 21:00, café 17:00), de zonas o estilos distintos';
+  return `- CUÁNTOS (manda sobre todo lo demás): pide ${n} ${plural}. Devuelve EXACTAMENTE ${n} paradas de tipo "${tipo}", cada una un local real DISTINTO con su nombre propio (elige primero entre los SITIOS REALES COMPROBADOS de ese tipo), ${comoRuta}. Si además pide otra cosa (cenar, un concierto...), añade esa parada aparte. Nunca devuelvas menos de ${n} ${plural}.`;
+}
+export const BLOQUE_AGENDA = `- PIDE LA AGENDA DEL DÍA ("qué hay", "qué hacer", "eventos"): devuelve entre 4 y 6 paradas, todas de la AGENDA VERIFICADA, con su hora real y su "fuente". Primero lo que solo pasa ese día y lo más grande (ferias, festivales, conciertos, teatro, fiestas, partidos), después talleres y exposiciones; visitas a museos o monumentos que se hacen cualquier día, solo si falta. Variedad de tipos y de horas. Sin bares ni restaurantes, salvo que los pida.`;
+
+// «Más cosas ese día»: primero lo que solo pasa ese día (conciertos, ferias, fiestas...) y luego lo que dura semanas
+// (exposiciones, visitas). Antes iba por hora y lo de «todo el día» llenaba los 12 huecos: el concierto de la noche no salía.
+export function elegirMasEseDia(lista, max = 12) {
+  const unicos = lista.filter((e) => !esDeVariosDias(e) && !/^visita/i.test(String(e?.categoria || '')));
+  const resto = lista.filter((e) => !unicos.includes(e));
+  return ordenarPorHora([...unicos, ...resto].slice(0, max));
+}
+
+const enriquecerSeguro = (p, contexto) => enriquecerParada(p, contexto).catch((e) => {
+  console.error('[plan] parada', e?.message || e);
+  return { parada: null, problemaConfigPlaces: null };
+});
+const esDeComerOBeber = (tipo) => TIPOS_CON_FICHA_OBLIGATORIA.includes(String(tipo || '').toLowerCase());
+
+// Si dos paradas de comer o beber acaban en el mismo local de Google, la segunda se busca otra vez sin ese local.
+// Las búsquedas de Places están en caché (72 h): solo cuesta la ficha del local nuevo.
+export async function separarRepetidos(enriquecidas, originales, contexto, enriquecer = enriquecerSeguro) {
+  const usados = new Set();
+  for (let i = 0; i < enriquecidas.length; i++) {
+    const id = enriquecidas[i]?.parada?.placeId;
+    if (!id) continue;
+    if (!usados.has(id)) { usados.add(id); continue; }
+    if (!esDeComerOBeber(originales[i]?.tipo) || Date.now() > contexto.limite - 4000) continue; // lo quita deduplicar
+    const otra = await enriquecer(originales[i], { ...contexto, excluir: new Set(usados) });
+    enriquecidas[i] = otra?.parada?.placeId && !usados.has(otra.parada.placeId) ? otra : { parada: null, problemaConfigPlaces: otra?.problemaConfigPlaces || null };
+    if (enriquecidas[i].parada?.placeId) usados.add(enriquecidas[i].parada.placeId);
+  }
+}
+
+const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const HORA_NATURAL = { bar: 20 * 60, discoteca: 23 * 60 + 30, restaurante: 14 * 60, cafeteria: 17 * 60, museo: 11 * 60, monumento: 11 * 60 };
+const BUSQUEDAS_DE_RESERVA = {
+  bar: ['Bar de tapas', 'Bar de vinos', 'Cervecería', 'Taberna', 'Bar', 'Pub'],
+  restaurante: ['Restaurante', 'Mesón', 'Asador', 'Restaurante de cocina leonesa'],
+  cafeteria: ['Cafetería', 'Café', 'Pastelería cafetería'],
+  discoteca: ['Discoteca', 'Pub de copas'],
+  museo: ['Museo'],
+  monumento: ['Monumento'],
+};
+function andando(a, b) {
+  const km = haversineKm(Number(a.lat), Number(a.lon), Number(b.lat), Number(b.lon));
+  if (!Number.isFinite(km)) return '';
+  return km <= 2.5 ? `${Math.max(2, Math.round((km / 4.5) * 60))} min andando desde la parada anterior` : `${Math.round(km)} km en coche desde la parada anterior`;
+}
+
+// Completa el plan hasta los N sitios pedidos: primero locales ya comprobados del catálogo (cerca del último), luego
+// búsquedas de reserva en Google Maps de la zona («Bar de tapas en Boñar»). Cada uno pasa por la misma comprobación
+// (ficha real, abierto ese día, en la provincia) y nunca repite un local. Solo se gasta Places si la IA se quedó corta.
+export async function completarPedido(ruta, pedido, { sitios, contexto, fecha, ahora = new Date() }, enriquecer = enriquecerSeguro) {
+  const delTipo = () => ruta.filter((p) => esDelTipo(p, pedido.tipo));
+  let faltan = pedido.n - delTipo().length;
+  if (faltan <= 0) return 0;
+  const usados = new Set(ruta.map((p) => p.placeId).filter(Boolean));
+  const ultimo = delTipo().at(-1);
+  const [la, lo] = ultimo ? [Number(ultimo.lat), Number(ultimo.lon)] : [Number(contexto.lat), Number(contexto.lon)];
+  const tipos = tiposIguales(pedido.tipo);
+  const delCatalogo = (sitios || [])
+    .filter((s) => tipos.includes(String(s.t || '').toLowerCase()) && !ruta.some((p) => seParecen(p.titulo, s.n) || seParecen(p.nombreGoogle || '', s.n)))
+    .sort((a, b) => haversineKm(la, lo, a.la, a.lo) - haversineKm(la, lo, b.la, b.lo))
+    .map((s) => ({ titulo: s.n, tipo: pedido.tipo, precio: s.p || PRECIO_TIPICO[pedido.tipo] || null, lat: s.la, lon: s.lo, descripcion: '' }));
+  const zona = contexto.nombreZona || 'León';
+  const reserva = (BUSQUEDAS_DE_RESERVA[pedido.tipo] || ['Bar']).map((q) => ({ titulo: `${q} en ${zona}`, tipo: pedido.tipo, precio: PRECIO_TIPICO[pedido.tipo] || null, descripcion: '' }));
+  const candidatos = [...delCatalogo.slice(0, 8), ...reserva];
+
+  // La hora: detrás del último del mismo tipo (en ruta) o la misma (opciones). Si es para hoy, nunca antes de ahora
+  const hoy = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(ahora);
+  const [h, m] = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ahora).split(':').map(Number);
+  const yaSon = fecha === hoy ? Math.ceil((h * 60 + m + 30) / 15) * 15 : 0;
+  const enRuta = DE_RUTA.has(pedido.tipo);
+  let hora = leerHora(ultimo?.hora).min;
+  hora = hora == null ? Math.max(HORA_NATURAL[pedido.tipo] ?? 20 * 60, yaSon) : enRuta ? hora + 50 : hora;
+
+  let añadidas = 0, i = 0;
+  while (faltan > 0 && i < candidatos.length && Date.now() < contexto.limite - 4000) {
+    const tanda = candidatos.slice(i, i + faltan);
+    i += tanda.length;
+    // Se prueban en tanda (a la vez); si dos caen en el mismo local, el segundo no entra y se tira del siguiente candidato
+    const hechas = await Promise.all(tanda.map((p) => enriquecer({ ...p, hora: hhmm(Math.min(hora, 24 * 60 - 1)) }, { ...contexto, excluir: new Set(usados) })));
+    for (const r of hechas) {
+      const p = r?.parada;
+      if (!p || faltan <= 0 || !enProvinciaLeon(p.lat, p.lon)) continue;
+      if (p.placeId && usados.has(p.placeId)) continue;
+      if (ruta.some((x) => seParecen(x.titulo, p.titulo))) continue;
+      if (p.placeId) usados.add(p.placeId);
+      const anterior = delTipo().at(-1);
+      p.hora = hhmm(Math.min(hora, 24 * 60 - 1));
+      if (anterior && enRuta) p.transporte = andando(anterior, p);
+      ruta.push(p);
+      añadidas++;
+      faltan--;
+      if (enRuta) hora += 50;
+    }
+  }
+  return añadidas;
+}
 
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso, aviso? } o { exito: false, mensaje, vacio? }
 export async function montarPlan(peticionOriginal, opciones = {}) {
@@ -106,6 +228,9 @@ async function montarEnZona(peticion, opciones, inicio, msIA) {
 
 async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000, ampliado = false } = {}) {
   const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
+  // «4 bares» = 4 bares; «qué hay hoy» = la agenda del día. Se lee sin IA (lib/intencion.js)
+  const pedido = paradasPedidas(apetece);
+  const agendaPedida = pideAgenda(apetece);
   const fuera = fueraDeLeon({ lat, lon, texto: apetece });
   if (fuera) return { exito: false, mensaje: fuera };
   const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GEMINI_API_KEY;
@@ -120,14 +245,14 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     sinRomper(eventosDelDia(fecha, { lat, lon, radio }), 'eventos'),
     ampliado || soloComerYBeber(apetece) ? null : sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
     sinRomper(preferenciasComunidad(lat, lon, radio), 'preferencias'),
-    conGoogle ? null : sinRomper(sitiosComprobados(lat, lon, radio), 'sitios comprobados'),
+    conGoogle && !pedido ? null : sinRomper(sitiosComprobados(lat, lon, radio, 40, pedido ? tiposIguales(pedido.tipo) : null), 'sitios comprobados'),
   ]);
   const previsionTiempo = tiempo?.texto || null; // lo que ve la persona; lo de "día malo" es solo para la IA
 
   // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
   // Y si el plan es para hoy, nada que ya haya empezado hace rato o terminado
   const agendaDelDia = quitarPasados(unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha)), fecha);
-  const bloqueAgenda = eventosParaPrompt(agendaParaRutas(agendaDelDia, apetece));
+  const bloqueAgenda = eventosParaPrompt(agendaParaRutas(agendaDelDia, apetece), agendaPedida ? 40 : 30);
   const bloqueComunidad = [
     prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
     prefs?.evitar?.length ? `EVITA estos sitios (malas experiencias reales de usuarios): ${prefs.evitar.join(', ')}.` : '',
@@ -154,12 +279,14 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
       ${bloqueHoy}
       ${bloqueTiempo}
       ${bloqueAgenda}
-      ${conGoogle ? '' : sitiosParaPrompt(sitios)}
+      ${conGoogle && !pedido ? '' : sitiosParaPrompt(sitios)}
       ${rutasParaPrompt(apetece, lat, lon, radio)}
       ${soloComerYBeber(apetece) ? '' : parajesParaPrompt(lat, lon, radio)}
       ${bloqueComunidad}
       ALCANCE (lo más importante): dale a la persona EXACTAMENTE lo que pide, ni más ni menos.
-      - Si pide algo CONCRETO (por ejemplo "una charla", "un concierto", "dónde ver el partido", "un sitio para comer cocido"), devuelve SOLO eso: normalmente 1 parada, y como mucho 2 o 3 si son opciones del mismo tipo a distintas horas. NO añadas comidas, copas, paseos ni visitas que no ha pedido.
+      ${bloquePedido(pedido)}
+      ${agendaPedida ? BLOQUE_AGENDA : ''}
+      - Si pide algo CONCRETO sin decir cuántos (por ejemplo "una charla", "un concierto", "dónde ver el partido", "un sitio para comer cocido"), devuelve SOLO eso: normalmente 1 parada, y como mucho 2 o 3 si son opciones del mismo tipo a distintas horas. NO añadas comidas, copas, paseos ni visitas que no ha pedido.
       - Si pide varias cosas (por ejemplo "comer y luego salir de fiesta"), una parada por cada cosa pedida, en ese orden.
       - Solo si pide un plan abierto SIN tema concreto ("un plan", "qué hacer", "sorpréndeme", "pasar el día") monta un plan completo de varias paradas. Si menciona un tema concreto, manda el tema aunque diga "plan" (por ejemplo "un plan con charla" = solo la charla).
       - Cada parada a su hora natural: comer entre 13:30 y 15:30, cenar entre 20:30 y 22:30, copas y fiesta desde las 23:00, salvo que pida otra hora. "Comer" o "cenar" es un sitio donde se come (restaurante, mesón o bar de comidas): un evento de la agenda no lo sustituye. Deja tiempo real entre paradas (lo que dura cada una más el camino) y un orden que no obligue a ir y volver. En "transporte" pon cómo se llega desde la parada anterior.
@@ -187,19 +314,17 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
   const rutaBruta = extraerJSON(textoIA, '[');
   if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
   // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas
-  if (rutaBruta.length === 0) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
+  // (si pidió «4 bares», no: esos se buscan abajo entre los locales reales de la zona)
+  if (rutaBruta.length === 0 && !pedido) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
 
   // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
   const contexto = { fecha, lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal, fuentes: conGoogle ? null : new Set(agendaDelDia.map((e) => e.fuente).filter(Boolean)) };
-  const enriquecidas = await Promise.all(
-    quitarNoPedidas(rutaBruta
-      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece)
-      .map((p) => enriquecerParada(p, contexto).catch((e) => {
-        console.error('[plan] parada', e?.message || e);
-        return { parada: null, problemaConfigPlaces: null };
-      }))
-  );
+  const paradasIA = quitarNoPedidas(rutaBruta
+    .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece);
+  const enriquecidas = await Promise.all(paradasIA.map((p) => enriquecerSeguro(p, contexto)));
+  // Dos bares que Google lleva al mismo local (pasa con «Bar en Boñar» o con nombres que no conoce) eran antes UNO solo
+  await separarRepetidos(enriquecidas, paradasIA, contexto);
 
   const rutaValidada = [];
   let problemaGlobal = null, fueraDeProvincia = 0;
@@ -210,11 +335,14 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     else if (parada) fueraDeProvincia++;
   }
 
+  // Pidió 4 bares y la IA (o Google) dejó menos: se completa con locales reales del radio, primero los ya comprobados
+  if (pedido) await completarPedido(rutaValidada, pedido, { sitios, contexto, fecha });
+
   // Si todo lo que salió era de fuera, el plan no es de León: se dice claro
   if (rutaValidada.length === 0 && fueraDeProvincia) return { exito: false, uso, mensaje: AVISO_MAPA.replace('Mueve el punto del mapa dentro de la provincia', 'Pide algo de la provincia') };
   if (rutaValidada.length === 0) return { exito: false, vacio: !problemaGlobal, uso, mensaje: problemaGlobal ? MENSAJE_GOOGLE_NO_RESPONDE : "No encontramos locales reales en esa zona. Amplía el radio." };
 
-  const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax);
+  const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax, pedido?.n || 1);
   if (rutaFinal.length === 0) return { exito: false, uso, mensaje: "Presupuesto muy bajo para esta zona." };
 
   // Paradas en orden cronológico y sin repetir el mismo sitio con otro nombre
@@ -225,9 +353,10 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
   // El resto de la agenda de ese día que no ha entrado en el plan ("Más cosas ese día")
   // (sin lo que ya está en la ruta, aunque tenga otro nombre, y ordenado por hora)
   // Si el plan es algo concreto (1-2 paradas), solo cosas parecidas a lo pedido, no toda la agenda
-  const masEseDia = ordenarPorHora(
-    filtrarMasEseDia(agendaDelDia, rutaFinal, apetece).filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })))
-  ).slice(0, 12);
+  // Si pregunta «qué hay hoy», se enseña toda la agenda (no solo lo parecido) y lo de ese día va antes que lo de siempre
+  const restoAgenda = (agendaPedida ? agendaDelDia : filtrarMasEseDia(agendaDelDia, rutaFinal, apetece))
+    .filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })));
+  const masEseDia = elegirMasEseDia(restoAgenda, agendaPedida ? 20 : 12);
 
   return { exito: true, plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, uso };
 }
