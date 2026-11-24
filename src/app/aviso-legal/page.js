@@ -18,7 +18,7 @@ export default function AvisoLegal() {
           <li><strong>Titular:</strong> {TITULAR.nombre}</li>
           {TITULAR.nif && <li><strong>NIF:</strong> {TITULAR.nif}</li>}
           <li><strong>Localidad:</strong> {TITULAR.ciudad}</li>
-          <li><strong>Contacto:</strong> <a href={`mailto:${TITULAR.email}`} className="text-rose-600 hover:underline">{TITULAR.email}</a></li>
+          <li><strong>Contacto:</strong> <a href={`mailto:${TITULAR.email}`} className="text-rose-700 underline underline-offset-2">{TITULAR.email}</a></li>
         </ul>
       </Apartado>
 

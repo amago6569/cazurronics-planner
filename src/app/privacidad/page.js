@@ -13,7 +13,7 @@ export default function Privacidad() {
   return (
     <PaginaLegal titulo="Privacidad" intro="Para usar Cazurronics no hace falta registrarse ni dar tu nombre. Aquí te contamos, sin letra pequeña, lo poco que guardamos." ctaRef="privacidad">
       <Apartado titulo="Responsable">
-        <p>{TITULAR.nombre}{TITULAR.nif && ` (NIF ${TITULAR.nif})`}, {TITULAR.ciudad}. Contacto: <a href={`mailto:${TITULAR.email}`} className="text-rose-600 hover:underline">{TITULAR.email}</a>.</p>
+        <p>{TITULAR.nombre}{TITULAR.nif && ` (NIF ${TITULAR.nif})`}, {TITULAR.ciudad}. Contacto: <a href={`mailto:${TITULAR.email}`} className="text-rose-700 underline underline-offset-2">{TITULAR.email}</a>.</p>
       </Apartado>
 
       <Apartado titulo="Qué datos usamos y para qué">

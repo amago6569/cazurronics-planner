@@ -67,7 +67,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
         type="button"
         onClick={() => elegirZona(id)}
         aria-pressed={activa}
-        className={`${PRESS} shrink-0 snap-start h-11 pl-3 pr-2.5 inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap ${activa ? "bg-slate-900 text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : "bg-white/70 text-slate-700 ring-1 ring-white hover:bg-white"} ${!total && !activa ? "opacity-60" : ""}`}
+        className={`${PRESS} shrink-0 snap-start h-11 pl-3 pr-2.5 inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap ${activa ? "bg-slate-900 text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)]" : total ? "bg-white/70 text-slate-700 ring-1 ring-white hover:bg-white" : "bg-white/40 text-slate-600 ring-1 ring-white/60 hover:bg-white"}`}
       >
         <span aria-hidden>{emoji}</span>{texto}
         <span className={`min-w-[1.4rem] h-[1.4rem] px-1 rounded-full text-[11px] leading-[1.4rem] tabular-nums ${activa ? "bg-white/20" : "bg-slate-900/5 text-slate-500"}`}>{total}</span>
@@ -98,7 +98,7 @@ export default function AgendaZonas({ enMarcha = [], dias = [] }) {
       {/* RESULTADOS DE LA ZONA */}
       <div ref={resultados} className="scroll-mt-24 space-y-4 sm:space-y-5">
         <div className="px-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Agenda de</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">Agenda de</p>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 first-letter:uppercase">
             {nombreZona} <span className="text-base font-medium text-slate-500">· {totalZona} {totalZona === 1 ? "plan" : "planes"}</span>
           </h2>
