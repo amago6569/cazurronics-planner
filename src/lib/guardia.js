@@ -15,10 +15,10 @@ import { comando, guardarJSON, sinRomper } from "./almacen";
 import { hoyEnLeon } from "./estadisticas";
 import { extraerJSON, llamarGemini, motivoClaro } from "./gemini";
 import { apuntarCharla, JEFE, TU } from "./charla";
-import { esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
+import { desenvolverEnlace, esBuscador, esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
 import {
   CUPO_SEGURO, DIAS_AGENDA, apuntarRepaso, apuntarSinConfirmar, comprobarUrl, decidirSinConfirmar, dominioConsultado, leerBandeja, leerRepesca,
-  leerSinConfirmar, marcarRevisados, quitarEnlacesRotos, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
+  leerSinConfirmar, marcarRevisados, pasarBuscadoresALaBandeja, quitarEnlacesRotos, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
 } from "./eventos";
 
 export const POR_PREGUNTA = 8, PREGUNTAS_POR_TURNO = 2, REPESCA_POR_TURNO = 6, VUELTAS_ANTES_DE_SUBIR = 2;
@@ -48,8 +48,10 @@ export async function leerVeredictos(texto, dominios, grupo, comprobar = (u) => 
   return Promise.all(grupo.map(async (e, i) => {
     const v = lista.find((x) => Number(x?.n) === i + 1) || lista[i] || {};
     const veredicto = String(v.veredicto || "nose").toLowerCase();
-    if (veredicto === "si" && /^https?:\/\//.test(v.fuente || "")) {
-      if (dominioConsultado(v.fuente, dominios) || (await comprobar(v.fuente)) === "ok") return { decision: "confirmado", fuente: v.fuente };
+    const fuente = desenvolverEnlace(String(v.fuente || ""));
+    // Una búsqueda de Google no confirma nada: siempre «existe» y repite lo que se le preguntó
+    if (veredicto === "si" && /^https?:\/\//.test(fuente) && !esBuscador(fuente)) {
+      if (dominioConsultado(fuente, dominios) || (await comprobar(fuente)) === "ok") return { decision: "confirmado", fuente };
       return { decision: "porConfirmar" };
     }
     if (veredicto === "no") return { decision: "falso", nota: String(v.nota || "").slice(0, 80) };
@@ -58,7 +60,7 @@ export async function leerVeredictos(texto, dominios, grupo, comprobar = (u) => 
 }
 
 // leer: cómo se descarga cada página (las pruebas lo cambian)
-export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000), repasarEnlaces = quitarEnlacesRotos } = {}) {
+export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000), repasarEnlaces = quitarEnlacesRotos, pasarBuscadores = pasarBuscadoresALaBandeja } = {}) {
   const limite = inicio + 50000;
   const [bandeja, subidos, cupo] = await Promise.all([leerBandeja(), leerSinConfirmar().catch(() => []), quedaCupo()]);
   const confirmados = [], porConfirmar = [], falsos = [], quedan = [];
@@ -75,13 +77,14 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     //    Confirma si es una web oficial o si la página dice la fecha, el pueblo y el año. Si la página carga pero no
     //    nombra el evento, no se tira: pasa a Google. Facebook o Instagram piden sesión: esos van directos a Google.
     const lote = bandeja.slice(0, 40);
-    const paginas = await Promise.all(lote.map((e) => (websDistintas(e) >= 2 || !e.fuente || esSocial(e.fuente) ? { estado: "duda", texto: "" } : leer(e.fuente))));
+    // Una búsqueda de Google tampoco se lee: su página repite el nombre y la fecha que se le pidieron y «lo nombraría» siempre
+    const paginas = await Promise.all(lote.map((e) => (websDistintas(e) >= 2 || !e.fuente || esSocial(e.fuente) || esBuscador(e.fuente) ? { estado: "duda", texto: "" } : leer(e.fuente))));
     const dudan = [];
     lote.forEach((e, i) => {
       const p = paginas[i];
       if (websDistintas(e) >= 2) confirmados.push({ ...e, porque: "dos webs" });
       else if (p.estado === "mal") falsos.push({ ...e, nota: "la página ya no existe" });
-      else if (esOficial(e.fuente) || (p.estado === "ok" && paginaLoNombra(p.texto, e))) confirmados.push({ ...e, porque: esOficial(e.fuente) ? "web oficial" : "la página lo dice" });
+      else if (!esBuscador(e.fuente) && (esOficial(e.fuente) || (p.estado === "ok" && paginaLoNombra(p.texto, e)))) confirmados.push({ ...e, porque: esOficial(e.fuente) ? "web oficial" : "la página lo dice" });
       else dudan.push(e);
     });
     quedan.push(...bandeja.slice(40));
@@ -145,6 +148,8 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
   const enlaces = limite - Date.now() > 4000
     ? await repasarEnlaces({ limite: Math.min(limite - 1500, Date.now() + 12000) }).catch((e) => { console.error("[verificador] enlaces", e?.message || e); return null; })
     : null;
+  // Lo subido antes con una búsqueda de Google por fuente: a la bandeja, para mirarlo en el turno siguiente
+  const buscadores = limite - Date.now() > 2500 ? await pasarBuscadores().catch((e) => { console.error("[verificador] buscadores", e?.message || e); return null; }) : null;
 
   const revisados = confirmados.length + porConfirmar.length + falsos.length;
   const parte = {
@@ -154,8 +159,10 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     descartes: falsos.slice(0, 5).map((e) => ({ titulo: e.titulo, nota: e.nota })),
     repasados,
     ...(enlaces ? { enlaces: { mirados: enlaces.mirados, quitados: enlaces.quitados } } : {}),
+    ...(buscadores?.pasados ? { buscadores: buscadores.pasados } : {}),
   };
   if (enlaces?.quitados) parte.texto += ` · ${enlaces.quitados} quitados de la agenda por enlace roto`;
+  if (buscadores?.pasados) parte.texto += ` · ${buscadores.pasados} con una búsqueda de Google por fuente, a revisar`;
   if (repasados.confirmados || repasados.quitados) parte.texto += ` · de lo subido «por confirmar»: ${repasados.confirmados} confirmados y ${repasados.quitados} quitados`;
   await guardarJSON("oficina:turno:verificador", parte, 14 * 24 * 3600);
   const charla = [];

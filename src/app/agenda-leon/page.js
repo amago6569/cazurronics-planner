@@ -6,7 +6,7 @@ import Link from "next/link";
 import PaginaContenido from "../components/PaginaContenido";
 import AgendaZonas from "../components/AgendaZonas";
 import { eventosProximos } from "../../lib/eventos";
-import { deduplicar, esDeVariosDias, organizarAgenda } from "../../lib/agenda";
+import { deduplicar, esDeVariosDias, organizarAgenda, sinLosDeVariosDias } from "../../lib/agenda";
 import { ZONAS } from "../../lib/zonas";
 import { rutaZona } from "../../lib/zonasSeo";
 import { datosEstructurados } from "../../lib/jsonld";
@@ -27,7 +27,7 @@ export default async function Agenda() {
   const agenda = organizarAgenda(dias);
   const total = agenda.enMarcha.length + agenda.porDia.reduce((s, d) => s + d.total, 0);
   const enMarcha = agenda.enMarcha.map(ligero);
-  const porDia = dias.map((d) => ({ fecha: d.fecha, eventos: deduplicar(d.eventos.filter((e) => !esDeVariosDias(e))).map(ligero) }));
+  const porDia = dias.map((d) => ({ fecha: d.fecha, eventos: sinLosDeVariosDias(deduplicar(d.eventos.filter((e) => !esDeVariosDias(e))), agenda.enMarcha, d.fecha).map(ligero) }));
   return (
     <PaginaContenido
       etiqueta="Actualizada cada mañana"

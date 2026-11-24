@@ -64,7 +64,7 @@ const FUERA = [
   "murcia", "alicante", "castellon", "toledo", "albacete", "guadalajara", "badajoz", "caceres", "extremadura", "andalucia",
   "cataluna", "girona", "tarragona", "lleida", "mallorca", "ibiza", "menorca", "tenerife", "canarias", "las palmas",
   // Fuera de España
-  "merida", "ciudad real", "valdepenas", "obregon",
+  "merida", "ciudad real", "valdepenas", "obregon", "guanajuato", "mexico",
   "portugal", "braganza", "braganca", "oporto", "porto", "lisboa", "francia", "paris", "londres", "roma", "andorra",
 ];
 const ANTES = "(?:en|a|por|hacia|hasta|para ir a|cerca de|junto a|al lado de|alrededor de|alrededores de|zona de|provincia de|ciudad de|viaje a|escapada a)";
