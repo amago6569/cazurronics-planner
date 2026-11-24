@@ -2,7 +2,7 @@
 // Antes de que Claude dé el trabajo por acabado:
 //  1. npm run check (lint y pruebas). Gratis: siempre.
 //  2. npm run evals con 5 casos, solo si el trabajo toca los planes (src/lib, src/app/api, evals, PLANES.md), hay clave
-//     (PANEL_CLAVE, o EVALS_CON_PROXY=1 si la pone la red) y no se pasaron en las últimas 12 h.
+//     (PANEL_CLAVE, o EVALS_CLAVE_EN_RED=1 si la pone la red) y no se pasaron en las últimas 12 h.
 //     Las pruebas de planes gastan (IA ≈ 0,04 € y Google Maps casi siempre en caché), por eso 5 casos y 2 veces al día como mucho.
 // Si algo falla sale con 2 y cuenta el fallo por stderr: Claude lo ve y sigue trabajando.
 // Si ya está dentro de un hook Stop (stop_hook_active), sale con 0 para no entrar en bucle.
@@ -42,7 +42,7 @@ function tocaLosPlanes() {
 }
 
 const ultima = (() => { try { return Number(readFileSync(MARCA, "utf8")) || 0; } catch { return 0; } })();
-const conClave = process.env.PANEL_CLAVE || process.env.EVALS_CON_PROXY;
+const conClave = process.env.PANEL_CLAVE || process.env.EVALS_CLAVE_EN_RED;
 if (conClave && Date.now() - ultima > HORAS_ENTRE_EVALS * 3600 * 1000 && tocaLosPlanes()) {
   const evals = correr("evals", ["--casos", "5"]);
   if (!evals || evals.codigo === 1) {
