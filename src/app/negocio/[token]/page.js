@@ -32,7 +32,7 @@ export default async function PanelNegocio({ params }) {
       <Fondo />
       <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-8 relative overflow-hidden cz-up`}>
-          <img src="/roseton.png" alt="" aria-hidden className="pointer-events-none absolute -right-16 -top-16 w-56 h-56 object-cover rounded-full opacity-20" />
+          <img src="/roseton-mini.webp" alt="" aria-hidden decoding="async" className="pointer-events-none absolute -right-16 -top-16 w-56 h-56 object-cover rounded-full opacity-20" />
           <p className="relative text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">Tu local en Cazurronics</p>
           <h1 className="relative text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 mt-1">{lugar.nombre}</h1>
           <p className="relative text-slate-600 mt-2 max-w-lg">Estas cifras son reales: cuentan cada vez que nuestra IA te ha recomendado y lo que hizo la gente después.</p>

@@ -202,7 +202,7 @@ export default function PlanCompartido({ inicial }) {
 
         {/* Bucle viral: quien recibe el enlace se monta el suyo */}
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-8 text-center relative overflow-hidden cz-up mt-2`}>
-          <img src="/roseton.png" alt="" aria-hidden className="pointer-events-none absolute -right-16 -bottom-16 w-56 h-56 object-cover rounded-full opacity-20" />
+          <img src="/roseton-mini.webp" alt="" aria-hidden decoding="async" className="pointer-events-none absolute -right-16 -bottom-16 w-56 h-56 object-cover rounded-full opacity-20" />
           <p className="relative text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">¿Y tu plan, <span className={TITULO_GRADIENTE}>cazurro</span>?</p>
           <p className="relative text-slate-600 mt-2 mb-5">Dime qué te apetece y te monto el tuyo en menos de un minuto. Gratis.</p>
           <Link href="/?ref=plan-compartido" className={`${BOTON_CTA} relative`}>✨ Crear mi plan</Link>
