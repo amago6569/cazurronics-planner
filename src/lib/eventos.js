@@ -18,7 +18,7 @@ import { limpiarParaPrompt } from "./blindaje";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
-import { desenvolverEnlace, dominioDe as dominioFuente, esBuscador, esOficial, paginaQueNoExiste } from "./fiables";
+import { desenvolverEnlace, dominioDe as dominioFuente, esBuscador, esOficial, esSocial, horaEnPagina, leerPagina, paginaQueNoExiste } from "./fiables";
 import { MUNICIPIOS_FUERA } from "./municipiosFuera";
 import { fuenteAytoLeon } from "./fuenteAyto";
 
@@ -982,6 +982,49 @@ export async function pasarBuscadoresALaBandeja({ max = POR_TANDA_BUSCADORES } =
   for (const e of pasan) await sinRomper(quitarDeLaAgenda(e), "buscador a la bandeja");
   return { pasados: pasan.length, titulos: pasan.map((e) => e.titulo) };
 }
+
+// Horas que faltan: lo suelto de los próximos días sin hora se busca en su página (0 €, sin IA). De momento solo se
+// apuntan las que encuentra (agenda:horas:propuestas, 7 días) para comprobar a mano que aciertan antes de ponerlas en la
+// web: una hora equivocada es peor que ninguna. Cada página se lee como mucho una vez cada 3 días; 15 por turno.
+export const HORAS_PROPUESTAS = "agenda:horas:propuestas";
+export async function buscarHorasQueFaltan({ dias = 7, max = 15, limite = Date.now() + 10000, leer = (u, ms) => leerPagina(u, ms), aplicar = false } = {}) {
+  const agenda = (await eventosProximos(dias)).flatMap((d) => d.eventos);
+  const porUrl = new Map();
+  for (const e of agenda) {
+    if (e?.hora || esDeVariosDiasEv(e) || !/^https?:\/\//.test(e?.fuente || "") || esBuscador(e.fuente) || esSocial(e.fuente)) continue;
+    if (!porUrl.has(e.fuente)) porUrl.set(e.fuente, []);
+    porUrl.get(e.fuente).push(e);
+  }
+  const urls = [...porUrl.keys()];
+  const vistos = urls.length ? await varios(urls.map((u) => ["GET", `horas:visto:${huella(u)}`])).catch(() => []) : [];
+  const toca = urls.filter((_, i) => !vistos[i]).slice(0, max);
+  const propuestas = [];
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(6, toca.length) }, async () => {
+    while (i < toca.length) {
+      const url = toca[i++];
+      const quedan = limite - Date.now();
+      if (quedan < 2000) return;
+      const p = await leer(url, Math.min(8000, quedan - 800)).catch(() => ({ estado: "duda", texto: "" }));
+      if (p.estado === "duda") continue; // no contestó: se vuelve a intentar otro turno
+      await sinRomper(comando(["SET", `horas:visto:${huella(url)}`, "1", "EX", 3 * 24 * 3600]), "horas");
+      if (p.estado !== "ok") continue;
+      for (const e of porUrl.get(url)) {
+        const hora = horaEnPagina(p.texto, e);
+        if (hora) propuestas.push({ e, hora });
+      }
+    }
+  }));
+  if (propuestas.length) {
+    await sinRomper(varios([
+      ["HSET", HORAS_PROPUESTAS, ...propuestas.flatMap(({ e, hora }) => [idDudoso(e), JSON.stringify({ titulo: e.titulo, fecha: e.fecha, localidad: e.localidad || null, fuente: e.fuente, hora, visto: new Date().toISOString() })])],
+      ["EXPIRE", HORAS_PROPUESTAS, 7 * 24 * 3600],
+    ]), "horas");
+    if (aplicar) for (const { e, hora } of propuestas) await sinRomper(cambiarEnLaAgenda(e, (x) => (x.hora ? x : { ...x, hora, horaDe: "pagina" })), "horas");
+  }
+  return { mirados: toca.length, propuestas: propuestas.length };
+}
+const esDeVariosDiasEv = (e) => Boolean(e?.permanente || e?.diasSemana?.length || (e?.fechaFin && e.fechaFin > e.fecha));
 
 // Resumen para el panel: cada tramo con su última pasada, y el total de la agenda
 export async function resumirBarridos() {

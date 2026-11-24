@@ -64,6 +64,39 @@ export function textoDeHtml(html) {
     .replace(/\s+/g, " ");
 }
 
+// ============ LA HORA QUE DICE LA PÁGINA ============
+// El 24-11-2026, 70 de los 162 planes sueltos de la agenda no tenían hora (14 de ellos conciertos), y un plan pone cada
+// parada a una hora concreta (R4 de PLANES.md): sin la de verdad, se la inventa. Aquí se busca en la página del evento,
+// junto al título, una hora escrita como «20:30», «20.30 h», «20 h» o «a las 20». Solo vale si en todo lo que rodea al
+// título sale UNA sola hora; con dos o ninguna, null (mejor sin hora que con una equivocada).
+const VACIAS_HORA = new Set(["para", "con", "del", "las", "los", "una", "unos", "unas", "por", "sobre", "entre", "desde", "hasta", "leon", "2025", "2026", "2027",
+  "concierto", "conciertos", "fiesta", "fiestas", "taller", "talleres", "exposicion", "teatro", "festival", "feria", "jornada", "jornadas", "mercado", "visita", "ruta", "presentacion", "actividad", "actividades"]);
+const HORAS_EN_TEXTO = /\ba las (\d{1,2})(?:[:.]([0-5]\d))?\b|\b(\d{1,2}):([0-5]\d)\b|\b(\d{1,2})[.,]([0-5]\d)\s?h(?:oras|rs?)?\b|\b(\d{1,2})\s?h(?:oras)?\b/g;
+export function horaEnPagina(texto, e) {
+  const t = plano(texto);
+  const claves = [...new Set(plano(e?.titulo).replace(/[^a-z0-9ñ ]+/g, " ").split(" ").filter((p) => p.length >= 4 && !VACIAS_HORA.has(p)))];
+  if (!claves.length) return null;
+  const guia = [...claves].sort((a, b) => b.length - a.length)[0];
+  const horas = new Set();
+  let desde = 0, ventanas = 0;
+  for (let pos = t.indexOf(guia); pos !== -1 && ventanas < 20; pos = t.indexOf(guia, desde)) {
+    desde = pos + guia.length;
+    // «de 10 a 14 h», «10:00-14:00»: vale la de empezar
+    const ventana = t.slice(Math.max(0, pos - 250), pos + 350)
+      .replace(/\b(\d{1,2}):(\d{2})\s*(?:a|-|–)\s*\d{1,2}:\d{2}\b/g, "$1:$2")
+      .replace(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(?:a|-|–)\s*\d{1,2}(?:[:.]\d{2})?\s*(?:h|horas)\b/g, (_, h, m) => `${h}:${m || "00"}`);
+    // El título tiene que estar ahí casi entero, no solo su palabra más larga
+    if (claves.filter((c) => ventana.includes(c)).length < Math.ceil(claves.length * 0.6)) continue;
+    ventanas++;
+    for (const m of ventana.matchAll(HORAS_EN_TEXTO)) {
+      const h = Number(m[1] ?? m[3] ?? m[5] ?? m[7]), min = Number(m[2] ?? m[4] ?? m[6] ?? 0);
+      if (h > 23) continue;
+      horas.add(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
+    }
+  }
+  return horas.size === 1 ? [...horas][0] : null;
+}
+
 // ¿La página dice ese día? «21 de noviembre», «21 nov», «21/11», «21-11-2026», «2026-11-21»
 function nombraFecha(t, fecha) {
   const [a, m, d] = String(fecha || "").split("-").map(Number);

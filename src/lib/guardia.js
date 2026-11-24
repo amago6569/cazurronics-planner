@@ -18,7 +18,7 @@ import { apuntarCharla, JEFE, TU } from "./charla";
 import { desenvolverEnlace, esBuscador, esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
 import {
   CUPO_SEGURO, DIAS_AGENDA, apuntarRepaso, apuntarSinConfirmar, comprobarUrl, decidirSinConfirmar, dominioConsultado, leerBandeja, leerRepesca,
-  leerSinConfirmar, marcarRevisados, pasarBuscadoresALaBandeja, quitarEnlacesRotos, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
+  buscarHorasQueFaltan, leerSinConfirmar, marcarRevisados, pasarBuscadoresALaBandeja, quitarEnlacesRotos, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
 } from "./eventos";
 
 export const POR_PREGUNTA = 8, PREGUNTAS_POR_TURNO = 2, REPESCA_POR_TURNO = 6, VUELTAS_ANTES_DE_SUBIR = 2;
@@ -60,7 +60,7 @@ export async function leerVeredictos(texto, dominios, grupo, comprobar = (u) => 
 }
 
 // leer: cómo se descarga cada página (las pruebas lo cambian)
-export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000), repasarEnlaces = quitarEnlacesRotos, pasarBuscadores = pasarBuscadoresALaBandeja } = {}) {
+export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000), repasarEnlaces = quitarEnlacesRotos, pasarBuscadores = pasarBuscadoresALaBandeja, buscarHoras = buscarHorasQueFaltan } = {}) {
   const limite = inicio + 50000;
   const [bandeja, subidos, cupo] = await Promise.all([leerBandeja(), leerSinConfirmar().catch(() => []), quedaCupo()]);
   const confirmados = [], porConfirmar = [], falsos = [], quedan = [];
@@ -150,6 +150,10 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     : null;
   // Lo subido antes con una búsqueda de Google por fuente: a la bandeja, para mirarlo en el turno siguiente
   const buscadores = limite - Date.now() > 2500 ? await pasarBuscadores().catch((e) => { console.error("[verificador] buscadores", e?.message || e); return null; }) : null;
+  // Horas que faltan, leídas en la página del evento (de momento solo se apuntan para comprobarlas)
+  const horas = limite - Date.now() > 5000
+    ? await buscarHoras({ leer: (u, ms) => leer(u, ms), limite: Math.min(limite - 1500, Date.now() + 10000) }).catch((e) => { console.error("[verificador] horas", e?.message || e); return null; })
+    : null;
 
   const revisados = confirmados.length + porConfirmar.length + falsos.length;
   const parte = {
@@ -160,6 +164,7 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     repasados,
     ...(enlaces ? { enlaces: { mirados: enlaces.mirados, quitados: enlaces.quitados } } : {}),
     ...(buscadores?.pasados ? { buscadores: buscadores.pasados } : {}),
+    ...(horas?.mirados ? { horas } : {}),
   };
   if (enlaces?.quitados) parte.texto += ` · ${enlaces.quitados} quitados de la agenda por enlace roto`;
   if (buscadores?.pasados) parte.texto += ` · ${buscadores.pasados} con una búsqueda de Google por fuente, a revisar`;
