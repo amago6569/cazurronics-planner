@@ -1,7 +1,8 @@
 // ============ PRUEBAS DE PLANES: npm run evals ============
 // Monta los casos de evals/casos.json en la web publicada (/api/panel/comparar: no guarda el plan ni suma visitas),
 // comprueba cada regla de PLANES.md y saca la tabla caso × regla, el tiempo medio y el coste.
-//   PANEL_CLAVE      clave del panel (obligatoria). Nunca se escribe en ningún archivo.
+//   PANEL_CLAVE      clave del panel. Nunca se escribe en ningún archivo. En el entorno de Claude la añade la red
+//                    (secreto de red para cazurronics.es, cabecera x-clave) y basta EVALS_CON_PROXY=1.
 //   EVALS_URL        web a probar (de serie https://cazurronics.es)
 //   EVALS_MAX_EUROS  para antes de pasar de este gasto (de serie 1 €)
 // Opciones: --casos 5 (los 5 primeros) · --solo humedo-20,martes-23 · --modo ahorro|sinIA|google · --json salida.json
@@ -20,7 +21,8 @@ const { casos: todos } = JSON.parse(await readFile(new URL("../evals/casos.json"
 const solo = opcion("solo")?.split(",").map((s) => s.trim());
 const casos = solo ? todos.filter((c) => solo.includes(c.id)) : todos.slice(0, Number(opcion("casos")) || todos.length);
 
-if (!CLAVE) {
+// Sin PANEL_CLAVE se prueba igual: en el entorno de Claude la clave la pone la red (secreto de red de cazurronics.es)
+if (!CLAVE && !process.env.EVALS_CON_PROXY) {
   console.error("Falta PANEL_CLAVE en el entorno: sin ella no se puede pedir planes a la web.");
   process.exit(2);
 }
@@ -29,7 +31,7 @@ async function pedirPlan(peticion) {
   const inicio = Date.now();
   const res = await fetch(`${URL_BASE}/api/panel/comparar`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-clave": CLAVE },
+    headers: { "content-type": "application/json", ...(CLAVE ? { "x-clave": CLAVE } : {}) },
     body: JSON.stringify({ ...peticion, modo: MODO }),
     signal: AbortSignal.timeout(70000),
   });

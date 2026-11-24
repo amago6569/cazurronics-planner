@@ -1,7 +1,8 @@
 // ============ CANDADO AL PARAR (hook Stop de .claude/settings.json) ============
 // Antes de que Claude dé el trabajo por acabado:
 //  1. npm run check (lint y pruebas). Gratis: siempre.
-//  2. npm run evals con 5 casos, solo si hay PANEL_CLAVE en el entorno y no se pasaron en las últimas 12 h.
+//  2. npm run evals con 5 casos, solo si el trabajo toca los planes (src/lib, src/app/api, evals, PLANES.md), hay clave
+//     (PANEL_CLAVE, o EVALS_CON_PROXY=1 si la pone la red) y no se pasaron en las últimas 12 h.
 //     Las pruebas de planes gastan (IA ≈ 0,04 € y Google Maps casi siempre en caché), por eso 5 casos y 2 veces al día como mucho.
 // Si algo falla sale con 2 y cuenta el fallo por stderr: Claude lo ve y sigue trabajando.
 // Si ya está dentro de un hook Stop (stop_hook_active), sale con 0 para no entrar en bucle.
@@ -29,8 +30,20 @@ function correr(script, args = []) {
 const check = correr("check");
 if (check) fallos.push("npm run check falla:", ...check.lineas);
 
+// Solo en trabajos que tocan los planes: las pruebas gastan y cuentan dentro del tope de IA del día de la web
+function tocaLosPlanes() {
+  try {
+    const opciones = { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
+    const rutas = `${execFileSync("git", ["diff", "--name-only", "origin/main...HEAD"], opciones)}\n${execFileSync("git", ["status", "--porcelain"], opciones)}`;
+    return /(^|\s)(src\/lib\/|src\/app\/api\/|evals\/|PLANES\.md)/m.test(rutas);
+  } catch {
+    return false;
+  }
+}
+
 const ultima = (() => { try { return Number(readFileSync(MARCA, "utf8")) || 0; } catch { return 0; } })();
-if (process.env.PANEL_CLAVE && Date.now() - ultima > HORAS_ENTRE_EVALS * 3600 * 1000) {
+const conClave = process.env.PANEL_CLAVE || process.env.EVALS_CON_PROXY;
+if (conClave && Date.now() - ultima > HORAS_ENTRE_EVALS * 3600 * 1000 && tocaLosPlanes()) {
   const evals = correr("evals", ["--casos", "5"]);
   if (!evals || evals.codigo === 1) {
     try { mkdirSync(".claude", { recursive: true }); writeFileSync(MARCA, String(Date.now())); } catch { /* sin marca: la próxima vez se repite */ }
