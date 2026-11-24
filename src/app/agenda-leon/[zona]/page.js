@@ -13,6 +13,7 @@ import { ZONAS, zonaDe } from "../../../lib/zonas";
 import { SEO_ZONAS, rutaZona, zonaPorSlug } from "../../../lib/zonasSeo";
 import { datosEstructurados } from "../../../lib/jsonld";
 import { GLASS } from "../../../lib/estilos";
+import { IMAGEN_OG } from "../../../lib/sitio";
 
 export const revalidate = 3600;
 export const dynamicParams = false;
@@ -36,7 +37,7 @@ export async function generateMetadata({ params }) {
     title: titulo,
     description: descripcion,
     alternates: { canonical: rutaZona(z.id) },
-    openGraph: { title: titulo, description: descripcion, url: rutaZona(z.id), type: "website", locale: "es_ES" },
+    openGraph: { title: titulo, description: descripcion, url: rutaZona(z.id), type: "website", locale: "es_ES", images: IMAGEN_OG },
     // Una zona sin ningún plan cerrado no merece aparecer en Google hasta que lo tenga
     ...(total === 0 ? { robots: { index: false, follow: true } } : {}),
   };
