@@ -142,14 +142,14 @@ export default function PlanCompartido({ inicial }) {
               <div className={`${GLASS} rounded-[2rem] p-5 flex items-start gap-4 cz-up`} style={{ animationDelay: "160ms" }}>
                 <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-sky-300 to-sky-500 flex items-center justify-center text-2xl shadow-[0_8px_20px_-6px_rgba(14,165,233,0.6)]">🌤️</div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-600 mb-1">Previsión</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700 mb-1">Previsión</p>
                   <p className="text-[15px] font-medium text-slate-700 leading-snug">{plan.prevision}</p>
                 </div>
               </div>
             )}
             {plan.apetece && (
               <div className={`${GLASS} rounded-[2rem] p-5 flex-1 cz-up`} style={{ animationDelay: "200ms" }}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-500 mb-1.5">Lo que pidió</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-700 mb-1.5">Lo que pidió</p>
                 <p className="text-[15px] text-slate-700 leading-relaxed">“{plan.apetece}”</p>
               </div>
             )}

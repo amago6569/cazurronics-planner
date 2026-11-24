@@ -401,7 +401,7 @@ export default function Home() {
                 <div className={`${GLASS} rounded-[2rem] p-5 flex items-start gap-4 cz-up`} style={{ animationDelay: "140ms" }}>
                   <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-sky-300 to-sky-500 flex items-center justify-center text-2xl shadow-[0_8px_20px_-6px_rgba(14,165,233,0.6)]">🌤️</div>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-600 mb-1">Previsión</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700 mb-1">Previsión</p>
                     <p className="text-[15px] font-medium text-slate-700 leading-snug">{climaPrevision}</p>
                     <p className="text-xs text-slate-500 mt-1.5">Plan adaptado al tiempo</p>
                   </div>
@@ -635,7 +635,7 @@ export default function Home() {
             <div className={`${GLASS} rounded-[2.25rem] p-5 sm:p-7 cz-up`} style={{ animationDelay: "90ms" }}>
               <div className="flex items-center justify-between mb-6 px-1">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">El plan perfecto</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">El plan perfecto</p>
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 mt-0.5">Cuéntame tu día</h2>
                 </div>
                 <span className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-white/60 ring-1 ring-slate-900/5 rounded-full px-3 py-1.5">
@@ -734,7 +734,7 @@ export default function Home() {
           <Link href="/despensa" className={`${GLASS} group/despensa order-3 lg:col-span-5 rounded-[2.25rem] p-5 sm:p-6 relative overflow-hidden flex items-center gap-4 transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1 hover:bg-white/70 active:scale-[0.98] cz-up`} style={{ animationDelay: "130ms" }}>
             <span className="shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300 to-rose-400 flex items-center justify-center text-3xl shadow-[0_10px_24px_-10px_rgba(244,63,94,0.6)] transition-transform duration-500 group-hover/despensa:rotate-[-8deg] group-hover/despensa:scale-105" aria-hidden>🧺</span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Despensa de León</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">Despensa de León</span>
               <span className="block text-lg font-bold tracking-tight text-slate-900 leading-snug mt-0.5">¿Una morcilla buena y pan de leña cerca?</span>
               <span className="block text-sm text-slate-500 mt-0.5">Escríbelo y te decimos dónde comprarlo en toda la provincia.</span>
             </span>
@@ -761,7 +761,7 @@ export default function Home() {
             <div className="relative flex items-center gap-4">
               <SelloChoice className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] shrink-0 drop-shadow-[0_8px_16px_rgba(244,63,94,0.35)] transition-transform duration-[1200ms] ease-[cubic-bezier(.2,.8,.2,1)] group-hover/choices:rotate-[30deg]" />
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">Locales destacados</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">Locales destacados</p>
                 <h2 id="cz-choices-titulo" className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-tight">Cazurronics Choices</h2>
                 <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Los locales de León que destacamos en la web y en nuestras redes.</p>
               </div>

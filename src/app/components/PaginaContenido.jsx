@@ -28,7 +28,7 @@ export default function PaginaContenido({ etiqueta, titulo, destacado, intro, ct
 
         <section className={`${GLASS} rounded-[2.25rem] p-6 sm:p-9 relative overflow-hidden cz-up`}>
           <img src="/roseton.png" alt="" aria-hidden className="pointer-events-none absolute -right-20 -top-20 w-64 h-64 object-cover rounded-full opacity-[0.18]" />
-          <p className="relative text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-500">{etiqueta}</p>
+          <p className="relative text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">{etiqueta}</p>
           <h1 className="relative text-[2.2rem] leading-[1.05] sm:text-5xl font-bold tracking-[-0.03em] text-slate-900 mt-2">
             {titulo} {destacado && <span className={TITULO_GRADIENTE}>{destacado}</span>}
           </h1>

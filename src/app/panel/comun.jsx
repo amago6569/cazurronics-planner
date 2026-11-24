@@ -130,7 +130,7 @@ export function Entrada({ acceso }) {
     <main className="min-h-[100dvh] flex items-center justify-center p-4">
       <Rosa />
       <form onSubmit={(e) => { e.preventDefault(); entrar(clave); }} className="pn-bloque w-full max-w-sm relative z-10" style={{ padding: 24 }}>
-        <p className="pn-marca">Cazurronics</p>
+        <h1 className="pn-marca">Cazurronics</h1>
         <p className="pn-apunte" style={{ marginBottom: 18 }}>Introduce la clave del panel.</p>
         <label htmlFor="clave-panel" className="sr-only">Clave</label>
         <input id="clave-panel" type="password" value={clave} onChange={(e) => setClave(e.target.value)} placeholder="Clave" autoFocus autoComplete="current-password"
