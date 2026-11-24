@@ -18,7 +18,7 @@ import { limpiarParaPrompt } from "./blindaje";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
-import { esOficial } from "./fiables";
+import { esOficial, paginaQueNoExiste } from "./fiables";
 import { fuenteAytoLeon } from "./fuenteAyto";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
@@ -401,14 +401,16 @@ export async function comprobarUrl(url, ms = 3500, { sinRango = false } = {}) {
     if (r.status === 404 || r.status === 410) return "mal";
     return r.status < 400 ? "ok" : "duda";
   } catch (e) {
-    const codigo = `${e?.cause?.code || ""} ${e?.message || ""}`;
-    return /ENOTFOUND|EAI_AGAIN|getaddrinfo|Invalid URL/i.test(codigo) ? "mal" : "duda";
+    return paginaQueNoExiste(e) ? "mal" : "duda";
   }
 }
 
 // Filtra una lista de eventos dejando solo los de fuente comprobada. Devuelve { buenos, descartados }
+// Los enlaces de una web que Google sí consultó también se abren: la IA a veces acierta la web pero se inventa la
+// página (leonjoven.net/agenda/expjoven-2026 daba 404 y traía Expojoven «hasta el 27»). Solo un 404 lo tira:
+// si la web no contesta a tiempo, entra igual, como antes.
 export async function verificarFuentes(eventos, dominios, { limite = Date.now() + 12000, enParalelo = 16 } = {}) {
-  const porComprobar = [...new Set(eventos.filter((e) => e.origen !== "jcyl" && !dominioConsultado(e.fuente, dominios)).map((e) => e.fuente))];
+  const porComprobar = [...new Set(eventos.filter((e) => e.origen !== "jcyl" && e.origen !== "ayto" && e.fuente).map((e) => e.fuente))];
   const estado = new Map();
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(enParalelo, porComprobar.length) }, async () => {
@@ -421,7 +423,8 @@ export async function verificarFuentes(eventos, dominios, { limite = Date.now() 
   const buenos = [], descartados = [];
   for (const e of eventos) {
     // Una web oficial o de la prensa local que no contesta a tiempo entra igual (lib/fiables.js); si no existe (404), fuera
-    const ok = e.origen === "jcyl" || dominioConsultado(e.fuente, dominios) || estado.get(e.fuente) === "ok" || (estado.get(e.fuente) === "duda" && esOficial(e.fuente));
+    const visto = estado.get(e.fuente);
+    const ok = e.origen === "jcyl" || e.origen === "ayto" || visto === "ok" || (visto !== "mal" && (dominioConsultado(e.fuente, dominios) || (visto === "duda" && esOficial(e.fuente))));
     if (ok) buenos.push(e);
     else descartados.push({ ...e, motivo: estado.get(e.fuente) || "duda" }); // "mal" = la página no existe
   }
@@ -906,6 +909,33 @@ export async function quitarDeLaAgenda(e) {
     if (comandos.length) await varios(comandos);
   });
   return quitados;
+}
+
+// Enlaces rotos en la agenda de los próximos días: lo que ya está subido y su página da 404 (o el dominio no existe)
+// se quita. Sin IA (0 €). Cada enlace se mira como mucho una vez cada 3 días; 40 por turno del Verificador.
+export async function quitarEnlacesRotos({ dias = 4, max = 40, limite = Date.now() + 10000, comprobar = (u, ms) => comprobarUrl(u, ms, { sinRango: true }) } = {}) {
+  const desde = hoyEnLeon();
+  const agenda = (await eventosProximos(dias)).flatMap((d) => d.eventos);
+  const porUrl = new Map();
+  for (const e of agenda) if (e?.fuente && /^https?:\/\//.test(e.fuente) && e.origen !== "jcyl" && e.origen !== "ayto" && !porUrl.has(e.fuente)) porUrl.set(e.fuente, e);
+  const urls = [...porUrl.keys()];
+  const vistos = urls.length ? await varios(urls.map((u) => ["GET", `enlace:visto:${huella(u)}`])).catch(() => []) : [];
+  const toca = urls.filter((_, i) => !vistos[i]).slice(0, max);
+  const rotos = [];
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(8, toca.length) }, async () => {
+    while (i < toca.length) {
+      const url = toca[i++];
+      const quedan = limite - Date.now();
+      if (quedan < 1500) return;
+      const estado = await comprobar(url, Math.min(6000, quedan - 500));
+      if (estado === "mal") rotos.push(porUrl.get(url));
+      else if (estado === "ok") await sinRomper(comando(["SET", `enlace:visto:${huella(url)}`, "1", "EX", 3 * 24 * 3600]), "enlaces");
+    }
+  }));
+  let quitados = 0;
+  for (const e of rotos) quitados += await sinRomper(quitarDeLaAgenda(e), "enlace roto") || 0;
+  return { mirados: toca.length, rotos: rotos.map((e) => ({ titulo: e.titulo, fuente: e.fuente })), quitados, desde };
 }
 
 // Resumen para el panel: cada tramo con su última pasada, y el total de la agenda
