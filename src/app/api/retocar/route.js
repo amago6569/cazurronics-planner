@@ -83,7 +83,8 @@ export async function POST(request) {
     if (typeof planId === 'string' && /^[0-9a-zA-Z]{6,20}$/.test(planId)) {
       await sinRomper((async () => {
         const guardado = await leerJSON(`plan:${planId}`);
-        if (guardado?.itinerario?.[indice]) {
+        // Solo si la parada que se cambia es la que hay guardada: con el enlace de otro no se reescribe su plan a ciegas
+        if (guardado?.itinerario?.[indice] && guardado.itinerario[indice].titulo === paradaAntigua.titulo) {
           guardado.itinerario[indice] = parada;
           guardado.editado = Date.now();
           await guardarJSON(`plan:${planId}`, guardado, 120 * 24 * 3600);

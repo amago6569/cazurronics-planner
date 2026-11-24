@@ -18,6 +18,8 @@ export default function Cookies() {
           <li><strong>Tus planes recientes y tus votos</strong>, para que no se pierdan si recargas la página y no votes dos veces lo mismo.</li>
           <li><strong>Un identificador anónimo</strong> (un código al azar, sin tu nombre ni nada tuyo) para contar tus votos y valoraciones una sola vez.</li>
           <li><strong>La fecha de tu última visita</strong>, solo para contar cuánta gente vuelve. Nunca sale de tu navegador con tu nombre ni se cruza con otras webs.</li>
+          <li><strong>Si ya has visto la portada</strong>, para no repetirte la animación entera.</li>
+          <li><strong>Si juegas en la Liga Cazurra</strong>: tu sesión, para no pedirte el código cada vez, el sonido encendido o apagado y las partidas que falten por guardar si te quedas sin cobertura.</li>
         </ul>
         <p>Son datos técnicos y de medición propia, sin terceros, que la ley permite usar sin pedir permiso.</p>
       </Apartado>

@@ -18,11 +18,13 @@ export default function Privacidad() {
 
       <Apartado titulo="Qué datos usamos y para qué">
         <ul className="list-disc pl-5 space-y-2">
-          <li><strong>Lo que escribes para tu plan</strong> (qué te apetece, fecha, presupuesto y la zona del mapa). Lo usamos solo para montar el plan. Si lo compartes, el plan se guarda con un enlace durante unos 4 meses para que tu grupo pueda verlo y votar.</li>
+          <li><strong>Lo que escribes para tu plan</strong> (qué te apetece, fecha, presupuesto y la zona del mapa). Lo usamos solo para montar el plan: va a Google Gemini, que como servicio de pago no lo usa para entrenar sus modelos. Cada plan se guarda unos 4 meses con su propio enlace, para que puedas compartirlo y tu grupo pueda verlo y votar. Solo lo ve quien tenga el enlace.</li>
+          <li><strong>Tu ubicación</strong>, solo si tocas «Usar mi ubicación» y tu navegador te da permiso. Sirve para buscar sitios cerca de ti. No guardamos tu posición exacta: con el plan queda solo la zona, redondeada a unos 100 metros.</li>
           <li><strong>Si eres un negocio y nos escribes</strong> (nombre del local, email o teléfono y mensaje). Lo usamos solo para contestarte y hablar de aparecer en Cazurronics. Lo guardamos mientras estemos en contacto, y como mucho las últimas 300 solicitudes.</li>
           <li><strong>Tu dirección IP</strong>, durante como mucho día y medio, solo para frenar abusos (por ejemplo, que alguien pida miles de planes con un programa).</li>
           <li><strong>Si juegas en la Liga Cazurra</strong> (es opcional): tu correo, el apodo que elijas, tus partidas y sus puntos, y si quieres recibir novedades. El correo sirve para entrar (te mandamos un código) y para avisarte si ganas; nunca se publica. En el ranking solo sale tu apodo. Puedes borrar tu cuenta y todas tus partidas desde la propia liga, en el menú con tu apodo.</li>
           <li><strong>Estadísticas</strong>: contamos cuántas visitas y planes hay al día, sin cookies y sin saber quién eres.</li>
+          <li><strong>En tu navegador</strong> se guardan unas pocas cosas técnicas (tus planes recientes, un código al azar para tus votos…). Están todas en la página de <a href="/cookies" className="text-rose-600 hover:underline">cookies</a>.</li>
         </ul>
         <p>Base legal: tu consentimiento al usar la web o escribirnos, y nuestro interés legítimo en que la web no se sature. No vendemos datos ni hacemos publicidad con ellos.</p>
       </Apartado>

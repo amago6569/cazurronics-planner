@@ -52,6 +52,20 @@ function GastoIA({ gasto }) {
   );
 }
 
+// Lo que la lista de sitios permitidos (CSP) habría bloqueado. Cuando lleve 7 días vacía de sitios que la web usa, se activa
+function AvisosCSP({ csp }) {
+  if (!csp) return null;
+  return (
+    <section className="pn-bloque">
+      <h2 className="pn-titulo">Avisos de seguridad del navegador, 7 días</h2>
+      {csp.length ? (
+        <ul className="pn-filas mt-1">{csp.slice(0, 10).map((a) => <li key={`${a.tipo}|${a.sitio}`}><span className="nombre truncate">{a.sitio}<small>{a.tipo}</small></span><span className="dato">{fmt(a.n)}</span></li>)}</ul>
+      ) : <p className="pn-apunte mt-2">Ninguno. Ningún navegador ha cargado nada de fuera de la lista de sitios permitidos.</p>}
+      <p className="pn-apunte mt-2">Sitios de fuera de la lista que habría bloqueado la protección. De momento solo avisa; cuando lleve una semana sin avisos de sitios que la web usa, se activa.</p>
+    </section>
+  );
+}
+
 function Barridos({ clave, barrido, agenda, alTerminar }) {
   const [barriendo, setBarriendo] = useState(null);
   const [aviso, setAviso] = useState("");
@@ -225,6 +239,7 @@ export default function MasDatos() {
         </section>
         <Barridos clave={acceso.clave} barrido={datos.barrido} agenda={datos.agenda} alTerminar={recargar} />
         <GastoIA gasto={datos.gastoIA} />
+        <AvisosCSP csp={datos.csp} />
         <PanelDespensa clave={acceso.clave} despensa={datos.despensa} alTerminar={recargar} />
         <Locales clave={acceso.clave} lugares={datos.lugares} alTerminar={recargar} />
       </div>
