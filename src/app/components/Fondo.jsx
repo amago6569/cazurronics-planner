@@ -1,9 +1,9 @@
-// Atmósfera común: la ilustración de León desenfocada + manchas de color de vidriera (estática)
+// Atmósfera común: la ilustración de León desenfocada (fondo-suave.webp: 640 px, 34 KB; con el desenfoque no se nota frente a los 142 KB de fondo.jpg) + manchas de color de vidriera (estática)
 export default function Fondo() {
   return (
     <>
       <div aria-hidden className="fixed inset-0 -z-30 bg-[#fdf6ef]" />
-      <div aria-hidden className="fixed inset-0 -z-20 bg-[url('/fondo.jpg')] bg-cover bg-center scale-110 blur-xl opacity-90 saturate-150" />
+      <div aria-hidden className="fixed inset-0 -z-20 bg-[url('/fondo-suave.webp')] bg-cover bg-center scale-110 blur-xl opacity-90 saturate-150" />
       <div aria-hidden className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -left-32 w-[55vw] h-[55vw] max-w-[640px] max-h-[640px] rounded-full bg-rose-300/40 blur-3xl" />
         <div className="absolute top-1/3 -right-40 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-sky-300/35 blur-3xl" />
