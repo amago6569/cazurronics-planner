@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "check": "npm run lint && npm test",
+    "evals": "vite-node scripts/evals.mjs --",
     "liga:three": "esbuild scripts/three-liga-entrada.js --bundle --format=esm --minify --target=es2020 --legal-comments=inline --outfile=public/liga/vendor/three-liga.js"
   },
   "dependencies": {

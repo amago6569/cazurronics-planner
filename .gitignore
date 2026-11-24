@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# pruebas de planes (npm run evals): el detalle de cada pasada se queda en local
+/evals/resultados/
+/.claude/.evals-ultima
