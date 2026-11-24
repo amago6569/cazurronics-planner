@@ -62,6 +62,13 @@ export function paginaLoNombra(texto, e) {
   return !anos.size || anos.has(String(e.fecha).slice(0, 4));
 }
 
+// El dominio no existe (ENOTFOUND) o la URL está mal escrita: la página no existe. Un fallo pasajero del DNS
+// (EAI_AGAIN) no prueba nada: antes tiraba eventos buenos, y con el repaso de enlaces los quitaría de la agenda.
+export function paginaQueNoExiste(e) {
+  const codigo = `${e?.cause?.code || ""} ${e?.code || ""} ${e?.message || ""}`;
+  return /ENOTFOUND|Invalid URL/i.test(codigo) && !/EAI_AGAIN/i.test(codigo);
+}
+
 // Descarga la página (como mucho ~400 KB de texto): { estado: "ok" | "mal" | "duda", texto }
 export async function leerPagina(url, ms = 8000) {
   try {
@@ -74,7 +81,6 @@ export async function leerPagina(url, ms = 8000) {
     const html = await r.text().catch(() => "");
     return { estado: "ok", texto: textoDeHtml(html.slice(0, 400000)) };
   } catch (e) {
-    const codigo = `${e?.cause?.code || ""} ${e?.message || ""}`;
-    return { estado: /ENOTFOUND|EAI_AGAIN|getaddrinfo|Invalid URL/i.test(codigo) ? "mal" : "duda", texto: "" };
+    return { estado: paginaQueNoExiste(e) ? "mal" : "duda", texto: "" };
   }
 }

@@ -35,3 +35,30 @@ describe("enlaces de una web consultada", () => {
     expect((await eventosDelDia(hoy)).map((e) => e.titulo)).toEqual(["Concierto"]);
   });
 });
+
+describe("un fallo pasajero del DNS no tira eventos", () => {
+  const error = (code) => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(`getaddrinfo ${code} web.example`), { code }) });
+  it("EAI_AGAIN es duda; ENOTFOUND y URL mal escrita, página que no existe", async () => {
+    const { paginaQueNoExiste } = await import("../src/lib/fiables");
+    expect(paginaQueNoExiste(error("EAI_AGAIN"))).toBe(false);
+    expect(paginaQueNoExiste(error("ENOTFOUND"))).toBe(true);
+    expect(paginaQueNoExiste(new TypeError("Invalid URL"))).toBe(true);
+    expect(paginaQueNoExiste(Object.assign(new Error("timeout"), { name: "TimeoutError" }))).toBe(false);
+  });
+
+  it("lo ya subido no sale de la agenda si el DNS falla un momento", async () => {
+    const hoy = hoyEnLeon();
+    await comando(["SET", `eventos:${hoy}`, JSON.stringify([
+      { titulo: "Feria del libro", fecha: hoy, fuente: "https://dns-pasajero.example/feria", localidad: "León" },
+    ])]);
+    const { comprobarUrl } = await import("../src/lib/eventos");
+    const antes = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => { throw error("EAI_AGAIN"); });
+    try {
+      expect(await comprobarUrl("https://dns-pasajero.example/feria")).toBe("duda");
+      const r = await quitarEnlacesRotos({ dias: 1 });
+      expect(r.quitados).toBe(0);
+      expect((await eventosDelDia(hoy)).map((e) => e.titulo)).toEqual(["Feria del libro"]);
+    } finally { globalThis.fetch = antes; }
+  });
+});

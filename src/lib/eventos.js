@@ -18,7 +18,7 @@ import { limpiarParaPrompt } from "./blindaje";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
-import { esOficial } from "./fiables";
+import { esOficial, paginaQueNoExiste } from "./fiables";
 import { fuenteAytoLeon } from "./fuenteAyto";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
@@ -401,8 +401,7 @@ export async function comprobarUrl(url, ms = 3500, { sinRango = false } = {}) {
     if (r.status === 404 || r.status === 410) return "mal";
     return r.status < 400 ? "ok" : "duda";
   } catch (e) {
-    const codigo = `${e?.cause?.code || ""} ${e?.message || ""}`;
-    return /ENOTFOUND|EAI_AGAIN|getaddrinfo|Invalid URL/i.test(codigo) ? "mal" : "duda";
+    return paginaQueNoExiste(e) ? "mal" : "duda";
   }
 }
 
