@@ -2,7 +2,7 @@
 // Elige lo mejor del próximo fin de semana (viernes, sábado y domingo) a partir de la agenda que ya
 // han barrido los crons. No gasta nada en IA: puntúa cada plan, no repite y reparte por tipo.
 // De aquí salen: la página /finde, los textos para WhatsApp e Instagram y las imágenes del carrusel.
-import { cuandoEs, deduplicar, esDeVariosDias, familia, leerHora, ordenarPorHora } from "./agenda";
+import { cuandoEs, deduplicar, esDeVariosDias, familia, leerHora, ordenarPorHora, sinLosDeVariosDias } from "./agenda";
 import { zonaDe, zonaPorId } from "./zonas";
 
 // Dirección pública para los textos que se copian y pegan (en local no queremos "localhost")
@@ -97,8 +97,10 @@ export function calcularFinde(dias, hoy) {
   const fechas = fechasDelFinde(hoy);
   const porFecha = Object.fromEntries((dias || []).map((d) => [d.fecha, d.eventos || []]));
 
+  // Lo que dura varios días (exposiciones, ferias, mercados): una sola vez
+  const largos = deduplicar(fechas.flatMap((f) => (porFecha[f] || []).filter((e) => esDeVariosDias(e) && e.titulo)));
   const brutos = fechas.map((fecha) => {
-    const propios = deduplicar((porFecha[fecha] || []).filter((e) => !esDeVariosDias(e) && e.titulo));
+    const propios = sinLosDeVariosDias(deduplicar((porFecha[fecha] || []).filter((e) => !esDeVariosDias(e) && e.titulo)), largos, fecha);
     return { fecha, propios, capital: propios.filter(ES_CAPITAL) };
   });
 
@@ -113,8 +115,6 @@ export function calcularFinde(dias, hoy) {
   // (por día y, dentro de cada día, por hora)
   const provincia = elegir(provinciaTodos, 5, { max: 2, por: (e) => zonaDe(e) }).map((e) => ficha(e)).sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  // Lo que dura varios días (exposiciones, ferias, mercados): una sola vez
-  const largos = deduplicar(fechas.flatMap((f) => (porFecha[f] || []).filter((e) => esDeVariosDias(e) && e.titulo)));
   const largosCapital = largos.filter(ES_CAPITAL);
   const enMarcha = elegir(largosCapital.length >= 3 ? largosCapital : largos, 3, { max: 2 }).map((e) => ficha(e, fechas[0]));
 

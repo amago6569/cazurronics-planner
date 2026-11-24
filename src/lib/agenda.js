@@ -61,8 +61,6 @@ function mismoLugar(a, b) {
 // ¿Son el mismo evento? (se compara dentro del mismo día)
 export function mismoEvento(a, b) {
   if (!a || !b) return false;
-  const fa = familia(a), fb = familia(b);
-  if (fa && fb && fa !== fb) return false;
   // El "mercado semanal" de Astorga no es el de La Bañeza: si los dos dicen dónde son y es en zonas distintas, son distintos
   const conSitio = (e) => Boolean(e.localidad) || e.lat != null;
   if (conSitio(a) && conSitio(b) && zonaDe(a) !== zonaDe(b)) return false;
@@ -71,6 +69,11 @@ export function mismoEvento(a, b) {
 
   const pa = new Set(palabras(a.titulo)), pb = new Set(palabras(b.titulo));
   if (!pa.size || !pb.size) return false;
+  // Mismo nombre en el mismo sitio: el mismo evento, aunque cada búsqueda le haya puesto otra categoría
+  // («Pabellón Retro de León» salía 3 veces en la agenda: como exposición, como feria y como otro)
+  if (pa.size === pb.size && [...pa].every((p) => pb.has(p))) return true;
+  const fa = familia(a), fb = familia(b);
+  if (fa && fb && fa !== fb) return false;
   const comunes = [...pa].filter((p) => pb.has(p)).length;
   const jaccard = comunes / new Set([...pa, ...pb]).size;
   if (jaccard >= 0.6) return true;
@@ -187,12 +190,18 @@ export function cuandoEs(e) {
   return null;
 }
 
+// Lo de un día que ya sale arriba, en «en marcha» («Mercadillo de Toreno» suelto el domingo y también como mercado de cada
+// domingo): se queda solo arriba. El 24-11-2026 había 11 así en la agenda.
+const cubre = (m, fecha) => !fecha || ((m.fecha || "") <= fecha && fecha <= (m.fechaFin || "9999-12-31"));
+export const sinLosDeVariosDias = (propios, enMarcha, fecha) =>
+  (propios || []).filter((e) => !(enMarcha || []).some((m) => cubre(m, fecha) && mismoEvento(e, m)));
+
 // De [{fecha, eventos}] a: lo que está en marcha varios días (una sola vez) + cada día con lo suyo, sin repetir
 export function organizarAgenda(dias) {
   const enMarcha = deduplicar((dias || []).flatMap((d) => d.eventos.filter(esDeVariosDias)));
   const porDia = (dias || [])
     .map((d) => {
-      const propios = deduplicar(d.eventos.filter((e) => !esDeVariosDias(e)));
+      const propios = sinLosDeVariosDias(deduplicar(d.eventos.filter((e) => !esDeVariosDias(e))), enMarcha, d.fecha);
       return { fecha: d.fecha, total: propios.length, grupos: agruparPorFranja(propios) };
     })
     .filter((d) => d.total);

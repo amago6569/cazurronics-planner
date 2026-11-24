@@ -25,8 +25,32 @@ export function esOficial(url) {
   return false;
 }
 
-// Webs distintas en las que ha salido el evento (la suya y las que trajeron otros empleados)
-export const websDistintas = (e) => new Set([e.fuente, ...(e.fuentesVistas || [])].map(dominioDe).filter(Boolean)).size;
+// Enlaces que no son una fuente: una búsqueda de Google o de Bing, un mapa o un acortador. La IA los pone cuando no
+// encuentra la página del evento. Una búsqueda siempre «existe» y repite el nombre, el pueblo y la fecha que se le
+// pidieron, así que pasaba por comprobada: el 24-11-2026, 87 de los 471 planes de la agenda tenían una de estas.
+export function esBuscador(url) {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  const host = u.hostname.toLowerCase().replace(/^www\./, "");
+  if (/^(maps\.app\.)?goo\.gl$/.test(host) || host === "duckduckgo.com") return true;
+  if (/^(maps\.)?google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(host)) return host.startsWith("maps.") || /^\/(search|url|maps)\b/.test(u.pathname);
+  return host === "bing.com" && u.pathname.startsWith("/search");
+}
+
+// google.com/url?q=https://la-web-de-verdad → https://la-web-de-verdad
+export function desenvolverEnlace(url) {
+  try {
+    const u = new URL(url);
+    if (/^(www\.)?google\.[a-z.]+$/.test(u.hostname) && u.pathname === "/url") {
+      const real = u.searchParams.get("q") || u.searchParams.get("url");
+      if (/^https?:\/\//.test(real || "") && !esBuscador(real)) return real;
+    }
+  } catch { /* no es una URL: se deja como está */ }
+  return url;
+}
+
+// Webs distintas en las que ha salido el evento (la suya y las que trajeron otros empleados). Un buscador no cuenta.
+export const websDistintas = (e) => new Set([e.fuente, ...(e.fuentesVistas || [])].filter((u) => !esBuscador(u)).map(dominioDe).filter(Boolean)).size;
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const plano = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");

@@ -209,23 +209,39 @@ export async function montarSinIA({ peticion, agenda, sitios, contexto, ahora = 
     // 3) Locales: catálogo comprobado y, si no hay, búsqueda en Google Maps de la zona («Bar de tapas en Boñar»)
     if (!hueco.tipo) continue;
     const n = Math.max(1, hueco.n || 1);
+    const dura = DURA[hueco.tipo] || 60;
     let hora = Math.max(hueco.hora ?? 20 * 60, reloj, desde);
-    for (let i = 0; i < n; i++) {
-      if (Date.now() > contexto.limite - 3000) break;
-      // Orden: los del catálogo a 15 min andando, luego una búsqueda en Maps de la zona y, por último, los del catálogo más lejos
-      const aParada = (s) => ({ titulo: s.n, tipo: hueco.tipo, hora: hhmm(Math.min(hora, 24 * 60 - 1)), precio: s.p || PRECIO_TIPICO[hueco.tipo] || null, lat: s.la, lon: s.lo, descripcion: '' });
+    // Orden: los del catálogo a 15 min andando, luego una búsqueda en Maps de la zona y, por último, los del catálogo más lejos
+    const probarA = (h) => {
+      const aParada = (s) => ({ titulo: s.n, tipo: hueco.tipo, hora: hhmm(Math.min(h, 24 * 60 - 1)), precio: s.p || PRECIO_TIPICO[hueco.tipo] || null, lat: s.la, lon: s.lo, descripcion: '' });
       const locales = localesParaHueco(sitios, hueco.tipo, punto, usados.nombres);
       const cerca = locales.filter((s) => s.km <= 1.2).slice(0, 3).map(aParada);
       const lejos = locales.filter((s) => s.km > 1.2).slice(0, 2).map(aParada);
-      const reserva = BUSCAR_EN_MAPS[hueco.tipo] ? [{ titulo: `${BUSCAR_EN_MAPS[hueco.tipo]} en ${contexto.nombreZona || 'León'}`, tipo: hueco.tipo, hora: hhmm(Math.min(hora, 24 * 60 - 1)), precio: PRECIO_TIPICO[hueco.tipo] || null, descripcion: '' }] : [];
+      const reserva = BUSCAR_EN_MAPS[hueco.tipo] ? [{ titulo: `${BUSCAR_EN_MAPS[hueco.tipo]} en ${contexto.nombreZona || 'León'}`, tipo: hueco.tipo, hora: hhmm(Math.min(h, 24 * 60 - 1)), precio: PRECIO_TIPICO[hueco.tipo] || null, descripcion: '' }] : [];
       const candidatos = [...cerca, ...reserva, ...lejos];
-      const p = await primeroQueValga(candidatos, contexto, usados, enriquecer, candidatos.length);
+      return primeroQueValga(candidatos, contexto, usados, enriquecer, candidatos.length);
+    };
+    // «3 bares en Boñar» un martes: a las 20:50 ya no hay nada abierto y salía 1 bar. Si detrás del primero ya está todo
+    // cerrado, se prueba antes de él (como mucho hasta las 18:00, o 2 horas antes si es de mediodía), igual que en montarPlan
+    let primera = null, haciaAtras = false;
+    for (let i = 0; i < n; i++) {
+      if (Date.now() > contexto.limite - 3000) break;
+      const suelo = primera == null ? 0 : Math.max(desde, primera >= 19 * 60 ? 18 * 60 : primera - 120);
+      let aLas = haciaAtras ? primera - dura : hora;
+      let p = aLas >= suelo ? await probarA(aLas) : null;
+      if (!p && !haciaAtras && primera != null) {
+        haciaAtras = true;
+        aLas = primera - dura;
+        if (aLas >= suelo) p = await probarA(aLas);
+      }
       if (!p) { faltan.push(`${hueco.tipo === 'cafeteria' ? 'cafetería' : hueco.tipo} abierto a las ${hhmm(hora)}`); break; }
       if (!p.precio) p.precio = PRECIO_TIPICO[hueco.tipo] || null;
-      p.hora = hhmm(Math.min(hora, 24 * 60 - 1));
+      p.hora = hhmm(Math.min(aLas, 24 * 60 - 1));
       apuntar(p);
       punto = { lat: Number(p.lat), lon: Number(p.lon) };
-      hora += DURA[hueco.tipo] || 60;
+      if (haciaAtras) { primera = aLas; continue; }
+      if (primera == null) primera = aLas;
+      hora += dura;
       reloj = Math.max(reloj, hora);
     }
   }

@@ -76,6 +76,22 @@ describe("montar el plan sin IA", () => {
     expect(plan).toHaveLength(1);
     expect(plan[0].titulo).toBe("Restaurante en León");
   });
+  it("«3 bares en Boñar» un martes: si a las 20:50 está todo cerrado, prueba antes del primero", async () => {
+    const BONAR = { lat: 42.8667, lon: -5.3236 };
+    const bares = ["Bar Casa Pepe", "Bar La Plaza", "Bar Los Arcos", "Bar El Puente"].map((n, i) => ({ n, t: "bar", la: BONAR.lat + i * 0.0005, lo: BONAR.lon, p: "2€" }));
+    // Google de mentira: después de las 20:30 todo está cerrado (pueblo, entre semana)
+    const pueblo = vi.fn(async (p) => {
+      const [hh, mm] = p.hora.split(":").map(Number);
+      if (hh * 60 + mm > 20 * 60 + 30) return { parada: null, cerrado: true };
+      return { parada: { ...p, lat: p.lat ?? BONAR.lat, lon: p.lon ?? BONAR.lon, placeId: p.titulo } };
+    });
+    const { plan, faltan } = await montarSinIA({
+      peticion: { apetece: "3 bares", fecha: "2026-11-25", ...BONAR, radio: 3 }, agenda: [], sitios: bares,
+      contexto: { ...BONAR, radio: 3, nombreZona: "Boñar", limite: Date.now() + 20000 }, ahora: new Date("2026-11-24T10:00:00Z"),
+    }, pueblo);
+    expect(plan.map((p) => p.hora)).toEqual(["18:20", "19:10", "20:00"]);
+    expect(faltan).toEqual([]);
+  });
   it("para hoy, nada antes de dentro de media hora", async () => {
     const { plan } = await montarSinIA({
       peticion: { apetece: "comer", fecha: "2026-11-24", ...LEON, radio: 3 }, agenda: [], sitios: SITIOS, contexto: contexto(),

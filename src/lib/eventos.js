@@ -18,7 +18,8 @@ import { limpiarParaPrompt } from "./blindaje";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
 import { enProvinciaLeon, esSitioDeFuera, eventoDeFuera } from "./provincia";
-import { esOficial, paginaQueNoExiste } from "./fiables";
+import { desenvolverEnlace, dominioDe as dominioFuente, esBuscador, esOficial, paginaQueNoExiste } from "./fiables";
+import { MUNICIPIOS_FUERA } from "./municipiosFuera";
 import { fuenteAytoLeon } from "./fuenteAyto";
 
 const DIAS_VENTANA = 21; // esta semana y las dos siguientes
@@ -29,6 +30,22 @@ const esFecha = (f) => typeof f === "string" && /^\d{4}-\d{2}-\d{2}$/.test(f);
 const enProvincia = enProvinciaLeon;
 // Coordenadas con pinta de reales (en la península): si caen fuera de León, el evento es de fuera
 const enLaPeninsula = (lat, lon) => lat > 36 && lat < 44 && lon > -10 && lon < 4;
+
+// ¿Es de un pueblo de otra provincia? La lista de siempre (lib/provincia.js) solo tiene los sitios más pedidos y se
+// colaban Valdemoro, Ciudad Rodrigo, Astudillo o «León (Guanajuato)». Ahora se mira cada trozo de la localidad contra
+// todos los municipios de España que no son de León. Si el enlace es de una web de León, se le da por bueno (hay pueblos
+// de aquí que se llaman como un municipio de fuera).
+const plano = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9ñ ]+/g, " ").replace(/\s+/g, " ").trim();
+const WEB_DE_LEON = /leon|bierzo|astorga|ponferrada|baneza|sahagun|laciana|maragat|cistierna|bembibre|villablino|coyanza|paramo|lanuevacronica/;
+export function deOtraProvincia(e) {
+  const loc = String(e?.localidad || "");
+  if (!loc.trim()) return false;
+  const partes = [loc, ...loc.split(/[,()/]/)].map(plano).filter(Boolean);
+  if (partes.some((p) => esSitioDeFuera(p))) return true;
+  const enLaLista = partes.some((p) => MUNICIPIOS_FUERA.has(p) || MUNICIPIOS_FUERA.has(p.replace(/^(el|la|los|las) /, "")));
+  return enLaLista && !WEB_DE_LEON.test(dominioFuente(e.fuente));
+}
+const deFuera = (e) => eventoDeFuera(e) || deOtraProvincia(e);
 
 function sumarDias(fecha, n) {
   const d = new Date(`${fecha}T12:00:00Z`);
@@ -152,14 +169,16 @@ export function validarEventoIA(e, desde, hasta) {
   if (!fechaFin && (diasSemana || permanente)) fechaFin = hasta;
   if ((fechaFin || fecha) < desde) return null;
   // Solo aceptamos una URL real citada por el modelo (no los enlaces internos de Google)
-  const fuente = typeof e.fuente === "string" && /^https?:\/\//.test(e.fuente) && !/vertexaisearch|grounding-api/.test(e.fuente) ? e.fuente : null;
+  // google.com/url?q=… se cambia por la web de verdad. Una búsqueda de Google no es fuente: verificarFuentes la manda al Verificador
+  const enlace = typeof e.fuente === "string" ? desenvolverEnlace(e.fuente.trim()) : null;
+  const fuente = enlace && /^https?:\/\//.test(enlace) && !/vertexaisearch|grounding-api/.test(enlace) ? enlace : null;
   if (!fuente) return null; // sin fuente verificable no lo publicamos
   const lat = Number(e.lat), lon = Number(e.lon);
   const coords = Number.isFinite(lat) && Number.isFinite(lon) && enProvincia(lat, lon);
   // Solo León: fuera lo que está en otra provincia (por coordenadas o por el nombre del pueblo)
   if (!coords && Number.isFinite(lat) && Number.isFinite(lon) && enLaPeninsula(lat, lon)) return null;
   if (esSitioDeFuera(e.localidad)) return null;
-  if (eventoDeFuera({ titulo, lugar: e.lugar, localidad: e.localidad, fuente })) return null;
+  if (deFuera({ titulo, lugar: e.lugar, localidad: e.localidad, fuente })) return null;
   return {
     titulo, fecha, fechaFin,
     hora: e.hora ? String(e.hora).slice(0, 20) : null,
@@ -410,7 +429,7 @@ export async function comprobarUrl(url, ms = 3500, { sinRango = false } = {}) {
 // página (leonjoven.net/agenda/expjoven-2026 daba 404 y traía Expojoven «hasta el 27»). Solo un 404 lo tira:
 // si la web no contesta a tiempo, entra igual, como antes.
 export async function verificarFuentes(eventos, dominios, { limite = Date.now() + 12000, enParalelo = 16 } = {}) {
-  const porComprobar = [...new Set(eventos.filter((e) => e.origen !== "jcyl" && e.origen !== "ayto" && e.fuente).map((e) => e.fuente))];
+  const porComprobar = [...new Set(eventos.filter((e) => e.origen !== "jcyl" && e.origen !== "ayto" && e.fuente && !esBuscador(e.fuente)).map((e) => e.fuente))];
   const estado = new Map();
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(enParalelo, porComprobar.length) }, async () => {
@@ -424,7 +443,8 @@ export async function verificarFuentes(eventos, dominios, { limite = Date.now() 
   for (const e of eventos) {
     // Una web oficial o de la prensa local que no contesta a tiempo entra igual (lib/fiables.js); si no existe (404), fuera
     const visto = estado.get(e.fuente);
-    const ok = e.origen === "jcyl" || e.origen === "ayto" || visto === "ok" || (visto !== "mal" && (dominioConsultado(e.fuente, dominios) || (visto === "duda" && esOficial(e.fuente))));
+    // Una búsqueda de Google siempre «existe»: nunca vale como fuente comprobada, va a la bandeja del Verificador
+    const ok = e.origen === "jcyl" || e.origen === "ayto" || (!esBuscador(e.fuente) && (visto === "ok" || (visto !== "mal" && (dominioConsultado(e.fuente, dominios) || (visto === "duda" && esOficial(e.fuente))))));
     if (ok) buenos.push(e);
     else descartados.push({ ...e, motivo: estado.get(e.fuente) || "duda" }); // "mal" = la página no existe
   }
@@ -917,7 +937,7 @@ export async function quitarEnlacesRotos({ dias = 4, max = 40, limite = Date.now
   const desde = hoyEnLeon();
   const agenda = (await eventosProximos(dias)).flatMap((d) => d.eventos);
   const porUrl = new Map();
-  for (const e of agenda) if (e?.fuente && /^https?:\/\//.test(e.fuente) && e.origen !== "jcyl" && e.origen !== "ayto" && !porUrl.has(e.fuente)) porUrl.set(e.fuente, e);
+  for (const e of agenda) if (e?.fuente && /^https?:\/\//.test(e.fuente) && !esBuscador(e.fuente) && e.origen !== "jcyl" && e.origen !== "ayto" && !porUrl.has(e.fuente)) porUrl.set(e.fuente, e);
   const urls = [...porUrl.keys()];
   const vistos = urls.length ? await varios(urls.map((u) => ["GET", `enlace:visto:${huella(u)}`])).catch(() => []) : [];
   const toca = urls.filter((_, i) => !vistos[i]).slice(0, max);
@@ -936,6 +956,31 @@ export async function quitarEnlacesRotos({ dias = 4, max = 40, limite = Date.now
   let quitados = 0;
   for (const e of rotos) quitados += await sinRomper(quitarDeLaAgenda(e), "enlace roto") || 0;
   return { mirados: toca.length, rotos: rotos.map((e) => ({ titulo: e.titulo, fuente: e.fuente })), quitados, desde };
+}
+
+// Lo que ya está en la agenda con una búsqueda de Google por «fuente» (entró antes de que eso dejara de valer): pasa a la
+// bandeja, de 8 en 8 (una pregunta del Verificador). Allí se confirma con la web de verdad, se sube «por confirmar» o
+// sale si es falso. Lo que ya está «por confirmar» se queda: el Verificador ya lo repasa. 0 € aquí.
+export const POR_TANDA_BUSCADORES = 8;
+export async function pasarBuscadoresALaBandeja({ max = POR_TANDA_BUSCADORES } = {}) {
+  const agenda = (await eventosProximos()).flatMap((d) => d.eventos);
+  const vistos = new Set(), lote = [];
+  for (const e of agenda) {
+    if (lote.length >= max) break;
+    if (!e?.fuente || !esBuscador(e.fuente) || e.porConfirmar || e.origen === "jcyl" || e.origen === "ayto") continue;
+    const id = idDudoso(e);
+    if (vistos.has(id)) continue;
+    vistos.add(id);
+    lote.push(e);
+  }
+  if (!lote.length) return { pasados: 0, titulos: [] };
+  await guardarDudosos(lote.map((e) => ({ ...e, empleado: "verificador" })));
+  // Solo sale de la web lo que ha entrado de verdad en la bandeja (o lo que ya tiraste antes)
+  const ids = lote.map(idDudoso);
+  const [enBandeja, tirados] = await varios([["HMGET", BANDEJA, ...ids], ["HMGET", TIRADOS, ...ids]]);
+  const pasan = lote.filter((_, i) => enBandeja?.[i] || tirados?.[i]);
+  for (const e of pasan) await sinRomper(quitarDeLaAgenda(e), "buscador a la bandeja");
+  return { pasados: pasan.length, titulos: pasan.map((e) => e.titulo) };
 }
 
 // Resumen para el panel: cada tramo con su última pasada, y el total de la agenda
@@ -986,7 +1031,7 @@ export function partesPorEmpleado(informes) {
 // ---------- Lectura ----------
 export async function eventosDelDia(fecha, { lat, lon, radio } = {}) {
   if (!esFecha(fecha)) return [];
-  const lista = ((await leerJSON(`eventos:${fecha}`)) || []).filter((e) => !eventoDeFuera(e)); // también limpia lo ya guardado
+  const lista = ((await leerJSON(`eventos:${fecha}`)) || []).filter((e) => !deFuera(e)); // también limpia lo ya guardado
   if (lat == null || lon == null || !radio) return lista;
   return lista.filter((e) => cercaDe(e, Number(lat), Number(lon), Number(radio)));
 }
@@ -1012,7 +1057,7 @@ export async function eventosProximos(dias = DIAS_VENTANA) {
   const res = await varios(fechas.map((f) => ["GET", `eventos:${f}`]));
   return fechas.map((fecha, i) => {
     let eventos = [];
-    try { eventos = JSON.parse(res[i] || "[]").filter((e) => !eventoDeFuera(e)); } catch {}
+    try { eventos = JSON.parse(res[i] || "[]").filter((e) => !deFuera(e)); } catch {}
     return { fecha, eventos };
   });
 }
