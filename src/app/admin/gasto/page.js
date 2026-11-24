@@ -9,7 +9,7 @@ const pct = (n) => `${n > 0 ? "+" : ""}${(n * 100).toFixed(1).replace(".", ",")}
 const enMadrid = (t, op) => new Date(t).toLocaleString("es-ES", { timeZone: "Europe/Madrid", ...op });
 const diaLargo = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
 const diaCorto = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
-const NOMBRE_FUNCION = { barrido: "Barrido de eventos", planes: "Planes y retoques", otros: "Otros (jefe, Despensa…)" };
+const NOMBRE_FUNCION = { barrido: "Barrido de eventos", planes: "Planes y retoques", pruebas: "Pruebas de planes (tope aparte)", otros: "Otros (jefe, Despensa…)" };
 const ORIGEN_FACTOR = { estimado: "estimado con la factura de noviembre", cuadre: "sale de tu último cuadre con AI Studio", vercel: "fijado en Vercel (GASTO_IA_AJUSTE)" };
 // La hora de ahora para el campo de fecha (datetime-local va sin zona: la del móvil)
 const ahoraLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
@@ -233,7 +233,7 @@ export default function Gasto() {
         <section className="pn-bloque">
           <h2 className="pn-titulo">Gasto de la IA</h2>
           <div className="pn-mini">
-            <span><b style={{ color: gasto.hoy >= gasto.tope ? "var(--mal)" : undefined }}>{eur(gasto.hoy)}</b><em>hoy</em></span>
+            <span><b style={{ color: gasto.hoy - (gasto.pruebasHoy || 0) >= gasto.tope ? "var(--mal)" : undefined }}>{eur(gasto.hoy)}</b><em>hoy{gasto.pruebasHoy > 0 ? `, ${eur(gasto.pruebasHoy)} de pruebas` : ""}</em></span>
             <span><b>{eur(gasto.ayer)}</b><em>ayer</em></span>
             <span><b>{eur(gasto.d7)}</b><em>7 días</em></span>
             <span><b>{eur(gasto.d30)}</b><em>30 días</em></span>

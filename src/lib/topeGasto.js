@@ -5,9 +5,11 @@
 //    El tramo que no se hace lo repite la Repesca otro día.
 //  · Planes, retoques, buscador de la Despensa y el jefe: paran en GASTO_IA_MAX_DIA (0,40 € de serie).
 //    Un plan que llega al tope sale igual, montado sin IA con los locales ya comprobados (lib/planSinIA.js).
+//  · Pruebas de planes (/api/panel/comparar): su propio tope, GASTO_PRUEBAS_MAX_DIA (1 € de serie), y no cuentan en los otros.
 // Si el almacén no responde no se puede contar: se para (sin contador no hay techo).
 import { comando, recordar } from "./almacen";
 import { EUROS_POR_DOLAR, hoyEnLeon } from "./estadisticas";
+import { claveGastoPruebas, esGastoDePruebas } from "./modoPruebas";
 
 const numero = (v, porDefecto) => {
   const n = Number(String(v ?? "").replace(",", "."));
@@ -37,16 +39,22 @@ export function gastoDeHoyEuros() {
   const dia = hoyEnLeon();
   return recordar(`tope-gasto:${dia}`, 20000, async () => ((Number(await comando(["GET", `ia:dia:${dia}`])) || 0) / 1e6) * EUROS_POR_DOLAR * (await ajusteReal()));
 }
+export const topePruebasEuros = () => numero(process.env.GASTO_PRUEBAS_MAX_DIA, 1);
+// Lo de las pruebas se lee sin recordar: una pasada de 20 casos no debe colarse por los 20 s de memoria
+async function gastoPruebasDeHoyEuros() {
+  return ((Number(await comando(["GET", claveGastoPruebas(hoyEnLeon())])) || 0) / 1e6) * EUROS_POR_DOLAR * (await ajusteReal());
+}
 
 // Lo que corre solo, sin nadie esperando
 const DE_FONDO = new Set(["barrido"]);
 
 // true = puede llamar a la IA. «para» es el de llamarGemini (usuario, barrido, despensa, asesor)
 export async function dentroDelGastoDelDia(para = "usuario") {
-  const tope = DE_FONDO.has(para) ? topeFondoEuros() : topeDiaEuros();
+  const pruebas = esGastoDePruebas();
+  const tope = pruebas ? topePruebasEuros() : DE_FONDO.has(para) ? topeFondoEuros() : topeDiaEuros();
   if (!(tope > 0)) return true; // 0 = sin tope
   try {
-    return (await gastoDeHoyEuros()) < tope;
+    return (await (pruebas ? gastoPruebasDeHoyEuros() : gastoDeHoyEuros())) < tope;
   } catch (e) {
     console.error("[tope-gasto]", e?.message || e);
     return false;

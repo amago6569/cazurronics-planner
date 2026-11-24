@@ -2,6 +2,7 @@
 // Contadores por día sin cookies ni librerías externas: visitas, planes, compartidos,
 // gente que vuelve, clics en "Llamar"... y de qué campaña viene cada visita (utm_source).
 import { comando, varios, aObjeto } from "./almacen";
+import { claveGastoPruebas } from "./modoPruebas";
 
 export const METRICAS = [
   "visita", "vuelve", "plan", "retoque", "compartir", "abre_compartido",
@@ -74,6 +75,7 @@ const mesEnLeon = (desplazamientoMeses = 0) => {
 // Para el panel de gasto: cada tarea cae en una de tres funciones
 export function funcionDeTarea(tarea) {
   const t = String(tarea || "");
+  if (/^pruebas/.test(t)) return "pruebas";
   if (/^(barrido|verificador|repesca|eventos)/.test(t)) return "barrido";
   if (/^(planes|retoques)/.test(t)) return "planes";
   return "otros";
@@ -89,8 +91,10 @@ export async function registrarErrorIA(estado) {
   await varios([["HINCRBY", claveErroresIA(dia), String(Number(estado) || "otro"), 1], ["EXPIRE", claveErroresIA(dia), 8 * 24 * 3600]]);
 }
 
-export async function registrarGastoIA(tarea, uso) {
-  const t = limpiarFuente(tarea) || "otra";
+// prueba: la llamada viene de /api/panel/comparar (lib/modoPruebas.js). Va a su propio contador del día, no al de la web
+export async function registrarGastoIA(tarea, uso, { prueba = false } = {}) {
+  const t = `${prueba ? "pruebas-" : ""}${limpiarFuente(tarea) || "otra"}`;
+  const diaGasto = prueba ? claveGastoPruebas(hoyEnLeon()) : `ia:dia:${hoyEnLeon()}`;
   const clave = `ia:${mesEnLeon()}`;
   // Búsqueda de un 2.x: gratis mientras el día no pase de 1.500 peticiones con búsqueda (cuota de Google)
   let extra = 0;
@@ -107,9 +111,9 @@ export async function registrarGastoIA(tarea, uso) {
     ["HINCRBY", clave, `${t}:busquedas`, Math.round(Number(uso?.consultas) || 0)],
     ["HINCRBY", clave, `${t}:microdolares`, Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6)],
     ["EXPIRE", clave, MESES_GASTO],
-    // El total del día, para la tarjeta de gasto de la oficina y el aviso de 1 € al día
-    ["INCRBY", `ia:dia:${hoyEnLeon()}`, Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6)],
-    ["EXPIRE", `ia:dia:${hoyEnLeon()}`, 40 * 24 * 3600],
+    // El total del día, para el tope, la tarjeta de gasto de la oficina y el aviso de 1 € al día (las pruebas, aparte)
+    ["INCRBY", diaGasto, micro],
+    ["EXPIRE", diaGasto, 40 * 24 * 3600],
     // Panel de gasto: la llamada suelta y el día por función y modelo
     ["LPUSH", CLAVE_LLAMADAS_IA, JSON.stringify({ t: Date.now(), f: funcionDeTarea(t), k: t, m: String(uso?.modelo || "?").slice(0, 40), e: Math.round(Number(uso?.entrada) || 0), s: Math.round(Number(uso?.salida) || 0), h: Math.round(Number(uso?.herramienta) || 0), b: Math.round(Number(uso?.consultas) || 0), u: micro })],
     ["LTRIM", CLAVE_LLAMADAS_IA, 0, 999],

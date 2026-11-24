@@ -6,6 +6,7 @@
 import { enSegundoPlano } from "./almacen";
 import { registrarErrorIA, registrarGastoIA } from "./estadisticas";
 import { precioDe } from "./preciosIA";
+import { esGastoDePruebas } from "./modoPruebas";
 import { dentroDelGastoDelDia } from "./topeGasto";
 
 // Los 2.0 (gemini-2.0-flash y -lite) los apagó Google el 1-6-2026: devolvían 404 y solo hacían perder tiempo.
@@ -114,7 +115,8 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
         .filter((t) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)));
       if (fallos.length) console.warn("[gemini] plan B:", fallos.join(" | "), "→ usando", modelo);
       const uso = medirUso(modelo, datos);
-      enSegundoPlano(() => registrarGastoIA(tarea, uso), "gasto-ia"); // solo apunta; si falla, la respuesta sigue igual
+      const prueba = esGastoDePruebas(); // se mira aquí: lo de segundo plano puede correr ya fuera de la petición
+      enSegundoPlano(() => registrarGastoIA(tarea, uso, { prueba }), "gasto-ia"); // solo apunta; si falla, la respuesta sigue igual
       console.log(`[gemini-uso] ${tarea} ${modelo} entrada=${uso.entrada} salida=${uso.salida} busquedas=${uso.consultas} ~${uso.dolares}$`);
       // Las páginas que ha consultado y qué trozo de la respuesta sale de cada una (para saber la fuente de cada dato)
       const grounding = { chunks: (candidato?.groundingMetadata?.groundingChunks || []).map((c) => ({ uri: c?.web?.uri || null, title: c?.web?.title || null })), supports: candidato?.groundingMetadata?.groundingSupports || [] };
