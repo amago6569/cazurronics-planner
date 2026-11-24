@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asegurarBarridoReciente, barrerEventos, HORAS_MIN_CRON, IDS_TRAMOS, idTramo, jefeRepasa, tramoReciente } from "../../../lib/eventos";
 import { segundaComprobacion, turnoDeRepesca } from "../../../lib/guardia";
-import { avisosUrgentes } from "../../../lib/avisos";
+import { avisosDeSaldo, avisosUrgentes } from "../../../lib/avisos";
 import { sinRomper } from "../../../lib/almacen";
 
 export const maxDuration = 60; // cada tramo del barrido cabe en un minuto
@@ -25,7 +25,8 @@ export async function GET(request) {
   try {
     const params = new URL(request.url).searchParams;
     // Al acabar cada turno: si la clave de la IA falla, Google retira un modelo o el día pasa de 1 €, te avisa ya por Telegram
-    if (params.has("jefe")) { const jefe = await jefeRepasa(); await sinRomper(avisosUrgentes(), "avisos"); return NextResponse.json({ exito: true, jefe }); }
+    // y dos veces al día mira el saldo de la IA (panel de gasto): poco saldo o un día con el doble de gasto, por Telegram y correo
+    if (params.has("jefe")) { const jefe = await jefeRepasa(); await sinRomper(avisosUrgentes(), "avisos"); await sinRomper(avisosDeSaldo(), "avisos de saldo"); return NextResponse.json({ exito: true, jefe }); }
     if (params.get("guardia") === "verificador") return NextResponse.json({ exito: true, verificador: await segundaComprobacion() });
     if (params.get("guardia") === "repesca") return NextResponse.json({ exito: true, repesca: await turnoDeRepesca() });
     const t = params.get("tramo");

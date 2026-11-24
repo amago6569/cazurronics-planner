@@ -71,6 +71,24 @@ const mesEnLeon = (desplazamientoMeses = 0) => {
   return d.toISOString().slice(0, 7);
 };
 
+// Para el panel de gasto: cada tarea cae en una de tres funciones
+export function funcionDeTarea(tarea) {
+  const t = String(tarea || "");
+  if (/^(barrido|verificador|repesca|eventos)/.test(t)) return "barrido";
+  if (/^(planes|retoques)/.test(t)) return "planes";
+  return "otros";
+}
+// Las últimas llamadas a la IA, una por línea (las 1.000 más recientes), y el detalle de cada día por función y modelo
+export const CLAVE_LLAMADAS_IA = "ia:llamadas";
+export const claveDetalleIA = (dia) => `ia:detalle:${dia}`;
+export const claveErroresIA = (dia) => `ia:errores:${dia}`;
+
+// Un error de Google al llamar a la IA (402 sin saldo, 429 saturado, 5xx caído…), por día, para el panel de gasto
+export async function registrarErrorIA(estado) {
+  const dia = hoyEnLeon();
+  await varios([["HINCRBY", claveErroresIA(dia), String(Number(estado) || "otro"), 1], ["EXPIRE", claveErroresIA(dia), 8 * 24 * 3600]]);
+}
+
 export async function registrarGastoIA(tarea, uso) {
   const t = limpiarFuente(tarea) || "otra";
   const clave = `ia:${mesEnLeon()}`;
@@ -81,6 +99,7 @@ export async function registrarGastoIA(tarea, uso) {
     const [n] = await varios([["INCRBY", dia, 1], ["EXPIRE", dia, 3 * 24 * 3600]]);
     if (Number(n) > BUSQUEDAS_GRATIS_DIA) extra = Number(uso.precioPeticion) || 0;
   }
+  const micro = Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6);
   await varios([
     ["HINCRBY", clave, `${t}:llamadas`, 1],
     ["HINCRBY", clave, `${t}:entrada`, Math.round(Number(uso?.entrada) || 0)],
@@ -91,6 +110,12 @@ export async function registrarGastoIA(tarea, uso) {
     // El total del día, para la tarjeta de gasto de la oficina y el aviso de 1 € al día
     ["INCRBY", `ia:dia:${hoyEnLeon()}`, Math.round(((Number(uso?.dolares) || 0) + extra) * 1e6)],
     ["EXPIRE", `ia:dia:${hoyEnLeon()}`, 40 * 24 * 3600],
+    // Panel de gasto: la llamada suelta y el día por función y modelo
+    ["LPUSH", CLAVE_LLAMADAS_IA, JSON.stringify({ t: Date.now(), f: funcionDeTarea(t), k: t, m: String(uso?.modelo || "?").slice(0, 40), e: Math.round(Number(uso?.entrada) || 0), s: Math.round(Number(uso?.salida) || 0), h: Math.round(Number(uso?.herramienta) || 0), b: Math.round(Number(uso?.consultas) || 0), u: micro })],
+    ["LTRIM", CLAVE_LLAMADAS_IA, 0, 999],
+    ["HINCRBY", claveDetalleIA(hoyEnLeon()), `${funcionDeTarea(t)}|${String(uso?.modelo || "?").slice(0, 40)}`, micro],
+    ["HINCRBY", claveDetalleIA(hoyEnLeon()), `${funcionDeTarea(t)}|${String(uso?.modelo || "?").slice(0, 40)}|n`, 1],
+    ["EXPIRE", claveDetalleIA(hoyEnLeon()), 40 * 24 * 3600],
   ]);
 }
 

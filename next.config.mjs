@@ -64,6 +64,11 @@ const nextConfig = {
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
       },
       {
+        // El panel de gasto no se guarda en buscadores ni en cachés, aunque alguien lo enlace
+        source: "/admin/:ruta*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }, { key: "Cache-Control", value: "no-store" }],
+      },
+      {
         // La copia de la web en cazurronics-planner.vercel.app (y las de prueba de Vercel) no debe salir en Google:
         // solo cuenta cazurronics.es. Sigue funcionando igual, simplemente los buscadores no la guardan.
         source: "/:path*",

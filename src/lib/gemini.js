@@ -4,7 +4,8 @@
 // de la gente: aunque el barrido gaste mucho, los planes de los usuarios siguen funcionando.
 
 import { enSegundoPlano } from "./almacen";
-import { registrarGastoIA } from "./estadisticas";
+import { registrarErrorIA, registrarGastoIA } from "./estadisticas";
+import { precioDe } from "./preciosIA";
 import { dentroDelGastoDelDia } from "./topeGasto";
 
 // Los 2.0 (gemini-2.0-flash y -lite) los apagó Google el 1-6-2026: devolvían 404 y solo hacían perder tiempo.
@@ -44,29 +45,23 @@ export class ErrorIA extends Error {
   constructor(mensaje, estado) { super(mensaje); this.estado = estado; }
 }
 
-// Precio aproximado (dólares) para medir lo que cuesta cada llamada. Cambia si Google cambia la tarifa:
-// https://ai.google.dev/pricing. Las búsquedas de Google de los modelos 3.x se cobran una a una
-// (5.000 gratis al mes, luego 14 $ cada 1.000); en los 2.x se cobra cada petición con búsqueda (1.500 gratis al día).
-const PRECIOS = [
-  [/^gemini-(flash-latest|3)/, { entrada: 0.75, salida: 3.75, busqueda: 0.014, porConsulta: true }],
-  [/^gemini-(2\.5-flash-lite|flash-lite)/, { entrada: 0.1, salida: 0.4, busqueda: 0.035, porConsulta: false }],
-  [/^gemini-2\.5-flash/, { entrada: 0.3, salida: 2.5, busqueda: 0.035, porConsulta: false }],
-  [/^gemini-2\.0/, { entrada: 0.1, salida: 0.4, busqueda: 0.035, porConsulta: false }],
-];
+// Precios por modelo: src/lib/preciosIA.js (comprobados en la página oficial de Google).
 
 // Tokens, búsquedas y coste aproximado de una respuesta de Gemini.
 // En los 2.x la búsqueda NO se suma aquí: las 1.500 primeras del día son gratis. Se devuelve aparte
 // (peticionGratis = 1) y registrarGastoIA solo la cobra si ese día se pasa de la cuota.
-export function medirUso(modelo, datos) {
+export function medirUso(modelo, datos, ahora = new Date()) {
   const u = datos?.usageMetadata || {};
   const consultas = (datos?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
-  const precio = PRECIOS.find(([re]) => re.test(modelo))?.[1] || PRECIOS[0][1];
+  const precio = precioDe(modelo, ahora);
   const entrada = Number(u.promptTokenCount) || 0;
   const salida = (Number(u.candidatesTokenCount) || 0) + (Number(u.thoughtsTokenCount) || 0);
+  // Lo que leen de los resultados de búsqueda: se apunta aparte (no se sabe si Google lo cobra; el cuadre lo dirá)
+  const herramienta = Number(u.toolUsePromptTokenCount) || 0;
   const pagadas = precio.porConsulta ? consultas : 0;
   const peticionGratis = !precio.porConsulta && consultas ? 1 : 0;
   const dolares = (entrada * precio.entrada + salida * precio.salida) / 1e6 + pagadas * precio.busqueda;
-  return { modelo, entrada, salida, consultas, peticionGratis, precioPeticion: peticionGratis ? precio.busqueda : 0, dolares: Math.round(dolares * 100000) / 100000 };
+  return { modelo, entrada, salida, herramienta, consultas, peticionGratis, precioPeticion: peticionGratis ? precio.busqueda : 0, dolares: Math.round(dolares * 100000) / 100000 };
 }
 
 // json: true pide la respuesta directamente en JSON (solo sin Google Search: Gemini no admite las dos cosas a la vez)
@@ -105,6 +100,7 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
       const datos = await res.json().catch(() => ({}));
       if (!res.ok) {
         fallos.push(`${modelo}: ${res.status} ${String(datos?.error?.message || "").slice(0, 160)}`);
+        enSegundoPlano(() => registrarErrorIA(res.status), "errores-ia"); // para el panel de gasto (402 sin saldo, 429 saturado…)
         if (REINTENTABLE.has(res.status)) { if (res.status === 429) await new Promise((r) => setTimeout(r, 400)); continue; }
         const err = new ErrorIA(`Gemini ${res.status}`, res.status);
         err.fallos = fallos;
