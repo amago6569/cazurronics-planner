@@ -11,6 +11,8 @@ import { hoyEnLeon, leerGastoDias } from "./estadisticas";
 import { enviarTelegram, leerDueno, telegramConfigurado } from "./telegram";
 import { apuntarCharla, JEFE, TU } from "./charla";
 import { LIMITE_DIA_EUROS, euros } from "./euros";
+import { mandarAvisosDeGasto } from "./gastoPanel";
+import { correoConfigurado, mandarCorreo } from "./liga/correo";
 
 export function avisosPendientes({ barrido, gasto }) {
   const tipos = new Set(Object.values(barrido?.fuentes || {}).filter((f) => !f.ok).map((f) => f.tipo));
@@ -36,4 +38,17 @@ export async function avisosUrgentes() {
   }
   if (enviados.length) await sinRomper(apuntarCharla(avisos.filter((a) => enviados.includes(a.tipo)).map((a) => ({ de: JEFE, a: TU, tipo: "fallo", texto: a.texto }))), "charla");
   return enviados;
+}
+
+// Saldo de la IA (panel de gasto): menos de 3 €, menos de 5 días al ritmo de la semana o ayer más del doble de la media.
+// Por Telegram y por correo a Alejandro (AVISOS_CORREO o, si no, el buzón de Strato de la web), una vez al día cada uno.
+export async function avisosDeSaldo(env = process.env) {
+  const dueno = telegramConfigurado() ? await leerDueno().catch(() => null) : null;
+  const para = env.AVISOS_CORREO || env.LIGA_SMTP_USUARIO;
+  const enviados = await mandarAvisosDeGasto({
+    telegram: dueno ? (texto) => enviarTelegram(dueno, texto) : null,
+    correo: correoConfigurado(env) && para ? (a) => mandarCorreo(para, { nombre: "Cazurronics", asunto: `Aviso de la IA: ${a.tipo === "gasto-doble" ? "gasto alto ayer" : "queda poco saldo"}`, texto: `${a.texto}\n\nPanel de gasto: https://www.cazurronics.es/admin/gasto` }, env) : null,
+  });
+  if (enviados.length) await sinRomper(apuntarCharla(enviados.map((a) => ({ de: JEFE, a: TU, tipo: "fallo", texto: a.texto }))), "charla");
+  return enviados.map((a) => a.tipo);
 }

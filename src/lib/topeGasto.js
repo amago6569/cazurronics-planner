@@ -16,13 +16,26 @@ const numero = (v, porDefecto) => {
 // El contador se queda corto: del 1 al 17-11-2026 marcó 8,29 € y Google facturó 12,61 € (x1,52). Hasta que el panel de gasto
 // cuadre con AI Studio, el tope compara con el contador x1,5 (GASTO_IA_AJUSTE en Vercel para cambiarlo)
 export const ajusteContador = () => numero(process.env.GASTO_IA_AJUSTE, 1.5) || 1;
+// Cuando Alejandro apunta en /admin/gasto el saldo que marca AI Studio, el panel calcula cuánto se queda corto el contador
+// y lo guarda en ia:factor. Solo vale entre 1 y 2 (por debajo de 1 cuenta como 1: el tope nunca se afloja por debajo de lo
+// contado). Fuera de 0,5-3 es un dato mal metido y se ignora. GASTO_IA_AJUSTE en Vercel manda sobre todo.
+export function factorDelCuadre(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n < 0.5 || n > 3) return null;
+  return Math.min(2, Math.max(1, n));
+}
+async function ajusteReal() {
+  if (String(process.env.GASTO_IA_AJUSTE ?? "").trim() !== "") return ajusteContador();
+  const cuadre = factorDelCuadre(await comando(["GET", "ia:factor"]).catch(() => null));
+  return cuadre ?? ajusteContador();
+}
 export const topeDiaEuros = () => numero(process.env.GASTO_IA_MAX_DIA, 0.4);
 export const topeFondoEuros = () => Math.min(topeDiaEuros(), numero(process.env.GASTO_FONDO_MAX_DIA, 0.25));
 
 // Lo que va de hoy, en euros. Se recuerda 20 s por instancia: un barrido de 10 búsquedas no lee 10 veces
 export function gastoDeHoyEuros() {
   const dia = hoyEnLeon();
-  return recordar(`tope-gasto:${dia}`, 20000, async () => ((Number(await comando(["GET", `ia:dia:${dia}`])) || 0) / 1e6) * EUROS_POR_DOLAR * ajusteContador());
+  return recordar(`tope-gasto:${dia}`, 20000, async () => ((Number(await comando(["GET", `ia:dia:${dia}`])) || 0) / 1e6) * EUROS_POR_DOLAR * (await ajusteReal()));
 }
 
 // Lo que corre solo, sin nadie esperando

@@ -77,8 +77,9 @@ async function transportar(env) {
   return transporte;
 }
 
-export async function mandarCorreo(para, { asunto, texto, html }, env = process.env) {
+// nombre: quién firma (los avisos del panel de gasto van como «Cazurronics»). Si el correo es para la propia cuenta, sin copia oculta
+export async function mandarCorreo(para, { asunto, texto, html, nombre = "Liga Cazurra" }, env = process.env) {
   const t = await transportar(env);
   const de = env.LIGA_SMTP_USUARIO;
-  await t.sendMail({ from: { name: "Liga Cazurra", address: de }, to: para, bcc: de, replyTo: de, subject: asunto, text: texto, html });
+  await t.sendMail({ from: { name: nombre, address: de }, to: para, bcc: para === de ? undefined : de, replyTo: de, subject: asunto, text: texto, html });
 }

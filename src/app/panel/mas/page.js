@@ -2,6 +2,7 @@
 // /panel/mas — lo que no hace falta mirar a diario: de dónde vienen las visitas, barridos a mano, gasto por tarea,
 // las tripas de la Despensa y las estadísticas de locales. Los botones que gastan búsquedas viven solo aquí.
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import PanelDespensa from "../../components/PanelDespensa";
 import { Entrada, Marco, fmt, pedir, useClave } from "../comun";
 
@@ -45,7 +46,8 @@ function GastoIA({ gasto }) {
           ))}
         </ul>
       ) : <p className="pn-apunte">Aún no hay datos de este mes. Se apuntan solos en cada llamada a la IA.</p>}
-      <p className="pn-apunte mt-3">Coste aproximado con la tarifa de Google. La factura real puede ser menor por las búsquedas gratis del día.</p>
+      <p className="pn-apunte mt-3">Lo que cuenta la web con la tarifa de Google. Google cobra algo más (en noviembre, × 1,5).</p>
+      <Link href="/admin/gasto" className="pn-boton flojo mt-3 w-full">Saldo, recargas y cada llamada: panel de gasto</Link>
     </section>
   );
 }

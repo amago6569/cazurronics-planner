@@ -19,6 +19,7 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 - Planes y retoques van en modo ahorro por defecto: sin búsqueda en Google, la IA elige entre locales ya comprobados. `PLANES_CON_GOOGLE=1` en Vercel vuelve al modo con búsqueda. No cambies ese valor por defecto.
 - Antes de añadir una llamada nueva a Gemini o a Google Places, di cuánto cuesta al mes con números (llamadas al día × precio).
 - Tope de gasto de la IA (24-11-2026): 0,40 € al día en total y 0,25 € para las tareas de fondo (`lib/topeGasto.js`, `GASTO_IA_MAX_DIA` y `GASTO_FONDO_MAX_DIA`). Pasado el tope, o si Google da 402/403, el plan sale sin IA (`lib/planSinIA.js`). Nunca un «Estamos recargando la IA».
+- Precios de cada modelo: solo en `src/lib/preciosIA.js`, con la fecha en que se comprobaron en la página oficial. El saldo de AI Studio, el gasto por llamada y los avisos de saldo están en `/admin/gasto` (`lib/gastoPanel.js`).
 - Nada de claves gratis de Gemini: las condiciones de la API solo permiten servicios de pago si la web la usan personas del EEE.
 
 ## Lógica que no se rompe
