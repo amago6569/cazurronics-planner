@@ -22,6 +22,8 @@ const MS_TOTAL = 58000;
 // Un plan que no sale (nada que encaje) no gasta cupo: se devuelve.
 const maxPorHora = () => Math.max(1, Number(process.env.PLANES_MAX_HORA ?? 10) || 10);
 
+const redondearPosicion = (n) => Math.round(Number(n) * 1000) / 1000;
+
 export async function POST(request) {
   const inicio = Date.now();
   // Lo que se ha contado para esta petición: si al final no hay plan (también si algo revienta), se devuelve
@@ -69,7 +71,8 @@ export async function POST(request) {
     }
     const { plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, aviso } = montado;
     // Si el texto nombraba un pueblo fuera del radio, el plan se hizo allí (lib/pueblos.js): el plan guardado lleva ese centro
-    const centro = montado.centro || [lat, lon];
+    // Tu posición exacta (si usaste «Usar mi ubicación») no se guarda: quien abra el enlace solo ve la zona, redondeada a unos 100 m
+    const centro = (montado.centro || [lat, lon]).map(redondearPosicion);
     const radioPlan = montado.radio || radio;
 
     // NUEVO: cada parada lleva su identificador de lugar (para estadísticas y valoraciones)

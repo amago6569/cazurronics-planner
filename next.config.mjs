@@ -12,6 +12,9 @@ const CSP = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'self'",
+  // Cada aviso llega a /api/csp y se cuenta en /panel/mas (lib/csp.js): así se sabe cuándo se puede activar de verdad
+  "report-uri /api/csp",
+  "report-to csp",
 ].join("; ");
 
 /** @type {import('next').NextConfig} */
@@ -49,8 +52,9 @@ const nextConfig = {
           // HSTS: el navegador entra siempre por https, aunque alguien escriba http://
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
           // Lista de sitios de los que la web puede cargar cosas. De momento en modo "solo avisar": no bloquea nada,
-          // solo apunta en la consola lo que se saldría de la lista. Cuando pase una semana sin avisos, se activa de verdad.
+          // y cada aviso se cuenta en /panel/mas. Cuando pase una semana sin avisos de sitios que la web usa, se activa de verdad.
           { key: "Content-Security-Policy-Report-Only", value: CSP },
+          { key: "Reporting-Endpoints", value: 'csp="/api/csp"' },
         ],
       },
       {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { claveConFreno, respuestaClave } from "../../../lib/freno";
 import { comando, leerJSON, usaRedis, varios } from "../../../lib/almacen";
 import { leerGastoIA, leerResumen } from "../../../lib/estadisticas";
+import { leerAvisosCSP } from "../../../lib/csp";
 import { buscarLugares, claveDePanelValida, claveValida, tokenNegocio, topLugares, topTiendas } from "../../../lib/lugares";
 import { barrerEventos, eventosProximos, HORAS_MIN_MANUAL, IDS_TRAMOS, idTramo, tramoReciente } from "../../../lib/eventos";
 import { barrerDespensa, resumenDespensa } from "../../../lib/despensa";
@@ -64,7 +65,7 @@ async function datosDelPanel(request) {
       solicitudes: leerSolicitudes(solicitudes).map((s) => ({ ...s, atendida: hechas.has(idSolicitud(s)), id: idSolicitud(s) })),
     }, { headers: { "Cache-Control": "no-store" } });
   }
-  const [resumen, apariciones, gusta, barrido, agenda, despensa, despensaTiendas, mercadillos, fichas, gastoIA] = await Promise.all([
+  const [resumen, apariciones, gusta, barrido, agenda, despensa, despensaTiendas, mercadillos, fichas, gastoIA, csp] = await Promise.all([
     leerResumen(14),
     topLugares("ranking:apariciones", 25),
     topLugares("ranking:gusta", 10),
@@ -75,6 +76,7 @@ async function datosDelPanel(request) {
     resumenMercadillos().catch(() => null),
     resumenFichas().catch(() => null),
     leerGastoIA().catch(() => null),
+    leerAvisosCSP().catch(() => []),
   ]);
   const conEnlace = (l) => ({ ...l, enlaceNegocio: tokenNegocio(l.clave) });
   return NextResponse.json({
@@ -86,6 +88,7 @@ async function datosDelPanel(request) {
     barrido,
     agenda: agenda.map((d) => ({ fecha: d.fecha, eventos: d.eventos.length })),
     gastoIA,
+    csp,
     despensa: despensa ? { ...despensa, google: despensaTiendas, mercadillos, fichas } : null,
   }, { headers: { "Cache-Control": "no-store" } });
 }
