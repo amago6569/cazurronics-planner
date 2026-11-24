@@ -56,11 +56,6 @@ export async function leerResumen(dias = 14) {
   };
 }
 
-export async function totalPlanes() {
-  const t = aObjeto(await comando(["HGETALL", "stats:total"]));
-  return Number(t.plan) || 0;
-}
-
 // ============ GASTO DE LA IA POR TAREA ============
 // Cada llamada a Gemini suma aquí sus tokens, búsquedas y coste aproximado, por mes y por tarea
 // (barrido de eventos, planes, Despensa...). Así el panel enseña qué tarea se lleva la factura.

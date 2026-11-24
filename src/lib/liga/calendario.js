@@ -27,11 +27,6 @@ export function jornadaDe(fecha = new Date()) {
   return m.hora < HORA_CAMBIO ? sumarDias(m.dia, -1) : m.dia;
 }
 
-export function esDia(texto) {
-  return typeof texto === "string" && /^\d{4}-\d{2}-\d{2}$/.test(texto) && !Number.isNaN(Date.parse(`${texto}T12:00:00Z`))
-    && new Date(`${texto}T12:00:00Z`).toISOString().slice(0, 10) === texto;
-}
-
 export function sumarDias(dia, n) {
   const d = new Date(`${dia}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);

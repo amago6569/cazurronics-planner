@@ -55,7 +55,6 @@ export const ZONAS = [
   },
 ];
 
-
 // Los ayuntamientos (municipios) de la provincia, por zona. Los usa el barrido gordo,
 // que va municipio a municipio, y ayudan a saber de qué zona es cada evento.
 export const MUNICIPIOS = {
@@ -129,13 +128,6 @@ export function zonaDe(e) {
   if (e.zonaBusqueda && POR_ID[e.zonaBusqueda]) return e.zonaBusqueda;
   if (!loc) return "leon"; // sin municipio: casi siempre es la capital (agendas del Ayuntamiento y la prensa)
   return "otros";
-}
-
-// Cuenta eventos únicos por zona: { leon: 12, bierzo: 4, ... }
-export function contarPorZona(eventos) {
-  const cuenta = {};
-  for (const e of eventos || []) { const z = zonaDe(e); cuenta[z] = (cuenta[z] || 0) + 1; }
-  return cuenta;
 }
 
 // La zona más cercana a un punto del mapa (cuando la gente pincha en cualquier sitio)

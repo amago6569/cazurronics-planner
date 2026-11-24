@@ -107,18 +107,6 @@ async function fuenteJCyL(desde, hasta) {
   return eventos;
 }
 
-// ---------- Fuente 2: Gemini + Google Search, búsquedas dirigidas ----------
-export const BUSQUEDAS = [
-  { tema: "conciertos y música en directo", pistas: "aytoleon.es, Auditorio Ciudad de León, Espacio Vías, salas de conciertos, Diario de León, Leonoticias, iLeón, entradas.com, ticketmaster" },
-  { tema: "teatro, danza, cine, monólogos y espectáculos", pistas: "Teatro El Albéitar, Auditorio Ciudad de León, Teatro Bergidum (Ponferrada), Teatro Gullón (Astorga), Instituto Leonés de Cultura (dipuleon.es)" },
-  { tema: "exposiciones, museos y visitas guiadas", pistas: "MUSAC, Museo de León, Palacio del Conde Luna, Catedral de León, Real Colegiata de San Isidoro, Casa Botines, Turismo León (leon.es)" },
-  { tema: "mercados, mercadillos, ferias de artesanía y jornadas gastronómicas", pistas: "Mercado del Conde Luna, ferias del Bierzo, jornadas de la cecina, del botillo y del cocido, Diario de León agenda" },
-  { tema: "fiestas patronales, romerías y eventos en pueblos de la provincia", pistas: "Ponferrada, Astorga, La Bañeza, Villablino, Sahagún, Valencia de Don Juan, el Bierzo, la Montaña, Diputación de León" },
-  { tema: "deporte, rutas guiadas, actividades al aire libre y planes para niños", pistas: "Cultural Leonesa, Ademar, Abanca Ademar, rutas de senderismo guiadas, ludotecas, actividades municipales" },
-  { tema: "mercados semanales, mercadillos fijos, rastros y mercados de abastos (los que se repiten cada semana: indica en diasSemana qué días se celebran)", pistas: "mercado de la Plaza Mayor y del Conde Luna de León, mercadillos de los pueblos, rastro, mercados de productores, ayuntamientos de la provincia" },
-  { tema: "exposiciones temporales abiertas ahora, ferias, festivales y ciclos que duran varios días o semanas (marca permanente: true si siguen abiertas sin fecha de cierre clara)", pistas: "salas de exposiciones, MUSAC, Museo de León, ILC, ferias de muestras, festivales de música y cine, ciclos culturales, jornadas gastronómicas" },
-];
-
 // Formato que pedimos a Gemini en todas las búsquedas de eventos
 const FORMATO_EVENTO = `[{"titulo":"...","fecha":"AAAA-MM-DD (o null si se repite cada semana)","fechaFin":"AAAA-MM-DD o null","diasSemana":"null o lista de días que se repite, 0=domingo..6=sábado, p. ej. [3,6]","permanente":"true si es algo abierto durante semanas (exposición, feria) sin fecha de cierre clara","hora":"20:30 o null","lugar":"recinto","localidad":"municipio exacto donde se celebra (León, Ponferrada, Astorga, Villablino...)","precio":"Gratis / 12€ / null","categoria":"concierto|teatro|exposicion|mercado|feria|fiesta|festival|deporte|infantil|gastronomia|visita|otro","descripcion":"máximo 12 palabras","fuente":"https://..."}]
     Omite los campos que no sepas en vez de escribir null (lat y lon solo si salen en la fuente). Sin texto antes ni después del JSON.`;
@@ -336,7 +324,6 @@ export const TRAMOS_DIARIOS = IDS_TRAMOS.filter((id) => /^[dt]/.test(id));
 export const TRAMOS_GORDOS = IDS_TRAMOS.filter((id) => id.startsWith("m"));
 // Compatibilidad: un número 0..4 es un tramo diario
 export const idTramo = (t) => (typeof t === "number" || /^\d+$/.test(String(t)) ? `d${t}` : String(t));
-export const NUM_TRAMOS = TRAMOS_DIARIOS.length;
 
 // Cada búsqueda de Gemini con Google se paga: un tramo que se hizo hace poco no se repite.
 // Devuelve { hace } (en ms) si el tramo se completó dentro de ese margen, o null si toca hacerlo.

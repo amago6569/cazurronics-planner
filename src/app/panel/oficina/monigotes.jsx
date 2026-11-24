@@ -138,30 +138,3 @@ export function Monigote({ estado = "ok", semilla = 0, camisa = "#f43f5e", emoji
     </svg>
   );
 }
-
-// Un monigote de pie que va andando (con un papel para el jefe o con su café)
-export function Andarin({ semilla = 0, camisa = "#0ea5e9", lleva = "📄", className = "" }) {
-  const id = `cz${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-  const piel = PIELES[semilla % PIELES.length];
-  const pelo = PELOS[(semilla * 3 + 1) % PELOS.length];
-  const u = (n) => `url(#${id}-${n})`;
-  return (
-    <svg viewBox="0 0 40 84" className={className} aria-hidden>
-      <Volumen id={id} piel={piel} pelo={pelo} camisa={camisa} />
-      <ellipse cx="20" cy="81" rx="15" ry="3.5" fill={u("sombra")} />
-      <rect x="13" y="56" width="6" height="23" rx="3" fill="#334155" className="cz-paso" />
-      <rect x="21" y="56" width="6" height="23" rx="3" fill="#475569" className="cz-paso-2" />
-      <g className="cz-bote">
-        <rect x="9" y="32" width="22" height="28" rx="9" fill={u("cuerpo")} />
-        <path d="M12 36 q8-3 16 0" stroke="rgba(255,255,255,0.35)" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-        <ellipse cx="20" cy="31.5" rx="7" ry="2.2" fill="rgba(15,23,42,0.2)" />
-        <circle cx="20" cy="20" r="11" fill={u("cara")} />
-        <path d="M9 19 q0-12 11-12 q11 0 11 12 q-5-6-11-6 q-6 0-11 6z" fill={u("pelo")} />
-        <circle cx="16.5" cy="21" r="1.3" fill="#1e293b" /><circle cx="23.5" cy="21" r="1.3" fill="#1e293b" />
-        <path d="M17 25.5 q3 2.2 6 0" stroke="#9a3412" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-        <rect x="28" y="38" width="6" height="14" rx="3" fill={u("mano")} />
-        <text x="31" y="54" textAnchor="middle" fontSize="10">{lleva}</text>
-      </g>
-    </svg>
-  );
-}
