@@ -3,7 +3,7 @@ import { NextResponse, after } from 'next/server';
 import { leerPeticionPlan } from '../../../lib/planUtils';
 import { montarPlan } from '../../../lib/montarPlan';
 import { enSegundoPlano, guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
-import { cupoPorHora, dentroDelTopeDiario, devolverCupo, mensajeCupoHora } from '../../../lib/freno';
+import { claveTopeDiario, cupoPorHora, dentroDelTopeDiario, devolverCupo, mensajeCupoHora } from '../../../lib/freno';
 import { asegurarBarridoReciente } from '../../../lib/eventos';
 import { claveLugar, esNegocio, esPrueba, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
@@ -42,18 +42,25 @@ export async function POST(request) {
     }
     contados.push(cupo.clave);
     // Techos de gasto del día (Alejandro, 24-11-2026): pasado cualquiera de ellos el plan NO se niega, sale sin IA (0 € de IA).
-    //  · por conexión (PLANES_MAX_IP_DIA, 6) y para toda la web (PLANES_MAX_DIA, 40 planes con IA)
+    //  · por conexión (PLANES_MAX_IP_DIA, 6 planes con IA) y para toda la web (PLANES_MAX_DIA, 40 planes con IA)
     //  · en euros (GASTO_IA_MAX_DIA, 0,40 €; lib/topeGasto.js)
     // Si el almacén falla, el de toda la web y el de euros no dejan pasar a la IA: sin contador no hay techo.
+    // Solo cuentan los planes que de verdad usan la IA: si sale sin IA (por un tope, sin saldo o la IA caída), se devuelve.
+    // Antes contaba cada petición, también las fallidas: el 24-11 se llegó a 43 con 0,07 € gastados y todo salía sin IA.
+    const diarios = [claveTopeDiario('plan', request), claveTopeDiario('plan')];
     let sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 6), request));
     if (!sinIA) sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 40), null, false));
+    else diarios.pop(); // el de toda la web no llegó a contar
     if (!sinIA) sinIA = !(await dentroDelGastoDelDia('usuario'));
     const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
     // Si la agenda diaria está vacía o caducada (p. ej. en local, sin cron), se rellena en segundo plano
     after(() => sinRomper(asegurarBarridoReciente(), 'barrido diario'));
     // Todo el trabajo (agenda, IA, comprobación en Google Places) está en lib/montarPlan.js
     const montado = await montarPlan(peticion, { inicio, msIA: MS_IA, msTotal: MS_TOTAL, sinIA });
-    if (montado.sinIA) enSegundoPlano(() => registrar('plan_sin_ia'), 'estadísticas');
+    if (montado.sinIA) {
+      enSegundoPlano(() => registrar('plan_sin_ia'), 'estadísticas');
+      await sinRomper(devolverCupo(...diarios), 'devolver tope diario');
+    }
     // Cuántos planes salen vacíos y cuántos se salvan con toda la provincia (para decidir con datos el tope de ampliados)
     if (montado.vacio || montado.ampliado) enSegundoPlano(() => registrar(montado.ampliado ? 'plan_ampliado' : 'plan_vacio'), 'estadísticas');
     if (!montado.exito) {

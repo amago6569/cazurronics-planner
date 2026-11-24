@@ -79,6 +79,9 @@ function ejecutarEnMemoria([cmd, ...a]) {
     case "DEL": { const ex = mem.kv.delete(a[0]); mem.caduca.delete(a[0]); return ex ? 1 : 0; }
     case "EXPIRE": { if (!mem.kv.has(a[0])) return 0; mem.caduca.set(a[0], Date.now() + Number(a[1]) * 1000); return 1; }
     case "INCRBY": { const n = Number(vivo(a[0]) || 0) + Number(a[1]); mem.kv.set(a[0], String(n)); return n; }
+    // Para devolver cupos (lib/freno.js) también sin Redis, en local y en las pruebas
+    case "DECR": { const n = Number(vivo(a[0]) || 0) - 1; mem.kv.set(a[0], String(n)); return n; }
+    case "TTL": { if (vivo(a[0]) === undefined) return -2; const t = mem.caduca.get(a[0]); return t ? Math.ceil((t - Date.now()) / 1000) : -1; }
     case "HINCRBY": { const h = hashDe(a[0]); const n = Number(h.get(a[1]) || 0) + Number(a[2]); h.set(a[1], String(n)); return n; }
     case "HSET": { const h = hashDe(a[0]); let nuevos = 0; for (let i = 1; i < a.length; i += 2) { if (!h.has(a[i])) nuevos++; h.set(a[i], String(a[i + 1])); } return nuevos; }
     case "HSETNX": { const h = hashDe(a[0]); if (h.has(a[1])) return 0; h.set(a[1], String(a[2])); return 1; }
