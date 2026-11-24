@@ -84,11 +84,12 @@ describe("guardar partidas de liga", () => {
     const guardado = liga.terminar({ x: 2 });
     await vi.runAllTimersAsync();
     const r = await guardado;
-    vi.useRealTimers();
     expect(r.estado).toBe("error");
     expect(JSON.parse(almacen.get("liga-pendientes"))).toHaveLength(1);
     sinRed = false;
+    // Con el reloj aún en la Liga: con el de hoy (ya acabó el 21-11-2026) la sesión se renueva antes y la prueba fallaba
     await liga.empezar();
+    vi.useRealTimers();
     const orden = llamadas.map((l) => l.ruta).filter((x) => x !== "hoy");
     expect(orden.slice(-2)).toEqual(["terminar", "empezar"]); // primero la pendiente, luego el intento nuevo
     expect(almacen.has("liga-pendientes")).toBe(false);
