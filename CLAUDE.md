@@ -54,10 +54,11 @@ La factura de Google se disparó en octubre de 2026 por búsquedas de pago. No l
 
 ## Comprobar antes de dar algo por hecho
 
-1. `npm test` y `npm run lint` sin errores.
-2. `npm run build` si cambias páginas, rutas o configuración.
-3. Si cambias algo visual, ábrelo en el navegador (`npm run dev`) en tamaño móvil y en escritorio antes de abrir el PR.
-4. Si falta una variable de entorno para probar algo, dilo en el PR en vez de suponer que funciona.
+1. `npm run check` (lint y pruebas) sin errores.
+2. Si tocas cómo se monta un plan, las reglas están en [PLANES.md](PLANES.md) y `npm run evals` las comprueba sobre 20 casos reales. Gasta: mira allí el coste antes de lanzarlo.
+3. `npm run build` si cambias páginas, rutas o configuración.
+4. Si cambias algo visual, ábrelo en el navegador (`npm run dev`) en tamaño móvil y en escritorio antes de abrir el PR.
+5. Si falta una variable de entorno para probar algo, dilo en el PR en vez de suponer que funciona.
 
 ## Palen Planner
 

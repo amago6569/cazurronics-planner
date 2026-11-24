@@ -7,6 +7,7 @@ import { bonito, mismoSitioNatural, seParecen, slug } from './nombres';
 import { rutaConocida } from './rutas';
 import { blindarParada } from './blindaje';
 import { registrar } from './estadisticas';
+import { contarGoogle } from './contadorGoogle';
 
 // Tiempo máximo de cada servicio externo. Si uno se cuelga, esa parte se salta (sin foto, sin Street View...)
 // en vez de agotar el minuto que da Vercel y dejar a la persona sin plan.
@@ -152,6 +153,7 @@ export async function obtenerLocalidad(lat, lon, mapsKey) {
 async function geocodificar(lat, lon, mapsKey) {
   try {
     const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=${mapsKey}&language=es`;
+    contarGoogle('geocoding');
     const res = await fetch(geoUrl, conLimite(MS.geocoding));
     const data = await res.json();
 
@@ -409,6 +411,7 @@ async function buscarEnPlaces({ consulta, lat, lon, radioMetros, mapsKey, limite
   const guardada = await sinRomper(leerJSON(clave), 'places caché');
   if (guardada?.results) return { ...guardada, deCache: true };
   const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(consulta)}&location=${lat},${lon}&radius=${radioMetros}&language=es&region=es&key=${mapsKey}`;
+  contarGoogle('busquedas');
   const res = await fetch(searchUrl, conLimite(MS.places, limite));
   const datos = await res.json();
   // Solo se guarda lo que salió bien (no un fallo de cupo o de clave), y solo los 8 primeros: es lo que se usa
@@ -425,6 +428,7 @@ export async function fichaDePlaces(placeId, mapsKey, limite) {
   const guardada = await sinRomper(leerJSON(clave), 'places caché');
   if (guardada) return guardada;
   const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=photos,formatted_phone_number,website,opening_hours,current_opening_hours,business_status&language=es&key=${mapsKey}`;
+  contarGoogle('fichas');
   const res = await fetch(detailsUrl, conLimite(MS.detalles, limite));
   const datos = await res.json();
   const d = datos?.result;
