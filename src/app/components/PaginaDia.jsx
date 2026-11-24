@@ -11,6 +11,7 @@ import { ZONAS, zonaDe } from "../../lib/zonas";
 import { rutaZona } from "../../lib/zonasSeo";
 import { datosEstructurados } from "../../lib/jsonld";
 import { GLASS } from "../../lib/estilos";
+import { IMAGEN_OG } from "../../lib/sitio";
 
 const CAPITAL = ["leon", "alfoz"];
 const MAX_POR_ZONA = 4;
@@ -38,7 +39,7 @@ export async function metadataDia(offset) {
   return {
     title: titulo, description: descripcion,
     alternates: { canonical: rutaDia(offset) },
-    openGraph: { title: titulo, description: descripcion, url: rutaDia(offset), type: "website", locale: "es_ES" },
+    openGraph: { title: titulo, description: descripcion, url: rutaDia(offset), type: "website", locale: "es_ES", images: IMAGEN_OG },
     ...(total === 0 ? { robots: { index: false, follow: true } } : {}),
   };
 }
