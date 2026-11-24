@@ -57,8 +57,6 @@ function inicios(turnos = [], desde, hasta) {
 
 export const enTurno = (turnos, ahora) => inicios(turnos, ahora - DESPUES, ahora + ANTES).length > 0;
 export const proximoTurno = (turnos, ahora) => inicios(turnos, ahora + 1, ahora + 8 * 864e5)[0] ?? null;
-// Cuántos turnos le tocan en un día cualquiera (los de pueblos solo domingos y miércoles)
-export const turnosAlDia = (turnos = []) => turnos.filter((t) => !t.dias).length;
 
 // "mesa" | "pendiente" (ha fallado: espera su turno en la cafetería con el fallo apuntado) | "sofa" (se ha saltado el turno) | "cafe"
 // enCurso: está trabajando ahora mismo de verdad (la tarea lo apunta al empezar) · descanso: la reunión le dio días libres
