@@ -3,10 +3,12 @@ import { NextResponse, after } from 'next/server';
 import { leerPeticionPlan } from '../../../lib/planUtils';
 import { montarPlan } from '../../../lib/montarPlan';
 import { enSegundoPlano, guardarJSON, nuevoId, sinRomper } from '../../../lib/almacen';
-import { claveTopeDiario, cupoPorHora, dentroDelTopeDiario, devolverCupo, mensajeCupoHora } from '../../../lib/freno';
+import { cupoPorHora, dentroDelTopeDiario, devolverCupo, mensajeCupoHora } from '../../../lib/freno';
 import { asegurarBarridoReciente } from '../../../lib/eventos';
 import { claveLugar, esNegocio, esPrueba, registrarApariciones } from '../../../lib/lugares';
 import { registrar } from '../../../lib/estadisticas';
+import { dentroDelGastoDelDia } from '../../../lib/topeGasto';
+import { guardarPlanEnCache, leerPlanEnCache } from '../../../lib/cachePlanes';
 
 export const maxDuration = 60;
 
@@ -16,9 +18,9 @@ export const maxDuration = 60;
 const MS_IA = 55000;
 const MS_TOTAL = 58000;
 
-// Regla de Alejandro (17-11-2026): cada persona, como mucho 3 planes por hora (se cambia con PLANES_MAX_HORA en Vercel).
-// Un plan que no sale (fallo de la IA, nada que encaje) no gasta cupo: se devuelve.
-const maxPorHora = () => Math.max(1, Number(process.env.PLANES_MAX_HORA ?? 3) || 3);
+// Regla de Alejandro (24-11-2026; antes 3): cada conexión, como mucho 10 planes por hora (PLANES_MAX_HORA en Vercel).
+// Un plan que no sale (nada que encaje) no gasta cupo: se devuelve.
+const maxPorHora = () => Math.max(1, Number(process.env.PLANES_MAX_HORA ?? 10) || 10);
 
 export async function POST(request) {
   const inicio = Date.now();
@@ -28,31 +30,30 @@ export async function POST(request) {
   try {
     const peticion = leerPeticionPlan(await request.json().catch(() => null));
     if (peticion.error) return NextResponse.json({ exito: false, mensaje: peticion.error }, { status: 400 });
+    // El mismo pedido hace poco: el plan ya montado, al instante y sin gastar (lib/cachePlanes.js)
+    const enCache = await sinRomper(leerPlanEnCache(peticion), 'caché de planes');
+    if (enCache) {
+      enSegundoPlano(() => registrar('plan_cache'), 'estadísticas');
+      return NextResponse.json(enCache);
+    }
     const cupo = await cupoPorHora(request, 'plan', maxPorHora());
     if (!cupo.ok) {
       return NextResponse.json({ exito: false, mensaje: mensajeCupoHora(maxPorHora(), cupo.minutos), esperaMin: cupo.minutos }, { status: 429 });
     }
     contados.push(cupo.clave);
-    // Techo de gasto por día: por conexión y para toda la web (se cambian con PLANES_MAX_IP_DIA y PLANES_MAX_DIA en Vercel; 0 = sin tope).
-    // 40 al día (Alejandro, 17-11-2026; antes 25). Con 3 por hora y persona, nadie lo agota solo; peor caso ~7 € más al mes
-    // El de conexión es más bajo que el total para que una sola no deje a todos sin planes; si el almacén falla, el total no deja pasar
-    contados.push(claveTopeDiario('plan', request));
-    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 6), request))) {
-      await devolver();
-      return NextResponse.json({ exito: false, mensaje: 'Hoy has montado muchos planes 🦁 Vuelve mañana y seguimos.' }, { status: 429 });
-    }
-    contados.push(claveTopeDiario('plan'));
-    if (!(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 40), null, false))) {
-      await devolver();
-      return NextResponse.json({ exito: false, mensaje: 'Hoy se han agotado los planes gratuitos 🦁 Vuelve mañana y te montamos el planazo.' }, { status: 429 });
-    }
-    // El techo de toda la web sí se queda contado aunque el plan falle: ese intento ya gasta IA
-    contados.pop();
+    // Techos de gasto del día (Alejandro, 24-11-2026): pasado cualquiera de ellos el plan NO se niega, sale sin IA (0 € de IA).
+    //  · por conexión (PLANES_MAX_IP_DIA, 6) y para toda la web (PLANES_MAX_DIA, 40 planes con IA)
+    //  · en euros (GASTO_IA_MAX_DIA, 0,40 €; lib/topeGasto.js)
+    // Si el almacén falla, el de toda la web y el de euros no dejan pasar a la IA: sin contador no hay techo.
+    let sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 6), request));
+    if (!sinIA) sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 40), null, false));
+    if (!sinIA) sinIA = !(await dentroDelGastoDelDia('usuario'));
     const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
     // Si la agenda diaria está vacía o caducada (p. ej. en local, sin cron), se rellena en segundo plano
     after(() => sinRomper(asegurarBarridoReciente(), 'barrido diario'));
     // Todo el trabajo (agenda, IA, comprobación en Google Places) está en lib/montarPlan.js
-    const montado = await montarPlan(peticion, { inicio, msIA: MS_IA, msTotal: MS_TOTAL });
+    const montado = await montarPlan(peticion, { inicio, msIA: MS_IA, msTotal: MS_TOTAL, sinIA });
+    if (montado.sinIA) enSegundoPlano(() => registrar('plan_sin_ia'), 'estadísticas');
     // Cuántos planes salen vacíos y cuántos se salvan con toda la provincia (para decidir con datos el tope de ampliados)
     if (montado.vacio || montado.ampliado) enSegundoPlano(() => registrar(montado.ampliado ? 'plan_ampliado' : 'plan_vacio'), 'estadísticas');
     if (!montado.exito) {
@@ -78,7 +79,9 @@ export async function POST(request) {
     if (!esPrueba(request)) enSegundoPlano(() => registrarApariciones(rutaFinal), 'apariciones');
     enSegundoPlano(() => registrar('plan'), 'estadísticas');
 
-    return NextResponse.json({ exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia, ...(aviso ? { aviso } : {}) });
+    const respuesta = { exito: true, plan: rutaFinal, prevision: previsionTiempo, planId: guardado ? planId : null, masEseDia, ...(aviso ? { aviso } : {}) };
+    enSegundoPlano(() => guardarPlanEnCache(peticion, respuesta, { sinIA: Boolean(montado.sinIA) }), 'caché de planes');
+    return NextResponse.json(respuesta);
   } catch (error) {
     console.error('[plan]', error?.message || error);
     await devolver();

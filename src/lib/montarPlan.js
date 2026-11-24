@@ -9,7 +9,7 @@
 //    Después, como siempre, cada parada se comprueba en Google Places (nombre, nota, teléfono, horario).
 // El modo ahorro es el de serie: en la comparación (/panel/comparar) los planes salen igual de bien y así ningún
 // plan paga búsquedas. PLANES_CON_GOOGLE=1 en Vercel vuelve al modo con búsqueda.
-import { llamarGemini, extraerJSON } from './gemini';
+import { llamarGemini, extraerJSON, ErrorIA } from './gemini';
 import { sinRomper } from './almacen';
 import { REGLA_DATOS, textoParaPrompt } from './blindaje';
 import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm, TIPOS_CON_FICHA_OBLIGATORIA } from './planUtils';
@@ -22,6 +22,13 @@ import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './pr
 import { dentroDelTopeDiario } from './freno';
 import { agendaParaRutas, parajesParaPrompt, rutasParaPrompt } from './rutas';
 import { centrarEnPueblo } from './pueblos';
+import { avisoSinIA, montarSinIA } from './planSinIA';
+
+// Lo que hace saltar al plan sin IA: Google sin saldo o sin clave, el tope de gasto del día, todos los modelos caídos o
+// una respuesta que no se puede leer. Cualquier otro fallo (un error del código) sigue su camino.
+export const esFalloIA = (e) => e instanceof ErrorIA || e instanceof SyntaxError || e?.name === 'TimeoutError';
+// La IA tiene hasta el segundo 42: así, si no contesta, al plan sin IA aún le quedan ~15 s para comprobar los sitios
+const MS_IA_MAX = 42000;
 
 // Solo León capital y provincia. Se mira ANTES de la IA y de Google: un plan de fuera no gasta nada.
 export function fueraDeLeon({ lat, lon, texto }) {
@@ -226,7 +233,7 @@ async function montarEnZona(peticion, opciones, inicio, msIA) {
   return { ...amplio, ampliado: true, aviso: avisoCercano({ ...peticion, plan: amplio.plan }) };
 }
 
-async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000, ampliado = false } = {}) {
+async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = Date.now(), msIA = 55000, msTotal = 58000, ampliado = false, sinIA = false } = {}) {
   const { fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon } = peticion;
   // «4 bares» = 4 bares; «qué hay hoy» = la agenda del día. Se lee sin IA (lib/intencion.js)
   const pedido = paradasPedidas(apetece);
@@ -243,9 +250,9 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
   const [tiempo, eventosDia, eventosAMedida, prefs, sitios] = await Promise.all([
     obtenerPrevisionTiempo(lat, lon, fecha),
     sinRomper(eventosDelDia(fecha, { lat, lon, radio }), 'eventos'),
-    ampliado || soloComerYBeber(apetece) ? null : sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
+    sinIA || ampliado || soloComerYBeber(apetece) ? null : sinRomper(barridoAMedida({ fecha, apetece, zona: nombreZona, radio, lat, lon }), 'barrido a medida'),
     sinRomper(preferenciasComunidad(lat, lon, radio), 'preferencias'),
-    conGoogle && !pedido ? null : sinRomper(sitiosComprobados(lat, lon, radio, 40, pedido ? tiposIguales(pedido.tipo) : null), 'sitios comprobados'),
+    conGoogle && !pedido && !sinIA ? null : sinRomper(sitiosComprobados(lat, lon, radio, sinIA ? 120 : 40, pedido ? tiposIguales(pedido.tipo) : null), 'sitios comprobados'),
   ]);
   const previsionTiempo = tiempo?.texto || null; // lo que ve la persona; lo de "día malo" es solo para la IA
 
@@ -309,38 +316,65 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
       "tipo" es uno de: bar, restaurante, cafeteria, discoteca, monumento, parque, museo, exposicion, concierto, teatro, mercadillo, feria, fiesta, festival, evento, ruta, deporte.
     `;
 
-  // Gemini con plan B: si un modelo está saturado, prueba otro (ver lib/gemini.js)
-  const { texto: textoIA, uso } = await llamarGemini(prompt, { sistema: REGLA_DATOS, para: 'usuario', tarea: 'planes', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + msIA - Date.now()) });
-  const rutaBruta = extraerJSON(textoIA, '[');
-  if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
-  // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas
-  // (si pidió «4 bares», no: esos se buscan abajo entre los locales reales de la zona)
-  if (rutaBruta.length === 0 && !pedido) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
-
   // Todas las paradas se comprueban A LA VEZ en Google Places (antes, una detrás de otra):
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
   const contexto = { fecha, lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal, fuentes: conGoogle ? null : new Set(agendaDelDia.map((e) => e.fuente).filter(Boolean)) };
-  const paradasIA = quitarNoPedidas(rutaBruta
-    .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece);
-  const enriquecidas = await Promise.all(paradasIA.map((p) => enriquecerSeguro(p, contexto)));
-  // Dos bares que Google lleva al mismo local (pasa con «Bar en Boñar» o con nombres que no conoce) eran antes UNO solo
-  await separarRepetidos(enriquecidas, paradasIA, contexto);
-
   const rutaValidada = [];
-  let problemaGlobal = null, fueraDeProvincia = 0;
-  for (const { parada, problemaConfigPlaces } of enriquecidas) {
-    if (problemaConfigPlaces) problemaGlobal = problemaConfigPlaces;
-    // Lo que Google sitúa fuera de la provincia no entra (p. ej. un bar de Benavente con radio grande desde La Bañeza)
-    if (parada && enProvinciaLeon(parada.lat, parada.lon)) rutaValidada.push(parada);
-    else if (parada) fueraDeProvincia++;
-  }
+  let problemaGlobal = null, fueraDeProvincia = 0, uso = null, sinIAFaltan = null;
 
-  // Pidió 4 bares y la IA (o Google) dejó menos: se completa con locales reales del radio, primero los ya comprobados
-  if (pedido) await completarPedido(rutaValidada, pedido, { sitios, contexto, fecha });
+  // Plan B (24-11-2026): sin saldo, sin clave, con el tope de gasto del día o con la IA caída, el plan sale igual sin IA
+  const conIA = async () => {
+    // Gemini con plan B: si un modelo está saturado, prueba otro (ver lib/gemini.js)
+    const respuesta = await llamarGemini(prompt, { sistema: REGLA_DATOS, para: 'usuario', tarea: 'planes', temperatura: 0.2, google: conGoogle, json: !conGoogle, msMax: Math.min(50000, inicio + Math.min(msIA, MS_IA_MAX) - Date.now()) });
+    uso = respuesta.uso;
+    const rutaBruta = extraerJSON(respuesta.texto, '[');
+    if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
+    // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas
+    // (si pidió «4 bares», no: esos se buscan abajo entre los locales reales de la zona)
+    if (rutaBruta.length === 0 && !pedido) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
+
+    const paradasIA = quitarNoPedidas(rutaBruta
+      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece);
+    const enriquecidas = await Promise.all(paradasIA.map((p) => enriquecerSeguro(p, contexto)));
+    // Dos bares que Google lleva al mismo local (pasa con «Bar en Boñar» o con nombres que no conoce) eran antes UNO solo
+    await separarRepetidos(enriquecidas, paradasIA, contexto);
+
+    for (const { parada, problemaConfigPlaces } of enriquecidas) {
+      if (problemaConfigPlaces) problemaGlobal = problemaConfigPlaces;
+      // Lo que Google sitúa fuera de la provincia no entra (p. ej. un bar de Benavente con radio grande desde La Bañeza)
+      if (parada && enProvinciaLeon(parada.lat, parada.lon)) rutaValidada.push(parada);
+      else if (parada) fueraDeProvincia++;
+    }
+
+    // Pidió 4 bares y la IA (o Google) dejó menos: se completa con locales reales del radio, primero los ya comprobados
+    if (pedido) await completarPedido(rutaValidada, pedido, { sitios, contexto, fecha });
+    return null;
+  };
+  const sinLaIA = async () => {
+    const r = await montarSinIA({ peticion, agenda: agendaDelDia, sitios, contexto });
+    rutaValidada.splice(0, rutaValidada.length, ...r.plan);
+    sinIAFaltan = r.faltan;
+  };
+
+  if (sinIA) await sinLaIA();
+  else {
+    try {
+      const corte = await conIA();
+      if (corte) return corte;
+    } catch (e) {
+      if (!esFalloIA(e)) throw e;
+      console.warn('[plan] sin IA:', e?.message || e, (e?.fallos || []).join(' | '));
+      rutaValidada.splice(0);
+      problemaGlobal = null;
+      fueraDeProvincia = 0;
+      await sinLaIA();
+    }
+  }
+  const hechoSinIA = sinIAFaltan !== null;
 
   // Si todo lo que salió era de fuera, el plan no es de León: se dice claro
   if (rutaValidada.length === 0 && fueraDeProvincia) return { exito: false, uso, mensaje: AVISO_MAPA.replace('Mueve el punto del mapa dentro de la provincia', 'Pide algo de la provincia') };
-  if (rutaValidada.length === 0) return { exito: false, vacio: !problemaGlobal, uso, mensaje: problemaGlobal ? MENSAJE_GOOGLE_NO_RESPONDE : "No encontramos locales reales en esa zona. Amplía el radio." };
+  if (rutaValidada.length === 0) return { exito: false, vacio: !problemaGlobal, uso, sinIA: hechoSinIA, mensaje: problemaGlobal ? MENSAJE_GOOGLE_NO_RESPONDE : hechoSinIA ? `No hemos encontrado ${sinIAFaltan?.[0] || 'sitios comprobados'} en esa zona 🦁 Prueba con más radio o con otra fecha.` : "No encontramos locales reales en esa zona. Amplía el radio." };
 
   const rutaFinal = ajustarAlPresupuesto(rutaValidada, presupuestoMax, pedido?.n || 1);
   if (rutaFinal.length === 0) return { exito: false, uso, mensaje: "Presupuesto muy bajo para esta zona." };
@@ -358,5 +392,5 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     .filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })));
   const masEseDia = elegirMasEseDia(restoAgenda, agendaPedida ? 20 : 12);
 
-  return { exito: true, plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, uso };
+  return { exito: true, plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, uso, ...(hechoSinIA ? { sinIA: true, ...(avisoSinIA(sinIAFaltan) ? { aviso: avisoSinIA(sinIAFaltan) } : {}) } : {}) };
 }

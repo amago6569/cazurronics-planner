@@ -38,7 +38,9 @@ describe("extraerJSON", () => {
 describe("mensajeParaUsuario", () => {
   it("traduce cada fallo a un mensaje amable", () => {
     expect(mensajeParaUsuario(new ErrorIA("saturado", 429))).toMatch(/muchísima gente/);
-    expect(mensajeParaUsuario(new ErrorIA("sin saldo", 403))).toMatch(/recargando/);
+    // Sin saldo o sin clave los planes salen sin IA; el mensaje solo lo ve quien retoca, y nunca «recargando»
+    expect(mensajeParaUsuario(new ErrorIA("sin saldo", 402))).toMatch(/no podemos retocar/);
+    expect(mensajeParaUsuario(new ErrorIA("sin saldo", 403))).not.toMatch(/recargando/);
     expect(mensajeParaUsuario(new SyntaxError("x"))).toMatch(/a medias/);
     expect(mensajeParaUsuario(new Error("cualquier cosa"))).toMatch(/no ha respondido a tiempo/);
   });
@@ -91,7 +93,20 @@ describe("modelos que se usan", () => {
   it("nadie pide ya los 2.0 (devuelven 404 desde el 1-6-2026)", () => {
     for (const lista of Object.values(MODELOS)) for (const m of lista) expect(m).not.toMatch(/^gemini-2\.0/);
   });
-  it("2.5 Flash de reserva en el barrido no piensa (no se paga pensamiento)", async () => {
+  it("el barrido no salta al 2.5 Flash (6 veces más caro): si el Flash-Lite falla, el tramo se salta", async () => {
+    const original = globalThis.fetch;
+    const urls = [];
+    globalThis.fetch = async (url) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ error: { message: "busy" } }), { status: 503 });
+    };
+    try {
+      await expect(llamarGemini("hola", { para: "barrido" })).rejects.toBeInstanceOf(ErrorIA);
+      expect(urls.length).toBe(1);
+      expect(urls[0]).toContain("gemini-2.5-flash-lite");
+    } finally { globalThis.fetch = original; }
+  });
+  it("2.5 Flash de reserva en la Despensa no piensa (no se paga pensamiento)", async () => {
     const original = globalThis.fetch;
     const cuerpos = [];
     globalThis.fetch = async (url, opciones) => {
@@ -100,10 +115,9 @@ describe("modelos que se usan", () => {
       return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "[]" }] } }], usageMetadata: {} }), { status: 200 });
     };
     try {
-      const r = await llamarGemini("hola", { para: "barrido" });
+      const r = await llamarGemini("hola", { para: "despensa", google: false });
       expect(r.modelo).toBe("gemini-2.5-flash");
       expect(cuerpos[1].cuerpo.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
-      expect(cuerpos[1].cuerpo.tools).toEqual([{ googleSearch: {} }]);
     } finally { globalThis.fetch = original; }
   });
 });
