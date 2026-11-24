@@ -2,8 +2,8 @@
 // Monta los casos de evals/casos.json en la web publicada (/api/panel/comparar: no guarda el plan ni suma visitas),
 // comprueba cada regla de PLANES.md y saca la tabla caso × regla, el tiempo medio y el coste.
 //   PANEL_CLAVE      clave del panel. Nunca se escribe en ningún archivo. En el entorno de Claude la añade la red
-//                    (secreto de red para cazurronics.es, cabecera x-clave) y basta EVALS_CLAVE_EN_RED=1.
-//   EVALS_URL        web a probar (de serie https://cazurronics.es)
+//                    (secreto de red para www.cazurronics.es, ruta /api/panel/comparar, cabecera x-clave) y basta EVALS_CLAVE_EN_RED=1.
+//   EVALS_URL        web a probar (de serie https://www.cazurronics.es: cazurronics.es redirige ahí)
 //   EVALS_MAX_EUROS  para antes de pasar de este gasto (de serie 1 €)
 // Opciones: --casos 5 (los 5 primeros) · --solo humedo-20,martes-23 · --modo ahorro|sinIA|google · --json salida.json
 // Sale con 1 si algún caso falla alguna regla, con 2 si no se pudo probar (sin clave, sin red, clave mal).
@@ -12,7 +12,7 @@ import { REGLAS, comprobar, costeEuros, resolverFecha } from "../evals/reglas.js
 
 const args = process.argv.slice(2);
 const opcion = (nombre) => { const i = args.indexOf(`--${nombre}`); return i >= 0 ? args[i + 1] : undefined; };
-const URL_BASE = (process.env.EVALS_URL || "https://cazurronics.es").replace(/\/$/, "");
+const URL_BASE = (process.env.EVALS_URL || "https://www.cazurronics.es").replace(/\/$/, "");
 const CLAVE = process.env.PANEL_CLAVE || process.env.EVALS_CLAVE || "";
 const MAX_EUROS = Number(process.env.EVALS_MAX_EUROS ?? 1);
 const MODO = opcion("modo") || "ahorro";
