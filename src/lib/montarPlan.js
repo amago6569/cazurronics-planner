@@ -168,34 +168,59 @@ export async function completarPedido(ruta, pedido, { sitios, contexto, fecha, a
   const reserva = (BUSQUEDAS_DE_RESERVA[pedido.tipo] || ['Bar']).map((q) => ({ titulo: `${q} en ${zona}`, tipo: pedido.tipo, precio: PRECIO_TIPICO[pedido.tipo] || null, descripcion: '' }));
   const candidatos = [...delCatalogo.slice(0, 8), ...reserva];
 
-  // La hora: detrás del último del mismo tipo (en ruta) o la misma (opciones). Si es para hoy, nunca antes de ahora
+  // Las horas libres. En ruta: detrás del último bar mientras sea antes de las 22:30; si no, antes del primero (un martes
+  // en un pueblo los bares cierran pronto: «3 bares en Boñar» con el primero a las 21:30 se quedaba en 1) y, si no queda
+  // otra, más tarde. Opciones (restaurantes, cafés): todas a la misma hora. Si es para hoy, nunca antes de ahora.
   const hoy = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(ahora);
   const [h, m] = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ahora).split(':').map(Number);
   const yaSon = fecha === hoy ? Math.ceil((h * 60 + m + 30) / 15) * 15 : 0;
   const enRuta = DE_RUTA.has(pedido.tipo);
-  let hora = leerHora(ultimo?.hora).min;
-  hora = hora == null ? Math.max(HORA_NATURAL[pedido.tipo] ?? 20 * 60, yaSon) : enRuta ? hora + 50 : hora;
+  const minutos = delTipo().map((p) => leerHora(p.hora).min).filter((x) => x != null);
+  const natural = Math.max(HORA_NATURAL[pedido.tipo] ?? 20 * 60, yaSon);
+  const pasos = Array.from({ length: faltan + 2 }, (_, k) => (k + 1) * 50);
+  let huecos;
+  if (!enRuta) huecos = [minutos[0] ?? natural];
+  else if (!minutos.length) huecos = [natural, ...pasos.map((d) => natural + d)].filter((x) => x < 24 * 60);
+  else {
+    const [primero, ultimoMin] = [Math.min(...minutos), Math.max(...minutos)];
+    const despues = pasos.map((d) => ultimoMin + d);
+    huecos = [
+      ...despues.filter((x) => x <= 22 * 60 + 30),
+      ...pasos.map((d) => primero - d).filter((x) => x >= Math.max(yaSon, 18 * 60)),
+      ...despues.filter((x) => x > 22 * 60 + 30 && x < 24 * 60),
+    ];
+  }
+  if (!huecos.length) huecos = [Math.min(natural, 24 * 60 - 1)];
 
+  const añadidos = new Set();
   let añadidas = 0, i = 0;
-  while (faltan > 0 && i < candidatos.length && Date.now() < contexto.limite - 4000) {
+  while (faltan > 0 && i < candidatos.length && huecos.length && Date.now() < contexto.limite - 4000) {
     const tanda = candidatos.slice(i, i + faltan);
     i += tanda.length;
-    // Se prueban en tanda (a la vez); si dos caen en el mismo local, el segundo no entra y se tira del siguiente candidato
-    const hechas = await Promise.all(tanda.map((p) => enriquecer({ ...p, hora: hhmm(Math.min(hora, 24 * 60 - 1)) }, { ...contexto, excluir: new Set(usados) })));
-    for (const r of hechas) {
-      const p = r?.parada;
-      if (!p || faltan <= 0 || !enProvinciaLeon(p.lat, p.lon)) continue;
-      if (p.placeId && usados.has(p.placeId)) continue;
-      if (ruta.some((x) => seParecen(x.titulo, p.titulo))) continue;
+    // Cada uno de la tanda prueba una hora libre distinta. Si dos caen en el mismo local, el segundo no entra y se tira del
+    // siguiente candidato; si el local estaba cerrado a esa hora, esa hora pasa al final de la cola
+    const horas = tanda.map((_, j) => huecos[j % huecos.length]);
+    const hechas = await Promise.all(tanda.map((p, j) => enriquecer({ ...p, hora: hhmm(horas[j]) }, { ...contexto, excluir: new Set(usados) })));
+    hechas.forEach((r, j) => {
+      const p = r?.parada, hueco = horas[j];
+      const k = huecos.indexOf(hueco);
+      if (!p) { if (r?.cerrado && enRuta && k >= 0) huecos.push(...huecos.splice(k, 1)); return; }
+      if (faltan <= 0 || !enProvinciaLeon(p.lat, p.lon)) return;
+      if (p.placeId && usados.has(p.placeId)) return;
+      if (ruta.some((x) => seParecen(x.titulo, p.titulo))) return;
       if (p.placeId) usados.add(p.placeId);
-      const anterior = delTipo().at(-1);
-      p.hora = hhmm(Math.min(hora, 24 * 60 - 1));
-      if (anterior && enRuta) p.transporte = andando(anterior, p);
+      p.hora = hhmm(hueco);
       ruta.push(p);
+      añadidos.add(p);
       añadidas++;
       faltan--;
-      if (enRuta) hora += 50;
-    }
+      if (enRuta && k >= 0) huecos.splice(k, 1);
+    });
+  }
+  // Cómo se llega a cada bar añadido: desde el anterior por hora
+  if (enRuta) {
+    const orden = delTipo().sort((a, b) => (leerHora(a.hora).min ?? 0) - (leerHora(b.hora).min ?? 0));
+    orden.forEach((p, k) => { if (k > 0 && añadidos.has(p)) p.transporte = andando(orden[k - 1], p); });
   }
   return añadidas;
 }
