@@ -133,3 +133,21 @@ describe("agenda del Ayuntamiento de León", () => {
     expect(fechaAyto(21, 11, "2026-11-21")).toBe("2026-11-21");
   });
 });
+
+describe("bares en un pueblo que cierra pronto", () => {
+  it("si a las 22:20 están cerrados, prueba antes del primero", async () => {
+    const contexto = { lat: 42.8667, lon: -5.3236, radio: 15, nombreZona: "Boñar", limite: Date.now() + 60000 };
+    const locales = ["El Rincón", "La Plaza", "Los Arcos", "El Puente"].map((n, i) => ({ placeId: `p${i}`, nombre: `Bar ${n}`, lat: 42.8667 + i * 0.0005, lon: -5.3236 }));
+    // Google de mentira: después de las 22:00 todo está cerrado
+    const google = async (p, ctx) => {
+      const [hh, mm] = p.hora.split(":").map(Number);
+      if (hh * 60 + mm >= 22 * 60) return { parada: null, cerrado: true };
+      const l = locales.find((x) => !ctx.excluir?.has(x.placeId));
+      return { parada: l ? { ...p, titulo: l.nombre, placeId: l.placeId, lat: l.lat, lon: l.lon } : null };
+    };
+    const ruta = [{ titulo: "Bar Casa Pepe", tipo: "bar", placeId: "pA", hora: "21:30", lat: 42.8667, lon: -5.3236 }];
+    const n = await completarPedido(ruta, { n: 3, tipo: "bar", plural: "bares" }, { sitios: [], contexto, fecha: "2030-01-08" }, google);
+    expect(n).toBe(2);
+    expect(ruta.map((p) => p.hora).sort()).toEqual(["19:50", "20:40", "21:30"]);
+  });
+});

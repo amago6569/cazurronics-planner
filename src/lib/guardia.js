@@ -18,7 +18,7 @@ import { apuntarCharla, JEFE, TU } from "./charla";
 import { esOficial, esSocial, leerPagina, paginaLoNombra, websDistintas } from "./fiables";
 import {
   CUPO_SEGURO, DIAS_AGENDA, apuntarRepaso, apuntarSinConfirmar, comprobarUrl, decidirSinConfirmar, dominioConsultado, leerBandeja, leerRepesca,
-  leerSinConfirmar, marcarRevisados, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
+  leerSinConfirmar, marcarRevisados, quitarEnlacesRotos, sacarDeBandeja, sumarALaAgenda, tirarParaSiempre, trabajarEn,
 } from "./eventos";
 
 export const POR_PREGUNTA = 8, PREGUNTAS_POR_TURNO = 2, REPESCA_POR_TURNO = 6, VUELTAS_ANTES_DE_SUBIR = 2;
@@ -58,7 +58,7 @@ export async function leerVeredictos(texto, dominios, grupo, comprobar = (u) => 
 }
 
 // leer: cómo se descarga cada página (las pruebas lo cambian)
-export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000) } = {}) {
+export async function segundaComprobacion({ inicio = Date.now(), leer = (url) => leerPagina(url, 8000), repasarEnlaces = quitarEnlacesRotos } = {}) {
   const limite = inicio + 50000;
   const [bandeja, subidos, cupo] = await Promise.all([leerBandeja(), leerSinConfirmar().catch(() => []), quedaCupo()]);
   const confirmados = [], porConfirmar = [], falsos = [], quedan = [];
@@ -141,6 +141,11 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
   await tirarParaSiempre(falsos.map((e) => e.id));
   await marcarRevisados(quedan.filter((e) => bandeja.slice(0, 40).includes(e)).map((e) => ({ ...e, vueltas: (e.vueltas || 0) + 1 })));
 
+  // Lo que ya está en la web y su enlace ha dejado de existir (o nunca existió): fuera. Con el tiempo que sobre, sin IA
+  const enlaces = limite - Date.now() > 4000
+    ? await repasarEnlaces({ limite: Math.min(limite - 1500, Date.now() + 12000) }).catch((e) => { console.error("[verificador] enlaces", e?.message || e); return null; })
+    : null;
+
   const revisados = confirmados.length + porConfirmar.length + falsos.length;
   const parte = {
     fin: new Date().toISOString(), revisados, confirmados: confirmados.length, porConfirmar: porConfirmar.length, falsos: falsos.length,
@@ -148,7 +153,9 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
     texto: !bandeja.length ? "Bandeja vacía: nada que revisar" : `${revisados} revisados: ${confirmados.length} confirmados, ${porConfirmar.length} subidos por confirmar, ${falsos.length} falsos`,
     descartes: falsos.slice(0, 5).map((e) => ({ titulo: e.titulo, nota: e.nota })),
     repasados,
+    ...(enlaces ? { enlaces: { mirados: enlaces.mirados, quitados: enlaces.quitados } } : {}),
   };
+  if (enlaces?.quitados) parte.texto += ` · ${enlaces.quitados} quitados de la agenda por enlace roto`;
   if (repasados.confirmados || repasados.quitados) parte.texto += ` · de lo subido «por confirmar»: ${repasados.confirmados} confirmados y ${repasados.quitados} quitados`;
   await guardarJSON("oficina:turno:verificador", parte, 14 * 24 * 3600);
   const charla = [];
@@ -156,6 +163,7 @@ export async function segundaComprobacion({ inicio = Date.now(), leer = (url) =>
   if (porConfirmar.length) charla.push({ de: JEFE, a: TU, tipo: "aviso", texto: `He subido ${porConfirmar.length} «por confirmar»: ${titulos(porConfirmar)}. Los sigo mirando yo; si alguno no te cuadra, dime «quita …».` });
   if (repasados.confirmados || repasados.quitados) charla.push({ de: "verificador", a: JEFE, tipo: "nuevos", texto: `He vuelto a mirar lo subido «por confirmar»: ${repasados.confirmados} confirmados y ${repasados.quitados} quitados por falsos.` });
   if (falsos.length) charla.push({ de: "verificador", a: JEFE, tipo: "fallo", texto: `Fuera ${titulos(falsos, 1)}: ${falsos[0].nota}.` });
+  if (enlaces?.rotos?.length) charla.push({ de: "verificador", a: JEFE, tipo: "fallo", texto: `Fuera de la agenda ${titulos(enlaces.rotos)}: su enlace ya no existe.` });
   if (fallo && !revisados) charla.push({ de: "verificador", a: JEFE, tipo: "fallo", texto: `No he podido preguntar a Google: ${fallo.texto}` });
   await sinRomper(apuntarCharla(charla), "charla");
   return parte;
