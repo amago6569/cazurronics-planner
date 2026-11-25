@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { comando, enSegundoPlano, guardarJSON, leerJSON, sinRomper } from './almacen';
 import { direccionEnLeon, enProvinciaLeon } from './provincia';
-import { bonito, mismoSitioNatural, seParecen, slug } from './nombres';
+import { bonito, mismoSitioDeEvento, mismoSitioNatural, seParecen, slug } from './nombres';
 import { rutaConocida } from './rutas';
 import { blindarParada } from './blindaje';
 import { registrar } from './estadisticas';
@@ -333,6 +333,8 @@ export const TIPOS_EVENTO = ['concierto', 'fiesta', 'mercadillo', 'evento', 'tea
 // una feria, un teatro o una ruta sin ficha se descartaban y el plan se quedaba en bares y restaurantes.
 export const TIPOS_CON_FICHA_OBLIGATORIA = ['bar', 'restaurante', 'discoteca', 'cafeteria', 'cafetería', 'pub', 'taberna', 'sidreria', 'sidrería'];
 const necesitaFicha = (tipo) => TIPOS_CON_FICHA_OBLIGATORIA.includes(String(tipo || '').toLowerCase());
+// Los tipos que se piden a la IA (montarPlan) y los que ya se entienden aquí: lo demás no es un tipo de parada
+const TIPOS_DE_PARADA = [...TIPOS_EVENTO, ...TIPOS_CON_FICHA_OBLIGATORIA, 'monumento', 'parque', 'museo', 'ruta', 'deporte'];
 
 // Lo que de verdad sabemos de un local cuando la IA no lo conocía: qué es según Google, dónde está y su nota.
 // Sin especialidades, historia ni premios, que es justo lo que se inventaba.
@@ -478,21 +480,26 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   parada.lugar = typeof parada.lugar === 'string' ? parada.lugar.trim().slice(0, 100) : null;
   if (!parada.lugar || /^(null|no|n\/a|no disponible|ninguno)$/i.test(parada.lugar) || parada.lugar.toLowerCase() === parada.titulo.toLowerCase()) parada.lugar = null;
   const queryBusquedaReal = `${parada.titulo}, ${nombreZona}, provincia de León, España`;
-  // Un concierto, una fiesta o un mercadillo se sitúa por su local («Sala Babylon», «Plaza Mayor»), no por su título:
-  // Google no conoce «Concierto de Vangoura» y devolvía cualquier sitio de la zona, con su chincheta (24-11-2026)
-  const esDeAgendaTipo = TIPOS_EVENTO.includes(String(parada.tipo || '').toLowerCase());
-  const consultaPlaces = esDeAgendaTipo && parada.lugar ? `${parada.lugar}, ${nombreZona}, provincia de León, España` : queryBusquedaReal;
-
-  let objetivo = null;
-  let fotoRealEncontrada = null;
-  let ubicacionResuelta = false;
-  let problemaConfigPlaces = null;
   // Rutas y parques que propone la IA por su cuenta solo valen si existen de verdad. Los de la agenda sí se quedan:
   // su fuente está en la lista de la agenda (sin lista, como en los retoques, vale que traiga un enlace)
   const fuenteParada = String(parada.fuente || '');
   const deLaAgenda = fuentes ? fuentes.has(fuenteParada) : /^https?:\/\//i.test(fuenteParada);
   // Vengan de donde vengan, nunca toman los datos de otro sitio: la "Marcha de la Amistad" no está en un pub de León
   const alAireLibre = ['parque', 'ruta', 'deporte'].includes(String(parada.tipo || '').toLowerCase());
+  // Una charla de la agenda es un evento aunque la IA le ponga un tipo que no está en la lista («literatura», «otro»;
+  // 25-11-2026): con ese tipo se buscaba por el título y la presentación de un libro acabó en la Casa del Libro
+  if (deLaAgenda && fuenteParada && !TIPOS_DE_PARADA.includes(String(parada.tipo || '').toLowerCase())) parada.tipo = 'evento';
+  // Un concierto, una fiesta o un mercadillo se sitúa por su local («Sala Babylon», «Plaza Mayor»), no por su título:
+  // Google no conoce «Concierto de Vangoura» y devolvía cualquier sitio de la zona, con su chincheta (24-11-2026)
+  const esDeAgendaTipo = TIPOS_EVENTO.includes(String(parada.tipo || '').toLowerCase());
+  // «León» o el nombre del pueblo no es un local: no dice dónde es
+  const lugarReal = parada.lugar && ![slug(nombreZona), slug(parada.localidad), 'leon'].includes(slug(parada.lugar)) ? parada.lugar : null;
+  const consultaPlaces = esDeAgendaTipo && lugarReal ? `${lugarReal}, ${nombreZona}, provincia de León, España` : queryBusquedaReal;
+
+  let objetivo = null;
+  let fotoRealEncontrada = null;
+  let ubicacionResuelta = false;
+  let problemaConfigPlaces = null;
   const sitioNatural = alAireLibre && !deLaAgenda;
   // Un evento solo toma la ficha de un sitio si es el suyo: "Ruta de la Morcilla" no es "Parrilla Ruta 987"
   const esEvento = ['evento', 'gastronomia'].includes(String(parada.tipo || '').toLowerCase());
@@ -537,7 +544,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       if (candidatosEnZona.length > 0) {
         if (esDeAgendaTipo) {
           // Solo el sitio que se llama como su local o como el evento; si no, sin chincheta antes que una equivocada
-          const suyo = candidatosEnZona.slice(0, 5).find((r) => r.name && mismoSitioNatural(`${parada.lugar || ''} ${parada.titulo}`, r.name));
+          const suyo = candidatosEnZona.slice(0, 5).find((r) => r.name && mismoSitioDeEvento({ lugar: lugarReal, titulo: parada.titulo }, r.name));
           orden = suyo ? [suyo] : [];
         } else {
           // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota

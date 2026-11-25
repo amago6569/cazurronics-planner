@@ -28,6 +28,21 @@ export const mismoSitioNatural = (a, b) => {
   return propias(a).some((w) => pb.has(w));
 };
 
+// Un evento de la agenda solo toma la ficha de Google de su local. 25-11-2026: la «Presentación del libro "Mientras me
+// operan el cerebro"» (sin local en la agenda, solo «León») acabó en la Casa del Libro de Espacio León por la palabra «libro».
+// Del título no cuentan las palabras del tipo de acto; del local, las de recinto («Sala del Pendón» no es «Sala Gótica»).
+const DE_ACTO = new Set(["presentacion", "libro", "libros", "novela", "poesia", "conferencia", "charla", "charlas", "coloquio",
+  "tertulia", "recital", "lectura", "mesa", "redonda", "jornada", "jornadas", "taller", "talleres", "concierto", "conciertos",
+  "exposicion", "festival", "feria", "mercado", "mercadillo", "fiesta", "fiestas", "teatro", "cine", "musica", "danza",
+  "espectaculo", "proyeccion", "homenaje", "encuentro", "guiada", "club"]);
+const DE_RECINTO = new Set(["sala", "salon", "actos", "auditorio", "centro", "espacio", "cultural", "civico", "municipal", "plaza", "calle"]);
+export const mismoSitioDeEvento = ({ lugar, titulo } = {}, nombre) => {
+  const pn = new Set(propias(nombre).filter((w) => !DE_RECINTO.has(w)));
+  const delLugar = propias(lugar).filter((w) => !DE_RECINTO.has(w));
+  const delTitulo = propias(titulo).filter((w) => !DE_ACTO.has(w) && !DE_RECINTO.has(w));
+  return [...delLugar, ...delTitulo].some((w) => pn.has(w));
+};
+
 // Nombre de Google más presentable: si viene todo en mayúsculas, a minúsculas con inicial en cada palabra
 export const bonito = (n) => {
   const s = String(n || "").trim();
