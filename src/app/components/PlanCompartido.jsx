@@ -165,7 +165,7 @@ export default function PlanCompartido({ inicial }) {
               <article key={`${i}-${p.titulo}`} className={`${GLASS} cz-up group rounded-[2rem] p-2 flex flex-col transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-1.5 hover:bg-white/70 ${favorita === i ? "ring-2 ring-amber-300" : ""}`} style={{ animationDelay: `${240 + i * 70}ms` }}>
                 <button onClick={() => abrir(i)} className="text-left outline-none focus-visible:ring-4 focus-visible:ring-rose-300/60 rounded-[1.6rem]">
                   <div className="h-44 sm:h-48 w-full rounded-[1.6rem] bg-slate-100 relative overflow-hidden">
-                    <img src={p.fotoOficial} alt={p.titulo} loading={i === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.06]" />
+                    {p.fotoOficial && <img src={p.fotoOficial} alt={p.titulo} loading={i === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.06]" />}
                     <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-900/45 via-transparent to-transparent" />
                     <span className="absolute top-3 left-3 w-9 h-9 rounded-full bg-gradient-to-br from-rose-400 to-orange-500 text-white text-sm font-bold flex items-center justify-center ring-[3px] ring-white">{i + 1}</span>
                     <span className="absolute top-3 right-3 bg-white/85 backdrop-blur-md text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-full">{p.hora}</span>
@@ -224,7 +224,7 @@ export default function PlanCompartido({ inicial }) {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
             </div>
-            <img src={parada.fotoOficial} alt={parada.titulo} loading="lazy" decoding="async" className="w-full h-48 object-cover rounded-[1.5rem] mb-4" />
+            {parada.fotoOficial && <img src={parada.fotoOficial} alt={parada.titulo} loading="lazy" decoding="async" className="w-full h-48 object-cover rounded-[1.5rem] mb-4" />}
             <p className="text-slate-600 text-[15px] leading-relaxed mb-4">{parada.descripcion}</p>
             {parada.fuente && /^https?:\/\//.test(parada.fuente) && (
                   <a href={webSegura(parada.fuente)} target="_blank" rel="noopener noreferrer" className="-mt-2 mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-rose-500 hover:underline">🎟️ Ver la fuente del evento</a>
