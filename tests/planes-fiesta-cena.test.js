@@ -43,6 +43,25 @@ describe("la parada de fiesta que pone la IA", () => {
     expect(ajustarFiesta([{ tipo: "discoteca", hora: "00:30" }], FRASE)[0].hora).toBe("00:30");
     expect(ajustarFiesta([{ tipo: "discoteca", hora: "22:00" }], "salir de fiesta a las 22")[0].hora).toBe("22:00");
   });
+  it("un evento de día de la agenda que la IA pone a las 23:00 no es la fiesta: se quita (producción, 28-11-2026)", () => {
+    const agenda = [
+      { titulo: "Magical Fest On Ice León", hora: "Todo el día", fuente: "https://agenda.example/hielo" },
+      { titulo: "Kamikaze Helmets", hora: "23:00", fuente: "https://agenda.example/concierto" },
+      { titulo: "Feria", hora: "10:00-22:00", fuente: "https://agenda.example/feria" },
+      { titulo: "Verbena", hora: "22:00 a 03:00", fuente: "https://agenda.example/verbena" },
+    ];
+    const conFuentes = new Set(agenda.map((e) => e.fuente));
+    const ia = [
+      { titulo: "Cocina con MiMo", tipo: "restaurante", hora: "21:00" },
+      { titulo: "Magical Fest On Ice León", tipo: "fiesta", hora: "23:00", fuente: "https://agenda.example/hielo" },
+      { titulo: "Kamikaze Helmets", tipo: "concierto", hora: "23:00", fuente: "https://agenda.example/concierto" },
+      { titulo: "Feria", tipo: "feria", hora: "23:00", fuente: "https://agenda.example/feria" },
+      { titulo: "Verbena", tipo: "fiesta", hora: "23:00", fuente: "https://agenda.example/verbena" },
+    ];
+    expect(ajustarFiesta(ia, FRASE, conFuentes, agenda).map((p) => p.titulo)).toEqual(["Cocina con MiMo", "Kamikaze Helmets", "Verbena"]);
+    // De día se queda: no lo ha puesto como la fiesta
+    expect(ajustarFiesta([{ ...ia[1], hora: "18:00" }], FRASE, conFuentes, agenda)).toHaveLength(1);
+  });
   it("una fiesta de la agenda (con su fuente) se queda como evento con su hora; sin pedir fiesta no se toca nada", () => {
     expect(ajustarFiesta([{ tipo: "fiesta", hora: "20:30", fuente: "https://agenda.example/fiesta-erasmus" }], FRASE, fuentes)[0]).toMatchObject({ tipo: "fiesta", hora: "20:30" });
     const ia = [{ tipo: "fiesta", hora: "12:00", titulo: "Fiestas de San Froilán" }];
