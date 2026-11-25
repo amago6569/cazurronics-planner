@@ -13,7 +13,7 @@ import { hoyEnLeon } from "./estadisticas";
 import { deduplicar, familia, ordenarPorHora } from "./agenda";
 import { MUNICIPIOS, ZONAS, zonaDe, zonaMasCercana } from "./zonas";
 import { llamarGemini as llamarGeminiConPlanB, extraerJSON, motivoClaro } from "./gemini";
-import { fuentesPara } from "./intencion";
+import { encajaConLoPedido, fuentesPara } from "./intencion";
 import { limpiarParaPrompt } from "./blindaje";
 import { apuntarNovedades, apuntarRendimiento } from "./novedades";
 import { apuntarCharla, charlaDeRepaso, charlaDeTurno } from "./charla";
@@ -1107,26 +1107,30 @@ export async function eventosProximos(dias = DIAS_VENTANA) {
 
 // Si la agenda del día no cabe entera, los huecos se reparten por turnos entre todos los tipos de plan
 // (uno de música, uno de teatro, uno de deporte, uno de fiestas...): ningún tipo tiene prioridad sobre otro.
-export function eventosParaPrompt(eventos, max = 30) {
+// apetece: lo que pide. Los eventos que van de eso entran siempre primero; el resto se reparte por familias
+export function eventosParaPrompt(eventos, max = 30, apetece = "") {
   if (!eventos.length) return "";
   const todos = ordenarPorHora(deduplicar(eventos));
-  let elegidos = todos.slice(0, max);
-  if (todos.length > max) {
+  const afines = apetece ? todos.filter((e) => encajaConLoPedido(e, apetece)).slice(0, max) : [];
+  const resto = todos.filter((e) => !afines.includes(e));
+  const hueco = max - afines.length;
+  let elegidos = [...afines, ...resto.slice(0, hueco)];
+  if (resto.length > hueco) {
     const grupos = new Map();
-    for (const e of todos) {
+    for (const e of resto) {
       const f = familia(e) || "otro";
       if (!grupos.has(f)) grupos.set(f, []);
       grupos.get(f).push(e);
     }
     const colas = [...grupos.values()];
-    elegidos = [];
-    for (let i = 0; elegidos.length < max; i++) {
+    elegidos = [...afines];
+    for (let i = 0; elegidos.length < max && hueco > 0; i++) {
       const cola = colas[i % colas.length];
       if (cola.length) elegidos.push(cola.shift());
       if (colas.every((c) => !c.length)) break;
     }
-    elegidos = ordenarPorHora(elegidos);
   }
+  elegidos = ordenarPorHora(elegidos);
   const lineas = elegidos.map((e) =>
     `- ${e.titulo}${e.hora ? ` (${e.hora})` : ""}${e.lugar ? ` en ${e.lugar}` : ""}${e.localidad ? `, ${e.localidad}` : ""}${e.precio ? ` · ${e.precio}` : ""}${e.categoria ? ` [${e.categoria}]` : ""}${e.porConfirmar ? " (por confirmar: dilo así si lo propones)" : ""} · fuente: ${e.fuente}`
   );

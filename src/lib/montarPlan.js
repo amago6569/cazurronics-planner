@@ -378,7 +378,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
   // Nada de "Actividades Verano" en noviembre: ni para la IA ni en Más cosas ese día
   // Y si el plan es para hoy, nada que ya haya empezado hace rato o terminado
   const agendaDelDia = quitarPasados(unirEventos(eventosAMedida || [], eventosDia || []).filter((e) => !fueraDeTemporada(e, fecha)), fecha);
-  const bloqueAgenda = eventosParaPrompt(agendaParaRutas(agendaDelDia, apetece), agendaPedida ? 40 : 30);
+  const bloqueAgenda = eventosParaPrompt(agendaParaRutas(agendaDelDia, apetece), agendaPedida ? 40 : 30, apetece);
   const bloqueComunidad = [
     prefs?.favoritos?.length ? `FAVORITOS DE LA COMUNIDAD CAZURRONICS en esta zona (gente que fue y le encantó; priorízalos si encajan): ${prefs.favoritos.join(', ')}.` : '',
     prefs?.evitar?.length ? `EVITA estos sitios (malas experiencias reales de usuarios): ${prefs.evitar.join(', ')}.` : '',
