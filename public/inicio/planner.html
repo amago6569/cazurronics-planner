@@ -441,7 +441,8 @@ async function montar() {
 
 /* ═══ Resultado ═══ */
 let centroPlan = null; // lo que el servidor no ha podido situar lleva el centro de la búsqueda: no se pinta como si estuviera ahí
-const conSitio = (p) => p.lat != null && p.lon != null && p.lat !== "" && Number.isFinite(+p.lat) && Number.isFinite(+p.lon) && !(centroPlan && +p.lat === centroPlan[0] && +p.lon === centroPlan[1]);
+// sinUbicar: el servidor no sabe dónde es (ni Google ni nuestra lista lo conocen): sin chincheta antes que una equivocada
+const conSitio = (p) => !p.sinUbicar && p.lat != null && p.lon != null && p.lat !== "" && Number.isFinite(+p.lat) && Number.isFinite(+p.lon) && !(centroPlan && +p.lat === centroPlan[0] && +p.lon === centroPlan[1]);
 // De una parada a la siguiente: andando si está cerca, en coche si no. Lo mismo en la lista y en la ficha, para que cuadre
 function tramoHasta(i) {
   const a = PLAN[i - 1], b = PLAN[i]; if (!a || !b || !conSitio(a) || !conSitio(b)) return null;

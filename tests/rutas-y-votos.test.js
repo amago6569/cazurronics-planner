@@ -80,7 +80,9 @@ describe("eventos de deporte de la agenda", () => {
     const { parada } = await enriquecerParada({ titulo: "Marcha de la Amistad", tipo: "deporte", fuente: "https://aytoleon.es/marcha", lat: 42.39, lon: -5.76 }, { ...contexto, radio: 60 });
     expect(parada.titulo).toBe("Marcha de la Amistad");
     expect(parada.nombreGoogle).toBeUndefined();
-    expect(parada.lat).toBe(42.39);
+    // 25-11-2026: las coordenadas que escribe la IA ya no se usan (la chincheta salía en otra calle): sin chincheta
+    expect(parada.sinUbicar).toBe(true);
+    expect(parada.lat).not.toBe(42.39);
   });
 });
 
@@ -89,7 +91,20 @@ describe("eventos y fichas de Google", () => {
     simularGoogle([{ ...ficha("Restaurante Parrilla Ruta 987"), types: ["restaurant"] }]);
     const { parada } = await enriquecerParada({ titulo: "VI Ruta de la Morcilla San Froilán", tipo: "evento", lat: 42.6, lon: -5.56 }, contexto);
     expect(parada.nombreGoogle).toBeUndefined();
-    expect(parada.lat).toBe(42.6);
+    expect(parada.sinUbicar).toBe(true); // ni la ficha del restaurante ni las coordenadas a ojo de la IA
+  });
+  it("las coordenadas de los datos abiertos de la Junta sí se usan, y la IA no puede colarlas", async () => {
+    simularGoogle([]);
+    const { conCoordenadasDeAgenda } = await import("../src/lib/montarPlan");
+    const agenda = [{ titulo: "Belén monumental", fuente: "https://datosabiertos.jcyl.es/belen", origen: "jcyl", lat: 42.6, lon: -5.57 }];
+    const deLaIA = conCoordenadasDeAgenda({ titulo: "Belén monumental", tipo: "evento", fuente: "https://datosabiertos.jcyl.es/belen", lat: 1, lon: 1, coordsFiables: true }, agenda);
+    expect(deLaIA).toMatchObject({ lat: 42.6, lon: -5.57, coordsFiables: true });
+    const inventada = conCoordenadasDeAgenda({ titulo: "Otra cosa", tipo: "evento", fuente: "https://otra.example", lat: 42.61, lon: -5.56, coordsFiables: true }, agenda);
+    expect(inventada.coordsFiables).toBeUndefined();
+    const { parada } = await enriquecerParada(deLaIA, contexto);
+    expect([parada.lat, parada.lon, parada.sinUbicar, parada.coordsFiables]).toEqual([42.6, -5.57, undefined, undefined]);
+    const { parada: otra } = await enriquecerParada(inventada, contexto);
+    expect(otra.sinUbicar).toBe(true);
   });
   it("sí toma la de su lugar", async () => {
     simularGoogle([{ ...ficha("Restaurante Cocinandos"), types: ["restaurant"] }]);
