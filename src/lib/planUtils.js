@@ -288,6 +288,52 @@ export async function buscarFotoCommons(nombre, zona, limite) {
   return null;
 }
 
+// Foto de serie (Unsplash, licencia libre) cuando no hay foto del sitio. Alejandro, 25-11-2026: «quiero foto para todo, pero
+// si no encuentra que ponga una de serie relacionada con lo que es». Una por tipo de plan, elegidas y revisadas a mano: no
+// enseñan ningún sitio concreto (ni una catedral, ni un estadio reconocible), solo de qué va (un libro, un escenario, unas tapas).
+const DE_SERIE = {
+  libro: 'photo-1553447977-754f9430685c', charla: 'photo-1540575467063-178a50c2df87', teatro: 'photo-1562329265-95a6d7a83440',
+  cine: 'photo-1574267432553-4b4628081c31', danza: 'photo-1550026593-cb89847b168d', exposicion: 'photo-1606819717115-9159c900370b',
+  museo: 'photo-1761563071832-e548e022a706', monumento: 'photo-1534445291134-f70b7a81f691', mercadillo: 'photo-1533900298318-6b8da08a523e',
+  feria: 'photo-1724562834182-4d4f9b579f93', fiesta: 'photo-1546148217-293f105f5e6a', deporte: 'photo-1546608235-3310a2494cdf',
+  infantil: 'photo-1560831340-b9679dc9e9f0', gastronomia: 'photo-1510812431401-41d2bd2722f3', ruta: 'photo-1676782778930-11b311ec5134',
+  parque: 'photo-1766766786108-6c98d82a26eb', bar: 'photo-1625418277638-6db2d521a78c', restaurante: 'photo-1414235077428-338989a2e8c0',
+  cafeteria: 'photo-1509042239860-f550ce710b93', discoteca: 'photo-1545128485-c400e7702796', evento: 'photo-1788149903141-d53b08f6f38a',
+  concierto: 'photo-1524368535928-5b5e00ddc76b', navidad: 'photo-1513201025652-45a8a3f21311', mercadoNavidad: 'photo-1575659458448-27b1d2836de2',
+};
+// De qué va, por lo que dice el título (en este orden: «Concierto de Navidad» es un concierto; «Mercado de Navidad», navideño)
+const TEMA_DE_SERIE = [
+  ['mercadoNavidad', /\b(?:mercad\w*|feria|mercadillo)\b.*\bnavid|\bnavid\w*.*\b(?:mercad\w*|mercadillo)\b/],
+  ['gastronomia', /gastronom|\btapas?\b|\bvinos?\b|\bcatas?\b|degustacion|matanza|cocido|botillo|cecina|pinchos?\b/],
+  ['libro', /\blibros?\b|literari|literatura|poesia|poetas?\b|novela|\blectura|escritor|relatos|club de lectura/],
+  ['charla', /charla|conferencia|coloquio|ponencia|mesa redonda|tertulia|debate|seminario|jornadas?\b/],
+  ['cine', /\bcine|pelicula|proyeccion|cortometraje|documental/],
+  ['danza', /\bdanza|ballet/],
+  ['teatro', /teatro|monologo|\bmagia|circo|zarzuela|musical\b|titeres|marionetas/],
+  ['concierto', /concierto|\bmusica|orquesta|\bcoro\b|recital|\bjazz|\brock\b|flamenco|\bbanda\b/],
+  ['exposicion', /exposicion|\bmuestra\b|pintura|fotografia|escultura/],
+  ['infantil', /infantil|\bninos|\bninas|familiar|\bpeques|cuentacuentos|\btaller/],
+  ['navidad', /navid|navide|\bbelen|alumbrado|cabalgata|reyes magos/],
+  ['mercadillo', /mercad|\brastro\b/],
+  ['feria', /\bferias?\b|artesan/],
+  ['fiesta', /fiestas?\b|romeria|verbena|magosto|patronal|carnaval|fuegos artificiales/],
+  ['deporte', /deporte|partido|futbol|baloncesto|balonmano|carrera|marcha|\btrail|maraton|\bcross\b|torneo/],
+];
+const TEMA_POR_TIPO = {
+  bar: 'bar', taberna: 'bar', sidreria: 'bar', 'sidrería': 'bar', restaurante: 'restaurante', cafeteria: 'cafeteria', 'cafetería': 'cafeteria',
+  discoteca: 'discoteca', pub: 'discoteca', museo: 'museo', monumento: 'monumento', parque: 'parque', ruta: 'ruta', deporte: 'deporte',
+  concierto: 'concierto', festival: 'concierto', teatro: 'teatro', exposicion: 'exposicion', mercadillo: 'mercadillo', feria: 'feria',
+  fiesta: 'fiesta', gastronomia: 'gastronomia',
+};
+export function temaDeSerie(parada) {
+  const tipo = String(parada?.tipo || '').toLowerCase();
+  // Un bar es un bar aunque se llame «La Bodega del Rock»
+  if (necesitaFicha(tipo)) return TEMA_POR_TIPO[tipo] || 'bar';
+  const texto = `${parada?.titulo || ''} ${parada?.categoria || ''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ]+/g, ' ');
+  return TEMA_DE_SERIE.find(([, re]) => re.test(texto))?.[0] || TEMA_POR_TIPO[tipo] || 'evento';
+}
+export const fotoDeSerie = (parada) => `https://images.unsplash.com/${DE_SERIE[temaDeSerie(parada)]}?auto=format&fit=crop&w=800&q=70`;
+
 // NUEVO: comprueba si Google tiene cobertura de Street View en ese punto (la consulta a "metadata" es
 // gratuita, no gasta cuota) y, si la hay, devuelve la URL de la imagen real de esa calle.
 // OJO: la clave del iframe acaba en el navegador, así que solo puede ser STREET_VIEW_API_KEY, restringida a tu dominio
@@ -672,7 +718,9 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // Una parada que llega sin descripción (las que se añaden para completar «4 bares») lleva la ficha propia
   if (!String(parada.descripcion || '').trim()) parada.descripcion = descripcionReal(objetivo, parada.tipo, nombreZona);
 
-  parada.fotoOficial = foto || null;
+  // Sin foto del sitio, una de serie de lo que es (fotoDeSerie: no es del sitio; no se guarda en su ficha)
+  parada.fotoOficial = foto || fotoDeSerie(parada);
+  if (!foto) parada.fotoDeSerie = true;
   parada.streetView = streetView;
 
   // Lo que ha escrito la IA (descripción y transporte) se recorta y pierde teléfonos, enlaces y trozos del prompt.

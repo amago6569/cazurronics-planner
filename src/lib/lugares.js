@@ -57,7 +57,7 @@ export async function registrarApariciones(paradas) {
     if (!claveValida(k) || !esNegocio(p)) continue;
     c.push(["SET", `lugar:${k}`, JSON.stringify({
       clave: k, nombre: bonito(p.nombreGoogle) || p.titulo, tipo: tipoNegocio(p) || p.tipo || null, placeId: p.placeId || null,
-      lat: p.lat ?? null, lon: p.lon ?? null, foto: p.fotoOficial || null,
+      lat: p.lat ?? null, lon: p.lon ?? null, foto: (!p.fotoDeSerie && p.fotoOficial) || null,
       precio: p.precio || null, resenas: p.resenas || null, actualizado: Date.now(),
     })]);
     c.push(["HINCRBY", `lugarstats:${k}`, "apariciones", 1]);
