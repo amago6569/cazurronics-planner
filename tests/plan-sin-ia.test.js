@@ -119,6 +119,13 @@ describe("caché de planes repetidos", () => {
     expect(claveCachePlan(base)).not.toBe(claveCachePlan({ ...base, fecha: "2026-12-06" }));
     expect(claveCachePlan(base)).not.toBe(claveCachePlan({ ...base, lat: 42.62 }));
   });
+  it("cada versión publicada tiene su caché: un arreglo se ve al momento", () => {
+    vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "99ad6dd0e40fd7a915ded85a15db3c55ebb55864");
+    const antes = claveCachePlan(base);
+    vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "608f896d425e7c122068eb2aefa3578cf2ba772a");
+    expect(claveCachePlan(base)).not.toBe(antes);
+    vi.unstubAllEnvs();
+  });
   it("dura 6 h para otro día, 30 min para hoy y 10 min si salió sin IA", () => {
     const ahora = new Date("2026-11-24T10:00:00Z");
     expect(segundosEnCache({ fecha: "2026-12-05" }, ahora)).toBe(6 * 3600);

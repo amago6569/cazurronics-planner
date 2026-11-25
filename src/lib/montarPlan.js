@@ -12,7 +12,7 @@
 import { llamarGemini, extraerJSON, ErrorIA } from './gemini';
 import { sinRomper } from './almacen';
 import { REGLA_DATOS, textoParaPrompt } from './blindaje';
-import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm, TIPOS_CON_FICHA_OBLIGATORIA } from './planUtils';
+import { presupuestoAPriceLevel, ajustarAlPresupuesto, obtenerLocalidad, obtenerPrevisionTiempo, enriquecerParada, haversineKm, TIPOS_CON_FICHA_OBLIGATORIA, TIPOS_EVENTO } from './planUtils';
 import { eventosDelDia, eventosParaPrompt, barridoAMedida, unirEventos } from './eventos';
 import { preferenciasComunidad, sitiosComprobados, sitiosParaPrompt } from './lugares';
 import { deduplicar, esDeVariosDias, fueraDeTemporada, leerHora, mismoEvento, ordenarPorHora } from './agenda';
@@ -261,13 +261,27 @@ const DICE_HORA = /\b(?:a las \d{1,2}|\d{1,2}[:.]\d{2}|\d{1,2}\s?h(?:oras)?\b)/;
 
 // Antes de comprobar en Google: si pide salir de fiesta, la parada de fiesta que la IA no ha sacado de la agenda es un
 // local (discoteca o pub, con ficha y horario) y va de noche: desde las 23:00 y después de cenar, salvo que diga la hora.
-export function ajustarFiesta(paradas, apetece, fuentesAgenda = null) {
+// 25-11-2026, ya publicado #97: para el sábado puso «23:00 Magical Fest On Ice» (patinaje sobre hielo, «Todo el día» en la
+// agenda) como la fiesta. Un evento de la agenda que la IA pone de noche sin que su hora en la agenda sea de noche no es
+// salir de fiesta (y a esa hora puede estar cerrado): se quita y completarLocalesPedidos busca un local abierto.
+const DE_NOCHE = 21 * 60 + 30;
+function eventoDeDiaPuestoDeNoche(p, agenda) {
+  const min = leerHora(p?.hora).min;
+  if (min == null || (min < DE_NOCHE && min >= 6 * 60)) return false;
+  const e = p?.fuente ? (agenda || []).find((x) => x?.fuente === p.fuente) : null;
+  if (!e) return false;
+  const h = leerHora(e.hora);
+  const deNoche = (h.min != null && (h.min >= 21 * 60 || h.min < 6 * 60)) || (h.fin != null && (h.fin >= 23 * 60 || h.fin < 6 * 60));
+  return !deNoche;
+}
+
+export function ajustarFiesta(paradas, apetece, fuentesAgenda = null, agenda = []) {
   if (!localesPedidos(apetece).some((h) => h.tipo === 'discoteca')) return paradas;
   const horaDada = DICE_HORA.test(sinTildes(apetece));
   const cena = paradas.find((p) => String(p?.tipo || '').toLowerCase() === 'restaurante' && (leerHora(p.hora).min ?? 0) >= 19 * 60);
   const finCena = cena ? (leerHora(cena.hora).min ?? 21 * 60) + 90 : 0;
   const desde = Math.max(23 * 60, finCena);
-  return paradas.map((p) => {
+  return paradas.filter((p) => !(TIPOS_EVENTO.includes(String(p?.tipo || '').toLowerCase()) && eventoDeDiaPuestoDeNoche(p, agenda))).map((p) => {
     const tipo = String(p?.tipo || '').toLowerCase();
     const deAgenda = Boolean(p?.fuente) && (fuentesAgenda ? fuentesAgenda.has(String(p.fuente)) : false);
     const q = { ...p };
@@ -440,7 +454,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     if (rutaBruta.length === 0 && !pedido && !localesPedidos(apetece).length) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
 
     const paradasIA = ajustarFiesta(quitarNoPedidas(rutaBruta
-      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece), apetece, contexto.fuentes)
+      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece), apetece, contexto.fuentes, agendaDelDia)
       .map((p) => conCoordenadasDeAgenda(p, agendaDelDia));
     const enriquecidas = await Promise.all(paradasIA.map((p) => enriquecerSeguro(p, contexto)));
     // Dos bares que Google lleva al mismo local (pasa con «Bar en Boñar» o con nombres que no conoce) eran antes UNO solo

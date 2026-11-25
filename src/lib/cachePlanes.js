@@ -9,9 +9,12 @@ import { guardarJSON, leerJSON } from "./almacen";
 const sinTildes = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const hoyEnLeon = (ahora = new Date()) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid" }).format(ahora);
 
+// Cada versión publicada tiene su caché: un arreglo de los planes se ve al momento, no 6 h después (25-11-2026)
+const version = () => String(process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7);
+
 export function claveCachePlan({ fecha, apetece, presupuestoMin, presupuestoMax, radio, lat, lon }) {
   const texto = sinTildes(apetece).replace(/[^a-z0-9ñ]+/g, " ").trim();
-  const base = [fecha, texto, Number(presupuestoMin) || 0, Number(presupuestoMax) || 0, Math.round(Number(radio) || 0), Number(lat).toFixed(2), Number(lon).toFixed(2)].join("|");
+  const base = [version(), fecha, texto, Number(presupuestoMin) || 0, Number(presupuestoMax) || 0, Math.round(Number(radio) || 0), Number(lat).toFixed(2), Number(lon).toFixed(2)].join("|");
   return `plan:cache:${createHash("sha256").update(base).digest("base64url").slice(0, 22)}`;
 }
 
