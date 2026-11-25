@@ -242,28 +242,45 @@ export async function obtenerPrevisionTiempo(lat, lon, fecha) {
   return null;
 }
 
-// Búsqueda de una foto real en Wikimedia Commons para un término de búsqueda dado
+// Foto de Wikimedia Commons de un sitio con nombre (un monumento, un museo, el local de un evento), solo si es suya.
+// 25-11-2026, Alejandro: «que las fotos que salgan estén bien o sean coherentes». Antes valía el primer resultado de la
+// búsqueda, y si no había, una genérica en inglés («restaurant table food Spain»). En 40 eventos de la agenda sin foto de
+// Google salió 1 coherente (la Catedral): 11 eran PDF de libros viejos («Cosas de España») y 28 genéricas de otros países
+// (el parlamento de Columbia Británica, un mercado de Bangladés). Ahora solo vale una imagen cuyo nombre lleva el nombre
+// entero del sitio y que está hecha en la provincia (por su posición en Wikimedia): «Universidad de Guanajuato (León)» es de
+// León de México, y «Carnaval San Francisco» no es el Teatro San Francisco.
 // (Wikimedia pide identificarse con un User-Agent propio en TODAS las llamadas)
 const CABECERAS_COMMONS = { 'User-Agent': 'CazurronicsPlanner/10.0' };
-export async function buscarFotoCommons(query, limite) {
+const ES_IMAGEN = /\.(?:jpe?g|png|webp)$/i;
+const SIN_NOMBRE = new Set(['del', 'las', 'los', 'por', 'con', 'para', 'visita', 'visitas', 'guiada', 'paseo', 'ruta', 'rutas', 'espana', 'provincia', 'file', 'archivo']);
+export function fotoEsDelSitio(archivo, nombre) {
+  const titulo = String(archivo || '').replace(/^(?:File|Archivo):/i, '');
+  if (!ES_IMAGEN.test(titulo)) return false;
+  const delArchivo = new Set(slug(titulo).split('-'));
+  const palabras = [...new Set(slug(nombre).split('-').filter((w) => w.length >= 3 && !SIN_NOMBRE.has(w)))];
+  return palabras.length > 0 && palabras.every((w) => delArchivo.has(w));
+}
+export async function buscarFotoCommons(nombre, zona, limite) {
+  if (!String(nombre || '').trim()) return null;
   try {
-    const commonsRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json`, {
+    // «un punto de la provincia de León» (sin pueblo conocido) no ayuda a buscar
+    const conZona = zona && !/^un punto/i.test(zona) && !slug(nombre).includes(slug(zona));
+    const query = conZona ? `${nombre} ${zona}` : String(nombre);
+    const commonsRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&srlimit=10&format=json`, {
       headers: CABECERAS_COMMONS, ...conLimite(MS.foto, limite),
     });
     const commonsData = await commonsRes.json();
-
-    if (commonsData.query?.search && commonsData.query.search.length > 0) {
-      const fileTitle = commonsData.query.search[0].title;
-      const fileInfoRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json`, {
-        headers: CABECERAS_COMMONS, ...conLimite(MS.foto, limite),
-      });
-      const fileInfoData = await fileInfoRes.json();
-      const filePages = fileInfoData.query?.pages;
-      const filePageId = Object.keys(filePages || {})[0];
-
-      if (filePages?.[filePageId]?.imageinfo?.[0]?.url) {
-        return filePages[filePageId].imageinfo[0].url;
-      }
+    const candidatos = (commonsData.query?.search || []).map((r) => r.title).filter((t) => fotoEsDelSitio(t, nombre));
+    if (!candidatos.length) return null;
+    // Una sola llamada para todos: dónde se hizo cada foto y su dirección
+    const fileInfoRes = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(candidatos.join('|'))}&prop=coordinates|imageinfo&iiprop=url&format=json`, {
+      headers: CABECERAS_COMMONS, ...conLimite(MS.foto, limite),
+    });
+    const paginas = Object.values((await fileInfoRes.json()).query?.pages || {});
+    for (const t of candidatos) {
+      const pagina = paginas.find((x) => x.title === t);
+      const c = pagina?.coordinates?.[0];
+      if (c && enProvinciaLeon(c.lat, c.lon) && pagina.imageinfo?.[0]?.url) return pagina.imageinfo[0].url;
     }
   } catch (e) {
     console.error("Error buscando foto en Wikimedia Commons:", e);
@@ -303,25 +320,6 @@ export function rumboHacia(lat1, lon1, lat2, lon2) {
   const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) - Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
   return ((Math.atan2(y, x) / rad) + 360) % 360;
 }
-
-export const BUSQUEDA_GENERICA_POR_TIPO = {
-  bar: 'tapas bar Spain',
-  restaurante: 'restaurant table food Spain',
-  discoteca: 'nightclub party lights',
-  monumento: 'historic monument building Spain',
-  parque: 'city park green space',
-  concierto: 'live music concert crowd',
-  mercadillo: 'street market stalls Spain',
-  fiesta: 'traditional Spanish village festival fireworks',
-  feria: 'Spanish fair stalls crafts',
-  festival: 'music festival stage Spain',
-  exposicion: 'art exhibition gallery',
-  museo: 'museum interior Spain',
-  teatro: 'theatre stage performance',
-  evento: 'León Spain event plaza',
-  ruta: 'hiking trail mountains León Spain',
-  deporte: 'sports stadium Spain',
-};
 
 // Tipos para los que aceptamos una ubicación aproximada (la del centro elegido, o la que estime la IA)
 // cuando Google Places no tiene una ficha de negocio exacta. No aplica a bar/restaurante/discoteca.
@@ -659,12 +657,13 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   }
 
   // La foto de reserva (Wikimedia) y el Street View no dependen el uno del otro: van a la vez
+  // Sin foto de Google del sitio, Wikimedia solo para un sitio con nombre propio: el monumento o el museo, o el local de un
+  // evento. Un bar o un evento sin local no tienen foto en Wikimedia: mejor sin foto que la de otra cosa.
   const buscarFoto = async () => {
     if (fotoRealEncontrada) return fotoRealEncontrada;
-    const foto = await buscarFotoCommons(queryBusquedaReal, limite);
-    if (foto) return foto;
-    const terminoGenerico = BUSQUEDA_GENERICA_POR_TIPO[parada.tipo] || 'Castilla y León turismo';
-    return buscarFotoCommons(terminoGenerico, limite);
+    if (necesitaFicha(parada.tipo)) return null;
+    const nombreDelSitio = esDeAgendaTipo ? lugarReal : parada.titulo;
+    return buscarFotoCommons(nombreDelSitio, nombreZona, limite);
   };
   // Solo con la posición exacta de Google Places: con un punto aproximado (eventos, rutas, el centro de la zona) la vista
   // enseñaba cualquier otra cosa. Consejo de asesores del 17-11-2026: arreglarla y, donde no hay garantía, no enseñarla.
@@ -673,7 +672,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   // Una parada que llega sin descripción (las que se añaden para completar «4 bares») lleva la ficha propia
   if (!String(parada.descripcion || '').trim()) parada.descripcion = descripcionReal(objetivo, parada.tipo, nombreZona);
 
-  parada.fotoOficial = foto || "https://images.unsplash.com/photo-1543785734-4b6e564642f8?auto=format&fit=crop&w=800&q=80";
+  parada.fotoOficial = foto || null;
   parada.streetView = streetView;
 
   // Lo que ha escrito la IA (descripción y transporte) se recorta y pierde teléfonos, enlaces y trozos del prompt.

@@ -454,7 +454,7 @@ export default function Home() {
                 style={{ animationDelay: `${260 + index * 70}ms` }}
               >
                 <div className="h-48 sm:h-52 w-full rounded-[1.6rem] bg-slate-100 relative overflow-hidden">
-                  <img src={parada.fotoOficial} alt={parada.titulo} loading={index === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] group-hover:scale-[1.06]" />
+                  {parada.fotoOficial && <img src={parada.fotoOficial} alt={parada.titulo} loading={index === 0 ? "eager" : "lazy"} decoding="async" className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] group-hover:scale-[1.06]" />}
                   <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-900/45 via-transparent to-transparent" />
                   <div className="absolute top-3 left-3 w-9 h-9 rounded-full bg-gradient-to-br from-rose-400 to-orange-500 text-white text-sm font-bold flex items-center justify-center ring-[3px] ring-white shadow-[0_6px_16px_-4px_rgba(244,63,94,0.6)]">
                     {index + 1}
