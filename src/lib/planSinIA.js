@@ -38,7 +38,7 @@ const HUECOS = [
   [/\b(?:cenar|cena)\b/, { tipo: 'restaurante', hora: 21 * 60 }],
   [/\b(?:conciertos?|musica|directo)\b/, { agenda: ['musica'] }],
   [/\b(?:teatro|cine|monologos?|espectaculos?|danza|magia|circo)\b/, { agenda: ['escena'] }],
-  [/\b(?:charlas?|conferencias?|presentacion|libros?|coloquio|talleres?)\b/, { agenda: ['charla'] }],
+  [/\b(?:charlas?|conferencias?|presentacion|libros?|coloquio|talleres?|literari\w*|literatura|poesia|tertulias?)\b/, { agenda: ['charla'] }],
   [/\b(?:partidos?|futbol|baloncesto|balonmano|deporte)\b/, { agenda: ['deporte'] }],
   [/\b(?:mercad\w*|rastro|ferias?|artesan\w*)\b/, { agenda: ['mercado', 'feria'] }],
   [/\b(?:fiestas?|romeria|verbena|san froilan|patronales)\b/, { agenda: ['fiesta'] }],
@@ -46,7 +46,7 @@ const HUECOS = [
   [/\b(?:ninos|ninas|crios|familia|infantil|peques|chavales)\b/, { agenda: ['infantil'], ruta: true }],
   [/\b(?:ruta|caminar|caminata|andar|senderismo|naturaleza|montana|excursion|bici|cuevas?|cascadas?|mirador|hoces|lago)\b/, { ruta: true }],
 ];
-const ES_CHARLA = /charla|conferencia|presentaci|coloquio|ponencia|taller|club de lectura|mesa redonda/;
+const ES_CHARLA = /charla|conferencia|presentaci|coloquio|ponencia|taller|club de lectura|mesa redonda|tertulia|poesia|literari/;
 
 // «Cenar algo leonés», «un cocido», «comida típica»: el restaurante se busca primero en Google Maps por esa cocina
 // («Restaurante de cocina leonesa en León»), antes que el mejor valorado del catálogo, que no sabe qué cocina tiene.

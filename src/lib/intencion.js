@@ -20,7 +20,7 @@ export function palabrasClave(apetece) {
 
 // [tema, regex sobre lo que pide, fuentes donde suele estar publicado]
 const TEMAS = [
-  ["charlas y cultura", /\b(?:charla|conferencia|coloquio|ponencia|presentacion|libro|lectura|mesa redonda|debate|seminario|jornada|cine ?forum|club de lectura)/,
+  ["charlas y cultura", /\b(?:charla|conferencia|coloquio|ponencia|presentacion|libro|lectura|mesa redonda|debate|seminario|jornada|cine ?forum|club de lectura|literari|literatura|poesia|poeta|escritor|novela|relatos|tertulia|recital poetico)/,
     "Universidad de León y su agenda cultural, bibliotecas municipales y públicas, Instituto Leonés de Cultura, centros cívicos, casas de cultura de los pueblos, librerías, fundaciones, colegios profesionales y asociaciones culturales"],
   ["deporte", /\b(?:deporte|partido|futbol|baloncesto|balonmano|carrera|maraton|trail|senderismo|ruta|bici|ciclismo|caminar|caminata|andar|excursion|montana|marcha|cross|mtb|btt|mountain|duatlon|triatlon|correr|running|escalada|padel|tenis|esqui|natacion|yoga|gimnasio|cultural leonesa|ademar)/,
     "webs y redes de los clubes (Cultural Leonesa, Ademar León, clubes de baloncesto y de montaña), federaciones de Castilla y León, calendarios de carreras populares y trails, la concejalía de deportes y la Diputación, estaciones de esquí de la provincia"],
@@ -33,6 +33,16 @@ const TEMAS = [
   ["museos y visitas", /\b(?:museo|exposicion|visita|guiada|monumento|catedral|arte\b|historia|patrimonio)/,
     "museos (MUSAC, Museo de León, Catedral), oficinas de turismo, Junta de Castilla y León, visitas guiadas y salas de exposiciones"],
 ];
+
+// ¿Un evento de la agenda va de lo que pide? Mismo tema («charla literaria» → presentaciones de libros, conferencias) o una
+// palabra suya en el título. 25-11-2026: «algo de charla literaria y comer» sacó solo la comida, con 3 presentaciones de
+// libros esa tarde en la agenda: con 100+ eventos, las de las 19:00 no llegaban a los 30 que ve la IA.
+export function encajaConLoPedido(e, apetece) {
+  const t = ` ${quitarTildes(apetece)} `;
+  const texto = ` ${quitarTildes(`${e?.titulo || ""} ${e?.categoria || ""}`)} `;
+  if (TEMAS.some(([, re]) => re.test(t) && re.test(texto))) return true;
+  return palabrasClave(apetece).some((p) => new RegExp(`\\b${p.length >= 7 ? p.slice(0, -2) : p}`).test(texto));
+}
 
 // Fuentes extra para la búsqueda a medida: solo las de los temas que salen en lo que pide la persona
 export function fuentesPara(apetece) {
