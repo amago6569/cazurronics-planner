@@ -44,13 +44,14 @@ export async function POST(request) {
     }
     contados.push(cupo.clave);
     // Techos de gasto del día (Alejandro, 24-11-2026): pasado cualquiera de ellos el plan NO se niega, sale sin IA (0 € de IA).
-    //  · por conexión (PLANES_MAX_IP_DIA, 6 planes con IA) y para toda la web (PLANES_MAX_DIA, 40 planes con IA)
+    //  · por conexión (PLANES_MAX_IP_DIA, 15 planes con IA; antes 6: el 24-11 Alejandro probando desde casa llegó a 6 a mediodía
+    //    y todo lo demás le salió sin IA) y para toda la web (PLANES_MAX_DIA, 40 planes con IA)
     //  · en euros (GASTO_IA_MAX_DIA, 0,40 €; lib/topeGasto.js)
     // Si el almacén falla, el de toda la web y el de euros no dejan pasar a la IA: sin contador no hay techo.
     // Solo cuentan los planes que de verdad usan la IA: si sale sin IA (por un tope, sin saldo o la IA caída), se devuelve.
     // Antes contaba cada petición, también las fallidas: el 24-11 se llegó a 43 con 0,07 € gastados y todo salía sin IA.
     const diarios = [claveTopeDiario('plan', request), claveTopeDiario('plan')];
-    let sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 6), request));
+    let sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_IP_DIA ?? 15), request));
     if (!sinIA) sinIA = !(await dentroDelTopeDiario('plan', Number(process.env.PLANES_MAX_DIA ?? 40), null, false));
     else diarios.pop(); // el de toda la web no llegó a contar
     if (!sinIA) sinIA = !(await dentroDelGastoDelDia('usuario'));
