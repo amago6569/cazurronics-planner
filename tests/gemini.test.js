@@ -1,6 +1,6 @@
 // npm test — Sacar el JSON de lo que responde la IA, aunque venga "adornado"
 import { describe, expect, it } from "vitest";
-import { ErrorIA, extraerJSON, llamarGemini, medirUso, mensajeParaUsuario, MODELOS } from "../src/lib/gemini";
+import { ErrorIA, extraerJSON, formaDeVacia, llamarGemini, medirUso, mensajeParaUsuario, MODELOS } from "../src/lib/gemini";
 
 describe("extraerJSON", () => {
   it("lee una lista limpia", () => {
@@ -105,6 +105,15 @@ describe("modelos que se usan", () => {
       expect(urls.length).toBe(1);
       expect(urls[0]).toContain("gemini-2.5-flash-lite");
     } finally { globalThis.fetch = original; }
+  });
+  it("una respuesta en blanco se apunta solo por su forma, para saber por qué pasa (25-11-2026: 47 de 118 en el barrido)", () => {
+    const datos = {
+      candidates: [{ content: { parts: [] }, finishReason: "STOP", groundingMetadata: { webSearchQueries: ["fiestas Turcia noviembre"], groundingChunks: [{}, {}] } }],
+      usageMetadata: { promptTokenCount: 1800, toolUsePromptTokenCount: 900 },
+    };
+    const f = formaDeVacia("barrido", "gemini-2.5-flash-lite", datos, new Date("2026-11-25T08:50:00Z"));
+    expect(f).toEqual({ cuando: "2026-11-25T08:50:00.000Z", para: "barrido", modelo: "gemini-2.5-flash-lite", fin: "STOP", partes: [], busquedas: 1, fuentes: 2, entrada: 1800, salida: null, pensamiento: null, herramienta: 900, bloqueo: null });
+    expect(JSON.stringify(formaDeVacia("barrido", "m", {}))).not.toMatch(/prompt|texto/);
   });
   it("2.5 Flash de reserva en la Despensa no piensa (no se paga pensamiento)", async () => {
     const original = globalThis.fetch;

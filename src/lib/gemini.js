@@ -3,7 +3,7 @@
 // Cada modelo tiene su propia cuota, así que el barrido automático usa modelos distintos que los planes
 // de la gente: aunque el barrido gaste mucho, los planes de los usuarios siguen funcionando.
 
-import { enSegundoPlano } from "./almacen";
+import { enSegundoPlano, varios } from "./almacen";
 import { registrarErrorIA, registrarGastoIA } from "./estadisticas";
 import { precioDe } from "./preciosIA";
 import { esGastoDePruebas } from "./modoPruebas";
@@ -109,7 +109,11 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
       }
       const candidato = datos.candidates?.[0];
       const texto = (candidato?.content?.parts || []).map((p) => p.text || "").join("\n");
-      if (!texto.trim()) { fallos.push(`${modelo}: respuesta vacía (${candidato?.finishReason || "?"})`); continue; }
+      if (!texto.trim()) {
+        fallos.push(`${modelo}: respuesta vacía (${candidato?.finishReason || "?"})`);
+        enSegundoPlano(() => apuntarVacia(para, modelo, datos), "respuestas-vacias");
+        continue;
+      }
       const dominios = new Set((candidato?.groundingMetadata?.groundingChunks || [])
         .map((c) => String(c?.web?.title || "").toLowerCase().replace(/^www\./, "").trim())
         .filter((t) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)));
@@ -131,6 +135,24 @@ export async function llamarGemini(prompt, { para = "usuario", tarea = para, tem
   const err = new ErrorIA(saturado ? "saturado" : "Error en la IA", saturado ? 429 : 502);
   err.fallos = fallos;
   throw err;
+}
+
+// 25-11-2026: el Flash-Lite con Google contesta en blanco (STOP) en ~4 de cada 10 búsquedas del barrido (47 de 118 ese
+// día). Para saber por qué sin gastar más, se guardan las 20 últimas, solo su forma (sin el texto del prompt): ia:vacias, 3 días
+export function formaDeVacia(para, modelo, datos, ahora = new Date()) {
+  const c = datos?.candidates?.[0];
+  const u = datos?.usageMetadata || {};
+  const g = c?.groundingMetadata || {};
+  return {
+    cuando: ahora.toISOString(), para, modelo, fin: c?.finishReason || null,
+    partes: (c?.content?.parts || []).map((x) => Object.keys(x).join("+")),
+    busquedas: (g.webSearchQueries || []).length, fuentes: (g.groundingChunks || []).length,
+    entrada: u.promptTokenCount ?? null, salida: u.candidatesTokenCount ?? null, pensamiento: u.thoughtsTokenCount ?? null, herramienta: u.toolUsePromptTokenCount ?? null,
+    bloqueo: datos?.promptFeedback?.blockReason || null,
+  };
+}
+async function apuntarVacia(para, modelo, datos) {
+  await varios([["LPUSH", "ia:vacias", JSON.stringify(formaDeVacia(para, modelo, datos))], ["LTRIM", "ia:vacias", 0, 19], ["EXPIRE", "ia:vacias", 3 * 24 * 3600]]);
 }
 
 // Por qué ha fallado una búsqueda, en cristiano, para la oficina. err.fallos trae lo que dijo cada modelo

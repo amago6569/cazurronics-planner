@@ -72,8 +72,32 @@ export function textoDeHtml(html) {
 const VACIAS_HORA = new Set(["para", "con", "del", "las", "los", "una", "unos", "unas", "por", "sobre", "entre", "desde", "hasta", "leon", "2025", "2026", "2027",
   "concierto", "conciertos", "fiesta", "fiestas", "taller", "talleres", "exposicion", "teatro", "festival", "feria", "jornada", "jornadas", "mercado", "visita", "ruta", "presentacion", "actividad", "actividades"]);
 const HORAS_EN_TEXTO = /\ba las (\d{1,2})(?:[:.]([0-5]\d))?\b|\b(\d{1,2}):([0-5]\d)\b|\b(\d{1,2})[.,]([0-5]\d)\s?h(?:oras|rs?)?\b|\b(\d{1,2})\s?h(?:oras)?\b/g;
+// 25-11-2026: las 3 primeras horas propuestas eran de OTRO evento de la misma lista («21:30» de Uncut puesta a Kamikaze
+// Helmets en la agenda de conciertos de mycontt; «12:45» del acto del 25N puesta a la pista de hielo de Valencia de Don
+// Juan). Una página con 3 o más fechas o 3 o más horas distintas es una lista de eventos: de ahí no se saca ninguna hora.
+const MES_CORTO = "ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic";
+function fechasDistintas(t) {
+  const vistas = new Set();
+  const poner = (d, m) => { if (d >= 1 && d <= 31 && m >= 1 && m <= 12) vistas.add(`${d}-${m}`); };
+  for (const x of t.matchAll(new RegExp(`\\b(\\d{1,2})(?:\\s+de)?\\s+(${MES_CORTO})[a-z]*\\b`, "g"))) poner(Number(x[1]), MES_CORTO.split("|").indexOf(x[2]) + 1);
+  for (const x of t.matchAll(/\b(\d{1,2})\s*[/-]\s*(\d{1,2})(?:\s*[/-]\s*\d{2,4})?\b/g)) poner(Number(x[1]), Number(x[2]));
+  for (const x of t.matchAll(/\b(\d{1,2})\.(\d{1,2})\.\d{4}\b/g)) poner(Number(x[1]), Number(x[2]));
+  for (const x of t.matchAll(/\b\d{4}-(\d{2})-(\d{2})\b/g)) poner(Number(x[2]), Number(x[1]));
+  return vistas.size;
+}
+function horasDistintas(t) {
+  const vistas = new Set();
+  for (const m of t.matchAll(HORAS_EN_TEXTO)) {
+    const h = Number(m[1] ?? m[3] ?? m[5] ?? m[7]), min = Number(m[2] ?? m[4] ?? m[6] ?? 0);
+    if (h <= 23) vistas.add(h * 60 + min);
+  }
+  return vistas.size;
+}
+const esListaDeEventos = (t) => fechasDistintas(t) >= 3 || horasDistintas(t) >= 3;
+
 export function horaEnPagina(texto, e) {
   const t = plano(texto);
+  if (esListaDeEventos(t)) return null;
   const claves = [...new Set(plano(e?.titulo).replace(/[^a-z0-9ñ ]+/g, " ").split(" ").filter((p) => p.length >= 4 && !VACIAS_HORA.has(p)))];
   if (!claves.length) return null;
   const guia = [...claves].sort((a, b) => b.length - a.length)[0];
