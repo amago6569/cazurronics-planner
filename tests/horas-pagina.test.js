@@ -33,6 +33,20 @@ describe("la hora que dice la página", () => {
     expect(horaEnPagina("Mercado de artesanía de Navidad, 10:00-14:00, Plaza Mayor", { titulo: "Mercado de artesanía de Navidad" })).toBe("10:00");
   });
 
+  it("en una lista de eventos no coge la hora del de al lado (las 3 primeras propuestas, 25-11-2026)", () => {
+    // Agenda de conciertos: la hora de la intro es la de Uncut, el 25; Kamikaze Helmets va el 26 sin hora
+    const conciertos = "Conciertos en León. Uncut en concierto en El Gran Café, el miércoles 25 de noviembre a las 21:30. "
+      + "Kamikaze Helmets en concierto en El Gran Café, León 26/11/2026. Encendido del alumbrado navideño, León 26/11/2026. "
+      + "Vangoura en concierto, 27/11/2026.";
+    expect(horaEnPagina(conciertos, { titulo: "Kamikaze Helmets en concierto", fecha: "2026-11-26" })).toBeNull();
+    expect(horaEnPagina(conciertos, { titulo: "Encendido del alumbrado navideño con Café Quijano", fecha: "2026-11-26" })).toBeNull();
+    // Lista de un ayuntamiento: «12:45 a 13:00» es del acto del 25N, no de la pista de hielo; y hay otros actos con su hora
+    const ayto = "Patrocina la pista de hielo ecológica municipal 25 noviembre de 2026 Valencia de Don Juan. "
+      + "25N Día internacional de la eliminación de la violencia contra la mujer 25 noviembre de 2026 12:45 a 13:00 Plaza Mayor. "
+      + "Cuentacuentos 26 noviembre de 2026 18:00. Concierto de la banda 28 noviembre de 2026 20:00.";
+    expect(horaEnPagina(ayto, { titulo: "Patrocina la Pista de Hielo Ecológica Municipal", fecha: "2026-11-25" })).toBeNull();
+  });
+
   it("si hay dos horas distintas o ninguna, no se la inventa", () => {
     expect(horaEnPagina("Vangoura en concierto. Puertas 21:00, concierto 22:00", VANGOURA)).toBeNull();
     expect(horaEnPagina("Vangoura en concierto el 21.11.2026 en León", VANGOURA)).toBeNull();
