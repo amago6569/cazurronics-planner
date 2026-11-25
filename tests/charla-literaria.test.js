@@ -52,3 +52,28 @@ describe("sin IA", () => {
     expect(huecosPedidos("algo literario por la tarde").some((h) => h.agenda?.includes("charla"))).toBe(true);
   });
 });
+
+describe("sin IA, la comida a su hora", () => {
+  const LEON = { lat: 42.5987, lon: -5.5671 };
+  const SITIOS = [{ n: "Restaurante El Roble", t: "restaurante", la: 42.599, lo: -5.567, p: "20€", v: 8, g: 1 }];
+  const AGENDA = [
+    { titulo: "Presentación del libro «Tarot. Antología de relatos»", categoria: "", hora: "19:30", lugar: "Biblioteca Pública", fuente: "https://ejemplo.es/libro", fecha: "2026-12-05" },
+    { titulo: "Concierto de prueba", categoria: "concierto", hora: "21:30", lugar: "Sala X", fuente: "https://ejemplo.es/c", fecha: "2026-12-05" },
+  ];
+  const falso = async (p) => ({ parada: { ...p, lat: p.lat ?? LEON.lat, lon: p.lon ?? LEON.lon, placeId: p.titulo } });
+  const montar = async (apetece) => {
+    const { montarSinIA } = await import("../src/lib/planSinIA");
+    return montarSinIA({
+      peticion: { apetece, fecha: "2026-12-05", ...LEON, radio: 3, presupuestoMin: 0, presupuestoMax: 50 },
+      agenda: AGENDA, sitios: SITIOS, contexto: { ...LEON, radio: 3, nombreZona: "León", limite: Date.now() + 20000, fecha: "2026-12-05" }, ahora: new Date("2026-11-24T10:00:00Z"),
+    }, falso);
+  };
+  it("«charla literaria y comer»: se come a las 14:00 y la charla a su hora, no una «comida» a las 21:00", async () => {
+    const { plan } = await montar(FRASE);
+    expect(plan.map((p) => `${p.hora} ${p.titulo}`)).toEqual(["14:00 Restaurante El Roble", "19:30 Presentación del libro «Tarot. Antología de relatos»"]);
+  });
+  it("si a su hora se pisa con lo anterior, va detrás como antes («un concierto y cenar»)", async () => {
+    const { plan } = await montar("un concierto y cenar");
+    expect(plan.map((p) => `${p.hora} ${p.titulo}`)).toEqual(["21:30 Concierto de prueba", "23:00 Restaurante El Roble"]);
+  });
+});

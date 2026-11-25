@@ -23,6 +23,15 @@ export function andando(a, b) {
 
 export const PRECIO_TIPICO = { bar: '2-4€', cafeteria: '3-5€', discoteca: '8-12€', restaurante: '15-25€', museo: '3-6€', monumento: 'Gratis', ruta: 'Gratis', parque: 'Gratis' };
 const DURA = { bar: 50, cafeteria: 45, restaurante: 90, discoteca: 120, museo: 90, ruta: 180, parque: 120 };
+// ¿Se pisa ese rato con alguna parada ya puesta? Un evento sin hora de fin ocupa hora y media
+function ocupado(plan, desde, hasta) {
+  return plan.some((p) => {
+    const { min, fin } = leerHora(p.hora);
+    if (min == null) return false;
+    const acaba = fin ?? min + (DURA[String(p.tipo || '').toLowerCase()] || 90);
+    return desde < acaba && min < hasta;
+  });
+}
 const BUSCAR_EN_MAPS = { bar: 'Bar de tapas', restaurante: 'Restaurante', cafeteria: 'Cafetería', discoteca: 'Pub de copas', museo: 'Museo' };
 
 // Lo que pide, en el orden en que lo escribe. Cada hueco es un tipo de local (con su hora natural), un trozo de la agenda
@@ -223,7 +232,11 @@ export async function montarSinIA({ peticion, agenda, sitios, contexto, ahora = 
     if (!hueco.tipo) continue;
     const n = Math.max(1, hueco.n || 1);
     const dura = DURA[hueco.tipo] || 60;
-    let hora = Math.max(hueco.hora ?? 20 * 60, reloj, desde);
+    // «Algo de charla literaria y comer» (25-11-2026): la charla de las 19:30 va primero en el texto y la comida salía a las
+    // 21:00, que es cenar. Si a su hora (comer a las 14:00) el rato está libre, va a su hora aunque se haya escrito después
+    const natural = hueco.hora;
+    const ratoLibre = natural != null && natural >= desde && natural < reloj && !ocupado(plan, natural, natural + dura * n);
+    let hora = ratoLibre ? natural : Math.max(natural ?? 20 * 60, reloj, desde);
     // Orden: los del catálogo a 15 min andando, luego una búsqueda en Maps de la zona y, por último, los del catálogo más lejos
     const cocina = hueco.tipo === 'restaurante' ? cocinaPedida(apetece) : null;
     const probarA = (h) => {
