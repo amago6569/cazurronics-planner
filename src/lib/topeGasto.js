@@ -3,6 +3,10 @@
 // (registrarGastoIA, en microdólares). Aquí solo se lee ese contador antes de cada llamada a Gemini.
 //  · Tareas de fondo (barrido, Verificador, Despensa por la noche): paran en GASTO_FONDO_MAX_DIA (0,25 € de serie).
 //    El tramo que no se hace lo repite la Repesca otro día.
+//    Miércoles y domingos toca barrer todos los pueblos (tramos m0-m22 de vercel.json): esos días el fondo llega a
+//    GASTO_FONDO_MAX_DIA_PUEBLOS (0,60 €) y el total sube lo mismo, para que a los planes les quede lo de siempre.
+//    Regla de Alejandro del 25-11-2026: ese miércoles el tope de 0,25 € paró el barrido de pueblos a las 9:20
+//    (57 búsquedas, 8 de 23 grupos) y ~2,20 € más al mes le parecen bien para mirarlos todos.
 //  · Planes, retoques, buscador de la Despensa y el jefe: paran en GASTO_IA_MAX_DIA (0,40 € de serie).
 //    Un plan que llega al tope sale igual, montado sin IA con los locales ya comprobados (lib/planSinIA.js).
 //  · Pruebas de planes (/api/panel/comparar): su propio tope, GASTO_PRUEBAS_MAX_DIA (1 € de serie), y no cuentan en los otros.
@@ -31,8 +35,19 @@ async function ajusteReal() {
   const cuadre = factorDelCuadre(await comando(["GET", "ia:factor"]).catch(() => null));
   return cuadre ?? ajusteContador();
 }
-export const topeDiaEuros = () => numero(process.env.GASTO_IA_MAX_DIA, 0.4);
-export const topeFondoEuros = () => Math.min(topeDiaEuros(), numero(process.env.GASTO_FONDO_MAX_DIA, 0.25));
+// 0 = domingo, 3 = miércoles, en hora de León (el contador ia:dia también va por el día de León)
+const DIAS_DE_PUEBLOS = new Set([0, 3]);
+const SEMANA = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+export const esDiaDePueblos = (ahora = new Date()) =>
+  DIAS_DE_PUEBLOS.has(SEMANA[new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Madrid", weekday: "short" }).format(ahora)]);
+const topeFondoNormal = () => numero(process.env.GASTO_FONDO_MAX_DIA, 0.25);
+// 0 en Vercel = sin tope: los días de pueblos tampoco se pone
+const topeFondoPueblos = () => (topeFondoNormal() > 0 ? Math.max(topeFondoNormal(), numero(process.env.GASTO_FONDO_MAX_DIA_PUEBLOS, 0.6)) : 0);
+export const topeDiaEuros = (ahora = new Date()) => {
+  const base = numero(process.env.GASTO_IA_MAX_DIA, 0.4);
+  return base > 0 && esDiaDePueblos(ahora) ? base + topeFondoPueblos() - topeFondoNormal() : base;
+};
+export const topeFondoEuros = (ahora = new Date()) => Math.min(topeDiaEuros(ahora), esDiaDePueblos(ahora) ? topeFondoPueblos() : topeFondoNormal());
 
 // Lo que va de hoy, en euros. Se recuerda 20 s por instancia: un barrido de 10 búsquedas no lee 10 veces
 export function gastoDeHoyEuros() {

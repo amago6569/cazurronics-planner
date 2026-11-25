@@ -140,17 +140,47 @@ describe("tope de gasto del día", () => {
     vi.doUnmock("../src/lib/topeGasto");
   });
   it("el fondo para antes que los planes, y con el almacén caído no se gasta", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-24T10:00:00Z")); // martes: día normal
     // 0,20 € en el contador x1,5 = 0,30 € de verdad
     vi.doMock("../src/lib/almacen", () => ({ comando: vi.fn(async () => String(0.2 / 0.9 * 1e6)), recordar: (_k, _ms, leer) => leer() }));
     const { dentroDelGastoDelDia } = await import("../src/lib/topeGasto");
     expect(await dentroDelGastoDelDia("barrido")).toBe(false); // 0,30 € ≥ 0,25 €
     expect(await dentroDelGastoDelDia("usuario")).toBe(true); // 0,30 € < 0,40 €
+    vi.useRealTimers();
     vi.doUnmock("../src/lib/almacen");
     vi.resetModules();
     vi.doMock("../src/lib/almacen", () => ({ comando: vi.fn(async () => { throw new Error("caído"); }), recordar: (_k, _ms, leer) => leer() }));
     const otra = await import("../src/lib/topeGasto");
     expect(await otra.dentroDelGastoDelDia("usuario")).toBe(false);
     vi.doUnmock("../src/lib/almacen");
+  });
+  it("miércoles y domingos (todos los pueblos) el fondo llega a 0,60 € y a los planes les queda lo mismo", async () => {
+    const { esDiaDePueblos, topeDiaEuros, topeFondoEuros } = await import("../src/lib/topeGasto");
+    const martes = new Date("2026-11-24T10:00:00Z"), miercoles = new Date("2026-11-25T08:20:00Z");
+    const domingoNoche = new Date("2026-11-29T22:30:00Z"); // 23:30 en León, aún domingo
+    const lunesMadrugada = new Date("2026-11-29T23:30:00Z"); // 00:30 del lunes en León
+    expect([martes, miercoles, domingoNoche, lunesMadrugada].map((d) => esDiaDePueblos(d))).toEqual([false, true, true, false]);
+    expect([topeFondoEuros(martes), topeDiaEuros(martes)]).toEqual([0.25, 0.4]);
+    expect(topeFondoEuros(miercoles)).toBeCloseTo(0.6);
+    expect(topeDiaEuros(miercoles) - topeFondoEuros(miercoles)).toBeCloseTo(0.4 - 0.25);
+    // El miércoles 25-11 a las 9:20: 0,19 $ contados (0,26 € x1,5) ya no paran el barrido
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(miercoles);
+    vi.resetModules();
+    vi.doMock("../src/lib/almacen", () => ({ comando: vi.fn(async () => "190220"), recordar: (_k, _ms, leer) => leer() }));
+    const tope = await import("../src/lib/topeGasto");
+    expect(await tope.dentroDelGastoDelDia("barrido")).toBe(true);
+    vi.useRealTimers();
+    vi.doUnmock("../src/lib/almacen");
+    vi.resetModules();
+  });
+  it("con el tope a 0 en Vercel (sin tope) los días de pueblos tampoco hay tope", async () => {
+    vi.stubEnv("GASTO_IA_MAX_DIA", "0"); vi.stubEnv("GASTO_FONDO_MAX_DIA", "0");
+    const { topeDiaEuros, topeFondoEuros } = await import("../src/lib/topeGasto");
+    const miercoles = new Date("2026-11-25T08:20:00Z");
+    expect([topeDiaEuros(miercoles), topeFondoEuros(miercoles)]).toEqual([0, 0]);
+    vi.unstubAllEnvs();
   });
   it("sin saldo (402) se explica en cristiano", async () => {
     const { motivoClaro } = await import("../src/lib/gemini");

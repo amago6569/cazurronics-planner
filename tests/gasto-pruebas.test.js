@@ -24,6 +24,8 @@ describe("presupuesto de las pruebas", () => {
   });
 
   it("con la web en su tope, las pruebas siguen; y con las pruebas en el suyo, la web sigue", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-24T10:00:00Z")); // martes: tope normal de 0,40 € (miércoles y domingos sube)
     await almacen.comando(["SET", `ia:dia:${est.hoyEnLeon()}`, String(Math.round((0.45 / 0.9) * 1e6))]); // web: 0,45 €
     expect(await tope.dentroDelGastoDelDia("usuario")).toBe(false);
     expect(await pruebas.conPresupuestoDePruebas(() => tope.dentroDelGastoDelDia("usuario"))).toBe(true);
@@ -32,6 +34,7 @@ describe("presupuesto de las pruebas", () => {
     await almacen.comando(["DEL", `ia:dia:${est.hoyEnLeon()}`]);
     tope = await import("../src/lib/topeGasto"); almacen.olvidar("tope-gasto");
     expect(await tope.dentroDelGastoDelDia("usuario")).toBe(true);
+    vi.useRealTimers();
   });
 
   it("el saldo del panel descuenta también lo de las pruebas (sale del mismo saldo de AI Studio)", async () => {

@@ -122,7 +122,9 @@ describe("de la llamada a la IA al panel (almacén en memoria)", () => {
     expect(d.errores.at(-1)["429"]).toBe(1);
     expect(d.factor).toEqual({ valor: 1.5, origen: "estimado" });
     expect(d.saldo.euros).toBeCloseTo(20 - (0.0016 + 0.00082) * EUR * 1.5, 2);
-    expect(d.gasto.tope).toBe(0.4);
+    // El tope de hoy: 0,40 €; miércoles y domingos (barrido de todos los pueblos) 0,75 € (25-11-2026)
+    const { esDiaDePueblos } = await import("../src/lib/topeGasto");
+    expect(d.gasto.tope).toBe(esDiaDePueblos() ? 0.75 : 0.4);
   });
 
   it("recargas absurdas no se guardan", async () => {
