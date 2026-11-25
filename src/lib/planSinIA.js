@@ -48,6 +48,17 @@ const HUECOS = [
 ];
 const ES_CHARLA = /charla|conferencia|presentaci|coloquio|ponencia|taller|club de lectura|mesa redonda/;
 
+// «Cenar algo leonés», «un cocido», «comida típica»: el restaurante se busca primero en Google Maps por esa cocina
+// («Restaurante de cocina leonesa en León»), antes que el mejor valorado del catálogo, que no sabe qué cocina tiene.
+// El 24-11-2026 «cenar algo leonés» daba el restaurante de un hotel. null si no pide ninguna cocina.
+export function cocinaPedida(apetece) {
+  const t = ` ${sinTildes(apetece)} `;
+  if (/\bcocido/.test(t)) return /maragat|astorga|castrillo/.test(t) ? 'Restaurante de cocido maragato' : 'Restaurante con cocido';
+  if (/\bbotillo/.test(t)) return 'Restaurante con botillo';
+  if (/\b(?:leones[ae]?s?|tipic[oa]s?|tradicional(?:es)?|de la tierra|casera|cecina|morcilla|lechazo|cocina de aqui)\b/.test(t)) return 'Restaurante de cocina leonesa';
+  return null;
+}
+
 // [{ pos, tipo?, hora?, n?, agenda?, ruta? }] en el orden del texto. Sin nada reconocible: plan abierto (vacío)
 export function huecosPedidos(apetece) {
   const t = ` ${sinTildes(apetece).replace(/\s+/g, ' ')} `;
@@ -103,9 +114,11 @@ function horaDeEvento(e, desde) {
   return Math.max(11 * 60, desde);
 }
 
+// Las coordenadas de la agenda solo se fían si vienen de los datos abiertos de la Junta (las del barrido las pone la IA)
 const paradaDeEvento = (e, hora) => ({
   titulo: e.titulo, tipo: tipoDeEvento(e), hora: hhmm(hora), lugar: e.lugar || null, fuente: e.fuente || null,
   descripcion: e.descripcion || '', precio: e.precio || 'Consultar', lat: e.lat, lon: e.lon,
+  ...(e.origen === 'jcyl' && e.lat != null && e.lon != null ? { coordsFiables: true } : {}),
 });
 
 // Rutas y parajes de la lista dentro del radio, el más cercano primero
@@ -212,13 +225,15 @@ export async function montarSinIA({ peticion, agenda, sitios, contexto, ahora = 
     const dura = DURA[hueco.tipo] || 60;
     let hora = Math.max(hueco.hora ?? 20 * 60, reloj, desde);
     // Orden: los del catálogo a 15 min andando, luego una búsqueda en Maps de la zona y, por último, los del catálogo más lejos
+    const cocina = hueco.tipo === 'restaurante' ? cocinaPedida(apetece) : null;
     const probarA = (h) => {
       const aParada = (s) => ({ titulo: s.n, tipo: hueco.tipo, hora: hhmm(Math.min(h, 24 * 60 - 1)), precio: s.p || PRECIO_TIPICO[hueco.tipo] || null, lat: s.la, lon: s.lo, descripcion: '' });
+      const enMaps = (q) => ({ titulo: `${q} en ${contexto.nombreZona || 'León'}`, tipo: hueco.tipo, hora: hhmm(Math.min(h, 24 * 60 - 1)), precio: PRECIO_TIPICO[hueco.tipo] || null, descripcion: '' });
       const locales = localesParaHueco(sitios, hueco.tipo, punto, usados.nombres);
       const cerca = locales.filter((s) => s.km <= 1.2).slice(0, 3).map(aParada);
       const lejos = locales.filter((s) => s.km > 1.2).slice(0, 2).map(aParada);
-      const reserva = BUSCAR_EN_MAPS[hueco.tipo] ? [{ titulo: `${BUSCAR_EN_MAPS[hueco.tipo]} en ${contexto.nombreZona || 'León'}`, tipo: hueco.tipo, hora: hhmm(Math.min(h, 24 * 60 - 1)), precio: PRECIO_TIPICO[hueco.tipo] || null, descripcion: '' }] : [];
-      const candidatos = [...cerca, ...reserva, ...lejos];
+      const reserva = BUSCAR_EN_MAPS[hueco.tipo] ? [enMaps(BUSCAR_EN_MAPS[hueco.tipo])] : [];
+      const candidatos = [...(cocina ? [enMaps(cocina)] : []), ...cerca, ...reserva, ...lejos];
       return primeroQueValga(candidatos, contexto, usados, enriquecer, candidatos.length);
     };
     // «3 bares en Boñar» un martes: a las 20:50 ya no hay nada abierto y salía 1 bar. Si detrás del primero ya está todo

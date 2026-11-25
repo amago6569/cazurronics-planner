@@ -74,7 +74,9 @@ export default function MapSelector({ radiusKm, setRadiusKm, center, setCenter, 
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(busqueda + ", provincia de León, España")}`);
       const data = await res.json();
-      if (data && data.length > 0) { setCenter([parseFloat(data[0].lat), parseFloat(data[0].lon)]); setBusqueda(""); }
+      // El pueblo (class "place") antes que el municipio: el punto del municipio es el centro de su término (Ponferrada, a 6 km)
+      const sitio = (data || []).find((d) => d.class === "place") || data?.[0];
+      if (sitio) { setCenter([parseFloat(sitio.lat), parseFloat(sitio.lon)]); setBusqueda(""); }
       else { alert("¡Ay guaje, no encuentro ese sitio en León!"); }
     } catch (error) { console.error("Error ubicación:", error); }
   };

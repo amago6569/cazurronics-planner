@@ -64,7 +64,10 @@ window.crearSelectorZona = function (raiz, { fino = false, km = 15, alCambiar = 
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q + ", provincia de León, España")}`);
       const data = await res.json();
-      const sitio = (data || []).map((d) => ({ lat: parseFloat(d.lat), lon: parseFloat(d.lon), n: String(d.display_name || q).split(",")[0] })).find((d) => window.dentroDeLeon(d.lat, d.lon));
+      // Primero el pueblo (class "place") y luego el municipio: el punto del municipio es el centro de su término y en
+      // Ponferrada caía a 6 km de la ciudad, en Villafranca del Bierzo a 10 km (25-11-2026)
+      const lista = (data || []).map((d) => ({ lat: parseFloat(d.lat), lon: parseFloat(d.lon), n: String(d.display_name || q).split(",")[0], pueblo: d.class === "place" }));
+      const sitio = [...lista.filter((d) => d.pueblo), ...lista.filter((d) => !d.pueblo)].find((d) => window.dentroDeLeon(d.lat, d.lon));
       if (sitio) { busca.value = ""; busca.blur(); poner(sitio.lat, sitio.lon, sitio.n); }
       else estado.textContent = "¡Ay guaje, no encuentro ese sitio en León!";
     } catch { estado.textContent = "No hemos podido buscar ahora. Toca el mapa o prueba otra vez."; }

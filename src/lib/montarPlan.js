@@ -22,7 +22,7 @@ import { AVISO_MAPA, avisoSitio, enProvinciaLeon, sitioFueraEnTexto } from './pr
 import { dentroDelTopeDiario } from './freno';
 import { agendaParaRutas, parajesParaPrompt, rutasParaPrompt } from './rutas';
 import { centrarEnPueblo } from './pueblos';
-import { avisoSinIA, montarSinIA } from './planSinIA';
+import { avisoSinIA, cocinaPedida, huecosPedidos, montarSinIA } from './planSinIA';
 
 // Lo que hace saltar al plan sin IA: Google sin saldo o sin clave, el tope de gasto del día, todos los modelos caídos o
 // una respuesta que no se puede leer. Cualquier otro fallo (un error del código) sigue su camino.
@@ -172,8 +172,10 @@ export async function completarPedido(ruta, pedido, { sitios, contexto, fecha, a
     .sort((a, b) => haversineKm(la, lo, a.la, a.lo) - haversineKm(la, lo, b.la, b.lo))
     .map((s) => ({ titulo: s.n, tipo: pedido.tipo, precio: s.p || PRECIO_TIPICO[pedido.tipo] || null, lat: s.la, lon: s.lo, descripcion: '' }));
   const zona = contexto.nombreZona || 'León';
-  const reserva = (BUSQUEDAS_DE_RESERVA[pedido.tipo] || ['Bar']).map((q) => ({ titulo: `${q} en ${zona}`, tipo: pedido.tipo, precio: PRECIO_TIPICO[pedido.tipo] || null, descripcion: '' }));
-  const candidatos = [...delCatalogo.slice(0, 8), ...reserva];
+  const enMaps = (q) => ({ titulo: `${q} en ${zona}`, tipo: pedido.tipo, precio: PRECIO_TIPICO[pedido.tipo] || null, descripcion: '' });
+  const reserva = (BUSQUEDAS_DE_RESERVA[pedido.tipo] || ['Bar']).map(enMaps);
+  // «Cenar algo leonés»: primero la búsqueda por esa cocina; el catálogo no sabe qué cocina tiene cada sitio
+  const candidatos = [...(pedido.cocina ? [enMaps(pedido.cocina)] : []), ...delCatalogo.slice(0, 8), ...reserva];
 
   // Las horas libres. En ruta: detrás del último bar mientras sea antes de las 22:30; si no, antes del primero (un martes
   // en un pueblo los bares cierran pronto: «3 bares en Boñar» con el primero a las 21:30 se quedaba en 1) y, si no queda
@@ -183,7 +185,7 @@ export async function completarPedido(ruta, pedido, { sitios, contexto, fecha, a
   const yaSon = fecha === hoy ? Math.ceil((h * 60 + m + 30) / 15) * 15 : 0;
   const enRuta = DE_RUTA.has(pedido.tipo);
   const minutos = delTipo().map((p) => leerHora(p.hora).min).filter((x) => x != null);
-  const natural = Math.max(HORA_NATURAL[pedido.tipo] ?? 20 * 60, yaSon);
+  const natural = Math.max(pedido.hora ?? HORA_NATURAL[pedido.tipo] ?? 20 * 60, yaSon);
   const pasos = Array.from({ length: faltan + 2 }, (_, k) => (k + 1) * 50);
   let huecos;
   if (!enRuta) huecos = [minutos[0] ?? natural];
@@ -230,6 +232,77 @@ export async function completarPedido(ruta, pedido, { sitios, contexto, fecha, a
     orden.forEach((p, k) => { if (k > 0 && añadidos.has(p)) p.transporte = andando(orden[k - 1], p); });
   }
   return añadidas;
+}
+
+// La IA escribe lat y lon a ojo. Si la parada es un evento de la agenda que trae su posición de los datos abiertos de la
+// Junta, se usa esa; si no, ninguna (enriquecerParada la busca en Google por su local o la deja sin chincheta).
+// coordsFiables solo lo pone el servidor: si la IA lo escribe, se borra.
+export function conCoordenadasDeAgenda(p, agenda = []) {
+  const { coordsFiables, ...q } = p || {};
+  const e = q.fuente ? (agenda || []).find((x) => x?.fuente === q.fuente && x.origen === 'jcyl' && x.lat != null && x.lon != null) : null;
+  return e ? { ...q, lat: e.lat, lon: e.lon, coordsFiables: true } : q;
+}
+
+// ---------- Lo que pide y tiene que estar ----------
+// 24-11-2026, Alejandro: «cenar algo leonés y luego salir de fiesta» dio solo «el sitio de fiesta, a las 20:30, que seguro
+// que esa discoteca ni está abierta». Una parada de tipo «fiesta» o «evento» no pide ficha de Google ni se mira si abre,
+// y si la cena no pasa la comprobación (cerrado ese día, nombre que Google no conoce) desaparecía sin más.
+// Ahora, leído sin IA (los mismos huecos que el plan sin IA): cada local que nombra («cenar» = restaurante, «salir de
+// fiesta» o «copas» = discoteca o pub, «merendar» = cafetería, «tapas» = bar) tiene que estar en el plan, comprobado y
+// abierto a su hora. Si no está, se busca uno (catálogo y Google Maps) y, si no hay ninguno abierto, se dice.
+const TIPOS_LOCAL = new Set(['restaurante', 'discoteca', 'cafeteria', 'bar']);
+const DE_FIESTA = ['discoteca', 'pub'];
+const NOMBRE_LOCAL = { restaurante: 'restaurante', discoteca: 'sitio de fiesta', cafeteria: 'cafetería', bar: 'bar' };
+export function localesPedidos(apetece) {
+  return huecosPedidos(apetece).filter((h) => h.tipo && TIPOS_LOCAL.has(h.tipo) && !h.agenda);
+}
+// «a las 22», «22:30», «22 h»: la persona ha dicho la hora y manda la suya
+const DICE_HORA = /\b(?:a las \d{1,2}|\d{1,2}[:.]\d{2}|\d{1,2}\s?h(?:oras)?\b)/;
+
+// Antes de comprobar en Google: si pide salir de fiesta, la parada de fiesta que la IA no ha sacado de la agenda es un
+// local (discoteca o pub, con ficha y horario) y va de noche: desde las 23:00 y después de cenar, salvo que diga la hora.
+export function ajustarFiesta(paradas, apetece, fuentesAgenda = null) {
+  if (!localesPedidos(apetece).some((h) => h.tipo === 'discoteca')) return paradas;
+  const horaDada = DICE_HORA.test(sinTildes(apetece));
+  const cena = paradas.find((p) => String(p?.tipo || '').toLowerCase() === 'restaurante' && (leerHora(p.hora).min ?? 0) >= 19 * 60);
+  const finCena = cena ? (leerHora(cena.hora).min ?? 21 * 60) + 90 : 0;
+  const desde = Math.max(23 * 60, finCena);
+  return paradas.map((p) => {
+    const tipo = String(p?.tipo || '').toLowerCase();
+    const deAgenda = Boolean(p?.fuente) && (fuentesAgenda ? fuentesAgenda.has(String(p.fuente)) : false);
+    const q = { ...p };
+    if (['fiesta', 'evento', 'festival'].includes(tipo) && !deAgenda) q.tipo = 'discoteca';
+    if (DE_FIESTA.includes(String(q.tipo || '').toLowerCase()) && !horaDada) {
+      const min = leerHora(q.hora).min;
+      // De madrugada (00:30) ya está bien; antes de las 23:00 o antes de acabar de cenar, no
+      if (min == null || (min >= 6 * 60 && min < desde)) q.hora = hhmm(Math.min(desde, 24 * 60 - 1));
+    }
+    return q;
+  });
+}
+
+// ¿Ya hay en el plan un sitio para ese hueco? Para la fiesta vale una discoteca o un pub, o un bar, una fiesta o un
+// concierto de la agenda desde las 22:00
+function cubreHueco(ruta, hueco) {
+  if (hueco.tipo !== 'discoteca') return ruta.some((p) => esDelTipo(p, hueco.tipo));
+  return ruta.some((p) => {
+    const tipo = String(p?.tipo || '').toLowerCase();
+    if (DE_FIESTA.includes(tipo)) return true;
+    return ['bar', 'fiesta', 'festival', 'concierto'].includes(tipo) && (leerHora(p.hora).min ?? 0) >= 22 * 60;
+  });
+}
+
+// Completa los locales pedidos que faltan. Devuelve los textos de lo que no se ha encontrado (para el aviso)
+export async function completarLocalesPedidos(ruta, apetece, pedido, datos, completar = completarPedido) {
+  const faltan = [];
+  for (const hueco of localesPedidos(apetece)) {
+    if (pedido && tiposIguales(pedido.tipo).includes(hueco.tipo)) continue; // «4 bares»: ya lo completa el pedido
+    if (cubreHueco(ruta, hueco)) continue;
+    const hora = hueco.tipo === 'discoteca' ? Math.max(hueco.hora ?? 23 * 60 + 30, ...ruta.filter((p) => esDelTipo(p, 'restaurante')).map((p) => (leerHora(p.hora).min ?? 0) + 90)) : hueco.hora;
+    const añadidas = await completar(ruta, { n: 1, tipo: hueco.tipo, plural: NOMBRE_LOCAL[hueco.tipo], hora, cocina: hueco.tipo === 'restaurante' ? cocinaPedida(apetece) : null }, datos);
+    if (!añadidas) faltan.push(`${NOMBRE_LOCAL[hueco.tipo]} abierto a las ${hhmm(Math.min(hora ?? 20 * 60, 24 * 60 - 1))}`);
+  }
+  return faltan;
 }
 
 // Devuelve { exito: true, plan, prevision, masEseDia, nombreZona, uso, aviso? } o { exito: false, mensaje, vacio? }
@@ -345,7 +418,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
   // el resultado es el mismo y en el mismo orden, pero tarda lo que la más lenta, no la suma de todas.
   const contexto = { fecha, lat, lon, radio, priceLevelObjetivo, nombreZona, mapsKey: MAPS_KEY, limite: inicio + msTotal, fuentes: conGoogle ? null : new Set(agendaDelDia.map((e) => e.fuente).filter(Boolean)) };
   const rutaValidada = [];
-  let problemaGlobal = null, fueraDeProvincia = 0, uso = null, sinIAFaltan = null;
+  let problemaGlobal = null, fueraDeProvincia = 0, uso = null, sinIAFaltan = null, faltanIA = [];
 
   // Plan B (24-11-2026): sin saldo, sin clave, con el tope de gasto del día o con la IA caída, el plan sale igual sin IA
   const conIA = async () => {
@@ -356,10 +429,12 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     if (!rutaBruta) throw new SyntaxError('La IA no devolvió una lista de paradas');
     // Lista vacía = no hay nada real que cumpla lo pedido: mejor decirlo que rellenar con otras cosas
     // (si pidió «4 bares», no: esos se buscan abajo entre los locales reales de la zona)
-    if (rutaBruta.length === 0 && !pedido) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
+    // (ni si pidió locales concretos, «cenar y salir de fiesta»: también se buscan abajo)
+    if (rutaBruta.length === 0 && !pedido && !localesPedidos(apetece).length) return { exito: false, vacio: true, uso, mensaje: `No hemos encontrado nada real que encaje con «${String(apetece || 'lo que pides').slice(0, 60)}» ese día 🦁 Prueba con otra fecha o amplía el radio.` };
 
-    const paradasIA = quitarNoPedidas(rutaBruta
-      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece);
+    const paradasIA = ajustarFiesta(quitarNoPedidas(rutaBruta
+      .filter((p) => p && typeof p === 'object' && typeof p.titulo === 'string' && p.titulo.trim()), apetece), apetece, contexto.fuentes)
+      .map((p) => conCoordenadasDeAgenda(p, agendaDelDia));
     const enriquecidas = await Promise.all(paradasIA.map((p) => enriquecerSeguro(p, contexto)));
     // Dos bares que Google lleva al mismo local (pasa con «Bar en Boñar» o con nombres que no conoce) eran antes UNO solo
     await separarRepetidos(enriquecidas, paradasIA, contexto);
@@ -373,6 +448,8 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
 
     // Pidió 4 bares y la IA (o Google) dejó menos: se completa con locales reales del radio, primero los ya comprobados
     if (pedido) await completarPedido(rutaValidada, pedido, { sitios, contexto, fecha });
+    // Pidió cenar y salir de fiesta y falta alguno (la IA no lo puso, o estaba cerrado): se busca uno abierto a su hora
+    faltanIA = await completarLocalesPedidos(rutaValidada, apetece, pedido, { sitios, contexto, fecha });
     return null;
   };
   const sinLaIA = async () => {
@@ -392,6 +469,7 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
       rutaValidada.splice(0);
       problemaGlobal = null;
       fueraDeProvincia = 0;
+      faltanIA = [];
       await sinLaIA();
     }
   }
@@ -417,5 +495,6 @@ async function intentoPlan(peticion, { conGoogle = planesConGoogle(), inicio = D
     .filter((e) => !rutaFinal.some((p) => mismoEvento(e, { titulo: p.titulo, lugar: p.lugar, hora: p.hora, categoria: p.tipo })));
   const masEseDia = elegirMasEseDia(restoAgenda, agendaPedida ? 20 : 12);
 
-  return { exito: true, plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, uso, ...(hechoSinIA ? { sinIA: true, ...(avisoSinIA(sinIAFaltan) ? { aviso: avisoSinIA(sinIAFaltan) } : {}) } : {}) };
+  const aviso = avisoSinIA(hechoSinIA ? sinIAFaltan : faltanIA);
+  return { exito: true, plan: rutaFinal, prevision: previsionTiempo, masEseDia, nombreZona, uso, ...(hechoSinIA ? { sinIA: true } : {}), ...(aviso ? { aviso } : {}) };
 }

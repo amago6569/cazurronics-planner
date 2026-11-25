@@ -86,6 +86,21 @@ export function limpiarPrecio(precio) {
   return importe ? importe[0] : sinNota;
 }
 
+// Un precio que no cuadra con el sitio: «5€» por cenar en un restaurante (salía en el plan sin IA del 24-11 porque el
+// catálogo guarda la consumición de otro plan) o «2€» de entrada a una discoteca. Se cambia por lo típico de ese tipo
+// de sitio y, si Google dice lo caro que es (price_level), por su tramo. El resto se deja como está.
+const MINIMO_CREIBLE = { restaurante: 10, discoteca: 5 };
+const TRAMO_RESTAURANTE = ['10-15€', '10-20€', '20-35€', '35-60€', '60€ o más'];
+const TIPICO = { restaurante: '15-25€', discoteca: '8-12€' };
+export function precioCreible(tipo, precio, priceLevel = null) {
+  const t = String(tipo || '').toLowerCase();
+  if (!(t in MINIMO_CREIBLE)) return precio;
+  const numeros = String(precio ?? '').match(/\d+(?:[.,]\d+)?/g)?.map((n) => Number(n.replace(',', '.'))) || [];
+  if (numeros.length && Math.max(...numeros) >= MINIMO_CREIBLE[t]) return precio;
+  if (/gratis/i.test(String(precio || '')) && t === 'discoteca') return precio; // entrada libre: puede ser verdad
+  return t === 'restaurante' && Number.isInteger(priceLevel) && TRAMO_RESTAURANTE[priceLevel] ? TRAMO_RESTAURANTE[priceLevel] : TIPICO[t];
+}
+
 // Puntúa un candidato de Google Places según valoración, popularidad, encaje de presupuesto y distancia real
 export function puntuarCandidato(candidato, tipo, lat, lon, priceLevelObjetivo, radio) {
   if (!candidato || !candidato.geometry) return -Infinity;
@@ -311,6 +326,8 @@ export const BUSQUEDA_GENERICA_POR_TIPO = {
 // Tipos para los que aceptamos una ubicación aproximada (la del centro elegido, o la que estime la IA)
 // cuando Google Places no tiene una ficha de negocio exacta. No aplica a bar/restaurante/discoteca.
 export const TIPOS_UBICACION_FLEXIBLE = ['concierto', 'mercadillo', 'fiesta', 'evento', 'monumento', 'parque'];
+// Paradas que son un evento con fecha (se celebran EN un sitio): se buscan en Google por su local
+export const TIPOS_EVENTO = ['concierto', 'fiesta', 'mercadillo', 'evento', 'teatro', 'exposicion', 'feria', 'festival', 'gastronomia'];
 
 // NUEVO: solo los negocios de hostelería EXIGEN ficha real en Google Places. Antes, una exposición,
 // una feria, un teatro o una ruta sin ficha se descartaban y el plan se quedaba en bares y restaurantes.
@@ -461,6 +478,10 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   parada.lugar = typeof parada.lugar === 'string' ? parada.lugar.trim().slice(0, 100) : null;
   if (!parada.lugar || /^(null|no|n\/a|no disponible|ninguno)$/i.test(parada.lugar) || parada.lugar.toLowerCase() === parada.titulo.toLowerCase()) parada.lugar = null;
   const queryBusquedaReal = `${parada.titulo}, ${nombreZona}, provincia de León, España`;
+  // Un concierto, una fiesta o un mercadillo se sitúa por su local («Sala Babylon», «Plaza Mayor»), no por su título:
+  // Google no conoce «Concierto de Vangoura» y devolvía cualquier sitio de la zona, con su chincheta (24-11-2026)
+  const esDeAgendaTipo = TIPOS_EVENTO.includes(String(parada.tipo || '').toLowerCase());
+  const consultaPlaces = esDeAgendaTipo && parada.lugar ? `${parada.lugar}, ${nombreZona}, provincia de León, España` : queryBusquedaReal;
 
   let objetivo = null;
   let fotoRealEncontrada = null;
@@ -485,7 +506,7 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   try {
     const radioMetros = Number(radio) * 1000;
 
-    const dataSearch = await buscarEnPlaces({ consulta: queryBusquedaReal, lat, lon, radioMetros, mapsKey, limite });
+    const dataSearch = await buscarEnPlaces({ consulta: consultaPlaces, lat, lon, radioMetros, mapsKey, limite });
 
     if (dataSearch.status && dataSearch.status !== 'OK' && dataSearch.status !== 'ZERO_RESULTS') {
       console.error(`[Google Places] status="${dataSearch.status}" para "${queryBusquedaReal}": ${dataSearch.error_message || '(sin mensaje adicional)'}`);
@@ -514,13 +535,16 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       // está cerrado ese día, los mejores de la zona. Así un cierre no deja el plan sin comida.
       let orden = [];
       if (candidatosEnZona.length > 0) {
-        if (parada.tipo === 'concierto' || parada.tipo === 'fiesta' || parada.tipo === 'mercadillo') {
-          orden = [candidatosEnZona[0]];
+        if (esDeAgendaTipo) {
+          // Solo el sitio que se llama como su local o como el evento; si no, sin chincheta antes que una equivocada
+          const suyo = candidatosEnZona.slice(0, 5).find((r) => r.name && mismoSitioNatural(`${parada.lugar || ''} ${parada.titulo}`, r.name));
+          orden = suyo ? [suyo] : [];
         } else {
           // Si Google tiene el sitio que nombró la IA, ese y no otro con mejor nota
           const mismoNombre = candidatosEnZona.slice(0, 5).find((r) => r.name && (esEvento ? mismoSitioNatural(`${parada.titulo} ${parada.lugar || ''}`, r.name) : alAireLibre ? mismoSitioNatural(parada.titulo, r.name) : seParecen(parada.titulo, r.name)));
-          // Una ruta o un parque que Google no conoce no se cambia por otro sitio: se queda sin ubicar y se descarta abajo
-          const porNota = alAireLibre || esEvento ? [] : [...candidatosEnZona.slice(0, 5)]
+          // Una ruta o un parque que Google no conoce no se cambia por otro sitio: se queda sin ubicar y se descarta abajo.
+          // Un museo o un monumento tampoco (el MUSAC no es el Museo de León): cambiar por el mejor valorado solo vale para comer y beber
+          const porNota = !paraComer ? [] : [...candidatosEnZona.slice(0, 5)]
             .sort((a, b) => puntuarCandidato(b, parada.tipo, lat, lon, priceLevelObjetivo, radio) - puntuarCandidato(a, parada.tipo, lat, lon, priceLevelObjetivo, radio));
           orden = mismoNombre ? [mismoNombre, ...(paraComer ? porNota.filter((r) => r !== mismoNombre) : [])] : porNota;
         }
@@ -551,6 +575,8 @@ export async function enriquecerParada(paradaOriginal, contexto) {
       if (typeof objetivo.rating === 'number') {
         parada.resenas = `${objetivo.rating}/5 (${objetivo.user_ratings_total || 0} reseñas)`;
       }
+      // «5€» por cenar: el precio de la consumición de otro plan. Va lo típico o el tramo de precio que da Google
+      parada.precio = precioCreible(parada.tipo, parada.precio, objetivo.price_level);
       // En los pueblos la IA a veces se inventa un bar ("Mesón El Rincón, famoso por su cecina") y Google
       // devuelve otro que sí existe. La ubicación ya es la del real: el nombre y lo que se cuenta, también.
       if (necesitaFicha(parada.tipo) && objetivo.name && !seParecen(parada.titulo, objetivo.name)) {
@@ -606,14 +632,20 @@ export async function enriquecerParada(paradaOriginal, contexto) {
   }
   if (!ubicacionResuelta && sitioNatural && googleRespondio) return { parada: null, problemaConfigPlaces };
 
+  // Sin ficha de Google ni ruta de la lista no sabemos dónde es: la IA pone coordenadas a ojo y la chincheta salía en otra
+  // calle (24-11-2026). La parada se queda, con el centro de la zona y «sinUbicar»: el mapa no la pinta y «Cómo llegar»
+  // busca por su local o su nombre.
+  // Solo se fían las coordenadas que trae nuestro código de una fuente con posición de verdad (datos abiertos de la Junta):
+  // coordsFiables lo pone el servidor, nunca la IA (montarPlan lo borra de lo que devuelve Gemini).
   if (!ubicacionResuelta && (TIPOS_UBICACION_FLEXIBLE.includes(parada.tipo) || !necesitaFicha(parada.tipo))) {
-    const latIA = Number(parada.lat);
-    const lonIA = Number(parada.lon);
-    const coordenadaValidaIA = !isNaN(latIA) && !isNaN(lonIA) && haversineKm(lat, lon, latIA, lonIA) <= Number(radio) * 1.1;
-    parada.lat = coordenadaValidaIA ? latIA : lat;
-    parada.lon = coordenadaValidaIA ? lonIA : lon;
+    const [la, lo] = [Number(parada.lat), Number(parada.lon)];
+    const fiables = parada.coordsFiables && Number.isFinite(la) && Number.isFinite(lo) && haversineKm(lat, lon, la, lo) <= Number(radio) * 1.1;
+    parada.lat = fiables ? la : lat;
+    parada.lon = fiables ? lo : lon;
+    if (!fiables) parada.sinUbicar = true;
     ubicacionResuelta = true;
   }
+  delete parada.coordsFiables;
 
   if (!ubicacionResuelta) {
     return { parada: null, problemaConfigPlaces };
