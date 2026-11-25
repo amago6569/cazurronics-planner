@@ -295,12 +295,19 @@ function cubreHueco(ruta, hueco) {
 // Completa los locales pedidos que faltan. Devuelve los textos de lo que no se ha encontrado (para el aviso)
 export async function completarLocalesPedidos(ruta, apetece, pedido, datos, completar = completarPedido) {
   const faltan = [];
-  for (const hueco of localesPedidos(apetece)) {
+  const huecos = localesPedidos(apetece);
+  for (const hueco of huecos) {
     if (pedido && tiposIguales(pedido.tipo).includes(hueco.tipo)) continue; // «4 bares»: ya lo completa el pedido
     if (cubreHueco(ruta, hueco)) continue;
     const hora = hueco.tipo === 'discoteca' ? Math.max(hueco.hora ?? 23 * 60 + 30, ...ruta.filter((p) => esDelTipo(p, 'restaurante')).map((p) => (leerHora(p.hora).min ?? 0) + 90)) : hueco.hora;
+    // 25-11-2026: para «cenar» la IA puso un bar a las 21:00 («Ezequiel Calle Ancha»). El restaurante lo sustituye, para no
+    // dejar dos sitios a la misma hora; si no hay restaurante abierto, ese bar se queda como cena. Si pidió bares, no se toca
+    const enLugarDe = hueco.tipo === 'restaurante' && hora != null && !huecos.some((h) => h.tipo === 'bar')
+      ? ruta.find((p) => esDelTipo(p, 'bar') && Math.abs((leerHora(p.hora).min ?? -999) - hora) <= 60)
+      : null;
     const añadidas = await completar(ruta, { n: 1, tipo: hueco.tipo, plural: NOMBRE_LOCAL[hueco.tipo], hora, cocina: hueco.tipo === 'restaurante' ? cocinaPedida(apetece) : null }, datos);
-    if (!añadidas) faltan.push(`${NOMBRE_LOCAL[hueco.tipo]} abierto a las ${hhmm(Math.min(hora ?? 20 * 60, 24 * 60 - 1))}`);
+    if (añadidas && enLugarDe) ruta.splice(ruta.indexOf(enLugarDe), 1);
+    if (!añadidas && !enLugarDe) faltan.push(`${NOMBRE_LOCAL[hueco.tipo]} abierto a las ${hhmm(Math.min(hora ?? 20 * 60, 24 * 60 - 1))}`);
   }
   return faltan;
 }

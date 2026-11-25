@@ -68,6 +68,21 @@ describe("si falta la cena o la fiesta, se busca una abierta", () => {
     await completarLocalesPedidos([], "4 bares", { n: 4, tipo: "bar", plural: "bares" }, {}, uno);
     expect(pedidos).toEqual([]);
   });
+  it("si la IA pone un bar para cenar, el restaurante lo sustituye; si no hay restaurante abierto, el bar se queda", async () => {
+    // Producción, 26-11-2026: «21:00 Ezequiel Calle Ancha | bar» + concierto a las 23:00
+    const deIA = () => [{ titulo: "Ezequiel Calle Ancha", tipo: "bar", hora: "21:00" }, { titulo: "Kamikaze Helmets", tipo: "concierto", hora: "23:00" }];
+    const pone = vi.fn(async (r) => { r.push({ titulo: "Mesón leonés", tipo: "restaurante", hora: "21:00" }); return 1; });
+    const ruta = deIA();
+    expect(await completarLocalesPedidos(ruta, FRASE, null, {}, pone)).toEqual([]);
+    expect(ruta.map((p) => [p.hora, p.tipo])).toEqual([["23:00", "concierto"], ["21:00", "restaurante"]]);
+    const sinNada = deIA();
+    expect(await completarLocalesPedidos(sinNada, FRASE, null, {}, vi.fn(async () => 0))).toEqual([]);
+    expect(sinNada.map((p) => p.tipo)).toEqual(["bar", "concierto"]);
+    // «unas cañas y cenar»: el bar es suyo, no se quita
+    const conCañas = [{ titulo: "Bar", tipo: "bar", hora: "20:30" }];
+    await completarLocalesPedidos(conCañas, "unas cañas de tapas y luego cenar", null, {}, pone);
+    expect(conCañas.map((p) => p.tipo)).toContain("bar");
+  });
   it("un bar o un concierto de noche ya valen como «salir de fiesta»", async () => {
     const uno = vi.fn(async () => 1);
     await completarLocalesPedidos([{ tipo: "restaurante", hora: "21:00" }, { tipo: "concierto", hora: "22:30" }], FRASE, null, {}, uno);
