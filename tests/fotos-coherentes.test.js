@@ -2,7 +2,7 @@
 // bien o sean coherentes»). En 40 eventos de la agenda sin foto de Google salió 1 coherente: 11 PDF de libros viejos de
 // Wikimedia y 28 fotos genéricas de otros países. Los nombres de archivo de abajo son los que salieron de verdad.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { enriquecerParada, fotoEsDelSitio } from "../src/lib/planUtils";
+import { enriquecerParada, fotoDeSerie, fotoEsDelSitio, temaDeSerie } from "../src/lib/planUtils";
 
 const CATEDRAL = "File:Catedral de León. España-44.jpg";
 const LIBRO_VIEJO = "File:Cosas de España (IA cosasdeespaas2zarc).pdf";
@@ -53,10 +53,11 @@ describe("¿la foto es del sitio?", () => {
 });
 
 describe("la foto de cada parada", () => {
-  it("un evento sin local ni foto de Google se queda sin foto, en vez de la de otra cosa", async () => {
+  it("un evento sin local ni foto de Google lleva una de serie de lo que es, no la de otra cosa", async () => {
     simular({ archivos: [LIBRO_VIEJO, "File:Live band performance captivates crowd at local music festival.jpg"] });
     const { parada } = await enriquecerParada({ titulo: "La semilla (teatro infantil)", tipo: "teatro", hora: "18:00", lat: 42.6, lon: -5.57 }, contexto);
-    expect(parada.fotoOficial).toBeNull();
+    expect(parada.fotoOficial).toBe(fotoDeSerie({ titulo: "La semilla (teatro infantil)", tipo: "teatro" }));
+    expect(parada.fotoDeSerie).toBe(true);
     // Ni búsqueda por el título del evento ni foto genérica en inglés
     expect(consultas).toEqual([]);
   });
@@ -74,15 +75,48 @@ describe("la foto de cada parada", () => {
   it("una foto de otro León (México) o sin posición no vale, aunque lleve el nombre", async () => {
     simular({ archivos: ["File:Universidad de Guanajuato (León) I.jpg"] });
     const mexico = await enriquecerParada({ titulo: "Universidad de León", tipo: "monumento", hora: "11:00", lat: 42.61, lon: -5.56 }, contexto);
-    expect(mexico.parada.fotoOficial).toBeNull();
+    expect(mexico.parada.fotoDeSerie).toBe(true);
+    expect(temaDeSerie(mexico.parada)).toBe("monumento");
     simular({ archivos: ["File:Rosetón da catedral de León 47.jpg", CATEDRAL] });
     const catedral = await enriquecerParada({ titulo: "Catedral de León", tipo: "monumento", hora: "11:00", lat: 42.5994, lon: -5.5668 }, contexto);
     expect(catedral.parada.fotoOficial).toMatch(/Catedral_de_León\._España-44\.jpg$/);
   });
-  it("un bar no busca foto en Wikimedia (allí no está) y nunca sale la foto fija de Unsplash", async () => {
+  it("un bar sin foto en Google no busca en Wikimedia (allí no está): lleva la de serie de un bar", async () => {
     simular({ sitios: [{ name: "Bar El Gallo", place_id: "g1", types: ["bar"], formatted_address: "Calle Ancha 1, 24003 León", geometry: { location: { lat: 42.598, lng: -5.568 } } }], archivos: [CATEDRAL] });
     const { parada } = await enriquecerParada({ titulo: "Bar El Gallo", tipo: "bar", hora: "20:00", lat: 42.598, lon: -5.568 }, contexto);
-    expect(parada.fotoOficial).toBeNull();
+    expect(temaDeSerie(parada)).toBe("bar");
+    expect(parada).toMatchObject({ fotoOficial: fotoDeSerie({ tipo: "bar" }), fotoDeSerie: true });
     expect(consultas).toEqual([]);
+  });
+});
+
+describe("la foto de serie va de lo que es la parada", () => {
+  it("cada tipo de plan tiene la suya", () => {
+    const casos = [
+      [{ titulo: "Presentación del libro «Mientras me operan el cerebro»", tipo: "evento" }, "libro"],
+      [{ titulo: "Conferencia «Escribir para reinar»", tipo: "evento" }, "charla"],
+      [{ titulo: "Vangoura en concierto", tipo: "concierto" }, "concierto"],
+      [{ titulo: "Concierto de Navidad de la Banda Municipal", tipo: "evento" }, "concierto"],
+      [{ titulo: "Mercado de Navidad", tipo: "mercadillo" }, "mercadoNavidad"],
+      [{ titulo: "Encendido del alumbrado navideño", tipo: "evento" }, "navidad"],
+      [{ titulo: "Magosto popular de Boñar", tipo: "fiesta" }, "fiesta"],
+      [{ titulo: "Jornadas gastronómicas de la matanza", tipo: "gastronomia" }, "gastronomia"],
+      [{ titulo: "Cuentacuentos en la biblioteca", tipo: "evento" }, "infantil"],
+      [{ titulo: "Exposición de ocho décadas de Pistoletto", tipo: "exposicion" }, "exposicion"],
+      [{ titulo: "Ruta de las Hoces de Vegacervera", tipo: "ruta" }, "ruta"],
+      [{ titulo: "Cultural Leonesa - Real Oviedo", tipo: "deporte" }, "deporte"],
+      [{ titulo: "Algo que no se sabe qué es", tipo: "evento" }, "evento"],
+    ];
+    for (const [parada, tema] of casos) expect([parada.titulo, temaDeSerie(parada)]).toEqual([parada.titulo, tema]);
+  });
+  it("un bar es un bar aunque su nombre suene a otra cosa", () => {
+    expect(temaDeSerie({ titulo: "La Bodega del Rock", tipo: "bar" })).toBe("bar");
+    expect(temaDeSerie({ titulo: "Mesón El Concierto", tipo: "restaurante" })).toBe("restaurante");
+    expect(temaDeSerie({ titulo: "Glam Theatre", tipo: "pub" })).toBe("discoteca");
+  });
+  it("son de Unsplash (permitido en la web) y cada tema tiene la suya", () => {
+    const urls = ["libro", "charla", "teatro", "bar"].map((t) => fotoDeSerie({ titulo: t }));
+    for (const u of urls) expect(u).toMatch(/^https:\/\/images\.unsplash\.com\/photo-[\w-]+\?/);
+    expect(new Set(urls).size).toBe(urls.length);
   });
 });
